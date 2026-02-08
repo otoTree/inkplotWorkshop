@@ -3,7 +3,7 @@ import { NextResponse } from 'next/server';
 import { getSystemPrompt, getOriginalStoryPrompt, getEpisodeContentPrompt } from '@/lib/prompts';
 import { createClient } from '@/lib/supabase/server';
 
-export const maxDuration = 60; // Allow longer timeout for generation
+export const maxDuration = 300; // Allow longer timeout for generation
 
 export async function POST(req: Request) {
   try {

@@ -3,7 +3,7 @@ import { NextResponse } from 'next/server';
 import { getStoryboardGenerationPrompt } from '@/lib/prompts';
 import { createClient } from '@/lib/supabase/server';
 
-export const maxDuration = 120; // Longer timeout for storyboard generation
+export const maxDuration = 300; // Longer timeout for storyboard generation
 
 export async function POST(req: Request) {
   try {
