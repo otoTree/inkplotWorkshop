@@ -1,20 +1,19 @@
 'use client';
 
-import { useLiveQuery } from 'dexie-react-hooks';
-import { db } from '@/lib/db';
+import { api } from '@/lib/api';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Plus, User, MapPin, Box, Wand2, Loader2, Sparkles } from 'lucide-react';
-import { Asset, AssetType } from '@/types';
-import { useState } from 'react';
+import { Asset, AssetType, Project } from '@/types';
+import { useState, useEffect, useCallback } from 'react';
 import { AssetDialog } from './AssetDialog';
 import { ExtractionPreviewDialog } from './ExtractionPreviewDialog';
 import { getImageGenerationPrompt } from '@/lib/prompts';
 
 export function AssetGallery({ projectId }: { projectId: string }) {
-  const assets = useLiveQuery(() => db.assets.where('projectId').equals(projectId).toArray());
-  const project = useLiveQuery(() => db.projects.get(projectId));
+  const [assets, setAssets] = useState<Asset[]>([]);
+  const [project, setProject] = useState<Project | null>(null);
   const [activeTab, setActiveTab] = useState<AssetType>('character');
   
   // Dialog State
@@ -30,6 +29,23 @@ export function AssetGallery({ projectId }: { projectId: string }) {
 
   // Generation State
   const [generatingAssets, setGeneratingAssets] = useState<Set<string>>(new Set());
+
+  const fetchData = useCallback(async () => {
+      try {
+          const [proj, assetList] = await Promise.all([
+              api.projects.get(projectId),
+              api.assets.list(projectId)
+          ]);
+          setProject(proj);
+          setAssets(assetList);
+      } catch (e) {
+          console.error('Failed to load assets', e);
+      }
+  }, [projectId]);
+
+  useEffect(() => {
+      fetchData();
+  }, [fetchData]);
 
   const getAssetsByType = (type: AssetType) => assets?.filter((a) => a.type === type) || [];
 
@@ -65,21 +81,24 @@ export function AssetGallery({ projectId }: { projectId: string }) {
             metadata: {},
             ...data
         } as Asset;
-        await db.assets.add(newAsset);
+        await api.assets.create(newAsset);
+        setAssets(prev => [...prev, newAsset]);
     } else if (dialogMode === 'edit' && selectedAsset?.id) {
-        await db.assets.update(selectedAsset.id, data);
+        await api.assets.update(selectedAsset.id, data);
+        setAssets(prev => prev.map(a => a.id === selectedAsset.id ? { ...a, ...data } : a));
     }
   };
 
   const handleDeleteAsset = async (id: string) => {
-    await db.assets.delete(id);
+    await api.assets.delete(id);
+    setAssets(prev => prev.filter(a => a.id !== id));
   };
 
   const handleExtractFromScript = async () => {
     setIsExtracting(true);
     setLoadingMessage('正在准备提取...');
     try {
-      const episodes = await db.episodes.where('projectId').equals(projectId).toArray();
+      const episodes = await api.episodes.list(projectId);
       if (!episodes || episodes.length === 0) {
         alert('暂无剧本可供提取');
         return;
@@ -146,9 +165,9 @@ export function AssetGallery({ projectId }: { projectId: string }) {
   };
 
   const handleImportAssets = async (selectedAssets: Partial<Asset>[]) => {
-    await db.transaction('rw', db.assets, async () => {
+      const newAssets: Asset[] = [];
       for (const asset of selectedAssets) {
-        await db.assets.add({
+        const newAsset: Asset = {
           id: crypto.randomUUID(),
           projectId,
           type: (asset.type as AssetType) || 'prop', // Default fallback
@@ -158,9 +177,12 @@ export function AssetGallery({ projectId }: { projectId: string }) {
           imageUrl: asset.imageUrl || '', // Preserve generated image url if any
           status: 'draft',
           metadata: {},
-        } as Asset);
+        } as Asset;
+        await api.assets.create(newAsset);
+        newAssets.push(newAsset);
       }
-    });
+    
+    setAssets(prev => [...prev, ...newAssets]);
     setExtractionDialogOpen(false);
   };
 
@@ -182,7 +204,8 @@ export function AssetGallery({ projectId }: { projectId: string }) {
         const data = await response.json();
 
         if (data.data && data.data[0]?.url) {
-            await db.assets.update(asset.id, { imageUrl: data.data[0].url });
+            await api.assets.update(asset.id, { imageUrl: data.data[0].url });
+            setAssets(prev => prev.map(a => a.id === asset.id ? { ...a, imageUrl: data.data[0].url } : a));
         } else {
             alert('图片生成失败');
         }

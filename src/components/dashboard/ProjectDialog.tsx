@@ -21,7 +21,7 @@ import {
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
-import { db } from '@/lib/db';
+import { api } from '@/lib/api';
 import { Project } from '@/types';
 
 interface ProjectDialogProps {
@@ -29,9 +29,10 @@ interface ProjectDialogProps {
   project?: Project; // If provided, we are in Edit mode
   open?: boolean;
   onOpenChange?: (open: boolean) => void;
+  onSuccess?: () => void; // Add callback to refresh list
 }
 
-export function ProjectDialog({ children, project, open: controlledOpen, onOpenChange: setControlledOpen }: ProjectDialogProps) {
+export function ProjectDialog({ children, project, open: controlledOpen, onOpenChange: setControlledOpen, onSuccess }: ProjectDialogProps) {
   const [internalOpen, setInternalOpen] = useState(false);
   
   // Use controlled state if provided, otherwise internal state
@@ -74,7 +75,7 @@ export function ProjectDialog({ children, project, open: controlledOpen, onOpenC
     try {
       if (project) {
         // Update existing project
-        await db.projects.update(project.id, {
+        await api.projects.update(project.id, {
           title,
           logline,
           language,
@@ -93,7 +94,7 @@ export function ProjectDialog({ children, project, open: controlledOpen, onOpenC
           createdAt: Date.now(),
           updatedAt: Date.now(),
         };
-        await db.projects.add(newProject);
+        await api.projects.create(newProject);
       }
       
       setOpen(false);
@@ -104,6 +105,7 @@ export function ProjectDialog({ children, project, open: controlledOpen, onOpenC
         setLanguage('zh');
         setArtStyle('');
       }
+      if (onSuccess) onSuccess();
     } catch (error) {
       console.error('Failed to save project:', error);
     } finally {

@@ -2,7 +2,7 @@
 create extension if not exists "uuid-ossp";
 
 -- 1. Create Profiles Table (Optional but recommended)
-create table profiles (
+create table if not exists profiles (
   id uuid references auth.users on delete cascade not null primary key,
   email text,
   avatar_url text,
@@ -12,33 +12,39 @@ create table profiles (
 
 alter table profiles enable row level security;
 
+drop policy if exists "Users can view their own profile" on profiles;
 create policy "Users can view their own profile"
   on profiles for select
   using (auth.uid() = id);
 
+drop policy if exists "Users can update their own profile" on profiles;
 create policy "Users can update their own profile"
   on profiles for update
   using (auth.uid() = id);
 
 -- 2. Create Projects Table
-create table projects (
+create table if not exists projects (
   id uuid default gen_random_uuid() primary key,
   user_id uuid references auth.users on delete cascade not null,
   title text not null,
   logline text,
   genre text[],
+  language text,
+  art_style text,
+  series_plan jsonb,
   created_at timestamp with time zone default timezone('utc'::text, now()) not null,
   updated_at timestamp with time zone default timezone('utc'::text, now()) not null
 );
 
 alter table projects enable row level security;
 
+drop policy if exists "Users can CRUD their own projects" on projects;
 create policy "Users can CRUD their own projects"
   on projects for all
   using (auth.uid() = user_id);
 
 -- 3. Create Episodes Table
-create table episodes (
+create table if not exists episodes (
   id uuid default gen_random_uuid() primary key,
   user_id uuid references auth.users on delete cascade not null,
   project_id uuid references projects(id) on delete cascade not null,
@@ -49,19 +55,29 @@ create table episodes (
   last_edited timestamp with time zone default timezone('utc'::text, now()) not null
 );
 
-create index episodes_project_id_idx on episodes(project_id);
+create index if not exists episodes_project_id_idx on episodes(project_id);
 
 alter table episodes enable row level security;
 
+drop policy if exists "Users can CRUD their own episodes" on episodes;
 create policy "Users can CRUD their own episodes"
   on episodes for all
   using (auth.uid() = user_id);
 
 -- 4. Create Assets Table
-create type asset_type as enum ('character', 'location', 'prop');
-create type asset_status as enum ('draft', 'locked');
+do $$ begin
+    create type asset_type as enum ('character', 'location', 'prop');
+exception
+    when duplicate_object then null;
+end $$;
 
-create table assets (
+do $$ begin
+    create type asset_status as enum ('draft', 'locked');
+exception
+    when duplicate_object then null;
+end $$;
+
+create table if not exists assets (
   id uuid default gen_random_uuid() primary key,
   user_id uuid references auth.users on delete cascade not null,
   project_id uuid references projects(id) on delete cascade not null,
@@ -77,12 +93,13 @@ create table assets (
 
 alter table assets enable row level security;
 
+drop policy if exists "Users can CRUD their own assets" on assets;
 create policy "Users can CRUD their own assets"
   on assets for all
   using (auth.uid() = user_id);
 
 -- 5. Create Shots Table
-create table shots (
+create table if not exists shots (
   id uuid default gen_random_uuid() primary key,
   user_id uuid references auth.users on delete cascade not null,
   episode_id uuid references episodes(id) on delete cascade not null,
@@ -100,6 +117,7 @@ create table shots (
 
 alter table shots enable row level security;
 
+drop policy if exists "Users can CRUD their own shots" on shots;
 create policy "Users can CRUD their own shots"
   on shots for all
   using (auth.uid() = user_id);
@@ -115,6 +133,7 @@ begin
 end;
 $$ language plpgsql security definer;
 
+drop trigger if exists on_auth_user_created on auth.users;
 create trigger on_auth_user_created
   after insert on auth.users
   for each row execute procedure public.handle_new_user();

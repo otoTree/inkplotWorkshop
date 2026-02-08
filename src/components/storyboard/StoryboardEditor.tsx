@@ -1,10 +1,8 @@
-
 'use client';
 
-import { useState, useEffect } from 'react';
-import { useLiveQuery } from 'dexie-react-hooks';
-import { db } from '@/lib/db';
-import { Episode, Asset, Shot } from '@/types';
+import { useState, useEffect, useCallback } from 'react';
+import { api } from '@/lib/api';
+import { Episode, Asset, Shot, Project } from '@/types';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { ScrollArea } from '@/components/ui/scroll-area';
@@ -22,21 +20,26 @@ export function StoryboardEditor({ projectId }: StoryboardEditorProps) {
   const [selectedEpisodeId, setSelectedEpisodeId] = useState<string | null>(null);
   const [isGenerating, setIsGenerating] = useState(false);
 
-  // Data fetching
-  const project = useLiveQuery(() => db.projects.get(projectId), [projectId]);
-  const episodes = useLiveQuery(() => 
-    db.episodes.where('projectId').equals(projectId).sortBy('episodeNumber')
-  , [projectId]);
-  
-  const assets = useLiveQuery(() => 
-    db.assets.where('projectId').equals(projectId).toArray()
-  , [projectId]);
+  const [project, setProject] = useState<Project | null>(null);
+  const [episodes, setEpisodes] = useState<Episode[]>([]);
+  const [assets, setAssets] = useState<Asset[]>([]);
+  const [shots, setShots] = useState<Shot[]>([]);
 
-  const shots = useLiveQuery<Shot[]>(() => 
-    selectedEpisodeId 
-      ? db.shots.where('episodeId').equals(selectedEpisodeId).sortBy('sequence')
-      : Promise.resolve([])
-  , [selectedEpisodeId]);
+  // Data fetching
+  useEffect(() => {
+    api.projects.get(projectId).then(setProject);
+    api.episodes.list(projectId).then(setEpisodes);
+    api.assets.list(projectId).then(setAssets);
+  }, [projectId]);
+
+  // Fetch shots when episode changes
+  useEffect(() => {
+    if (selectedEpisodeId) {
+        api.shots.list(selectedEpisodeId).then(setShots);
+    } else {
+        setShots([]);
+    }
+  }, [selectedEpisodeId]);
 
   // Auto-select first episode
   useEffect(() => {
@@ -68,10 +71,8 @@ export function StoryboardEditor({ projectId }: StoryboardEditorProps) {
 
       const data = await res.json();
       
-      // Clear existing shots for this episode (or maybe keep them? let's clear for now as it's a "generate" action)
-      // Actually, better to confirm or just append? 
-      // The prompt generates a full sequence. Let's replace.
-      await db.shots.where('episodeId').equals(selectedEpisodeId).delete();
+      // Clear existing shots for this episode
+      await api.shots.deleteByEpisode(selectedEpisodeId);
 
       const newShots: Shot[] = data.shots.map((s: any) => {
         // Map suggested asset names to IDs
@@ -87,18 +88,19 @@ export function StoryboardEditor({ projectId }: StoryboardEditorProps) {
           id: crypto.randomUUID(),
           episodeId: selectedEpisodeId,
           sequence: s.sequence,
-          narrativeGoal: s.narrativeGoal,
-          visualEvidence: s.visualEvidence,
-          description: s.description,
-          dialogue: s.dialogue,
-          camera: s.camera,
-          size: s.size,
-          duration: s.duration,
+          narrativeGoal: s.narrativeGoal || '',
+          visualEvidence: s.visualEvidence || '',
+          description: s.description || '',
+          dialogue: s.dialogue || '',
+          camera: s.camera || '',
+          size: s.size || '',
+          duration: s.duration || 10,
           relatedAssetIds: relatedIds
         };
       });
 
-      await db.shots.bulkAdd(newShots);
+      await api.shots.bulkCreate(newShots);
+      setShots(newShots);
 
     } catch (error) {
       console.error('Failed to generate storyboard:', error);
@@ -112,7 +114,7 @@ export function StoryboardEditor({ projectId }: StoryboardEditorProps) {
     if (!selectedEpisodeId) return;
     const maxSeq = shots && shots.length > 0 ? Math.max(...shots.map(s => s.sequence)) : 0;
     
-    await db.shots.add({
+    const newShot: Shot = {
       id: crypto.randomUUID(),
       episodeId: selectedEpisodeId,
       sequence: maxSeq + 1,
@@ -124,10 +126,23 @@ export function StoryboardEditor({ projectId }: StoryboardEditorProps) {
       size: '',
       duration: 10,
       relatedAssetIds: []
-    });
+    };
+
+    await api.shots.create(newShot);
+    setShots(prev => [...prev, newShot]);
+  };
+  
+  const handleUpdateShot = async (updatedShot: Shot) => {
+      await api.shots.update(updatedShot.id, updatedShot);
+      setShots(prev => prev.map(s => s.id === updatedShot.id ? updatedShot : s));
+  };
+  
+  const handleDeleteShot = async (shotId: string) => {
+      await api.shots.delete(shotId);
+      setShots(prev => prev.filter(s => s.id !== shotId));
   };
 
-  if (!episodes) return <div className="p-8">加载中...</div>;
+  if (episodes.length === 0 && !project) return <div className="p-8">加载中...</div>;
 
   return (
     <div className="flex h-full bg-white">
@@ -212,6 +227,8 @@ export function StoryboardEditor({ projectId }: StoryboardEditorProps) {
                   shot={shot} 
                   assets={assets || []} 
                   index={index}
+                  onUpdate={handleUpdateShot}
+                  onDelete={handleDeleteShot}
                 />
               ))}
               
@@ -228,7 +245,19 @@ export function StoryboardEditor({ projectId }: StoryboardEditorProps) {
   );
 }
 
-function ShotCard({ shot, assets, index }: { shot: Shot, assets: Asset[], index: number }) {
+function ShotCard({ 
+    shot, 
+    assets, 
+    index, 
+    onUpdate, 
+    onDelete 
+}: { 
+    shot: Shot, 
+    assets: Asset[], 
+    index: number,
+    onUpdate: (shot: Shot) => void,
+    onDelete: (id: string) => void
+}) {
   const [isEditing, setIsEditing] = useState(false);
   const [data, setData] = useState(shot);
 
@@ -236,13 +265,13 @@ function ShotCard({ shot, assets, index }: { shot: Shot, assets: Asset[], index:
   useEffect(() => setData(shot), [shot]);
 
   const save = async () => {
-    await db.shots.put(data);
+    onUpdate(data);
     setIsEditing(false);
   };
 
   const deleteShot = async () => {
     if (confirm('确定删除此镜头吗？')) {
-      await db.shots.delete(shot.id);
+      onDelete(shot.id);
     }
   };
 
@@ -253,7 +282,7 @@ function ShotCard({ shot, assets, index }: { shot: Shot, assets: Asset[], index:
     
     const newData = { ...data, relatedAssetIds: newIds };
     setData(newData);
-    await db.shots.put(newData); // Auto-save asset changes
+    onUpdate(newData); // Auto-save asset changes
   };
 
   return (

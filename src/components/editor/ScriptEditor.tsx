@@ -4,9 +4,8 @@ import { useEditor, EditorContent } from '@tiptap/react';
 import StarterKit from '@tiptap/starter-kit';
 import Placeholder from '@tiptap/extension-placeholder';
 import { useEffect, useState, useCallback, useRef } from 'react';
-import { useLiveQuery } from 'dexie-react-hooks';
-import { db } from '@/lib/db';
-import { Episode } from '@/types';
+import { api } from '@/lib/api';
+import { Episode, Project } from '@/types';
 import { useCompletion } from '@ai-sdk/react';
 import { Button } from '@/components/ui/button';
 import { Wand2, Sparkles, Loader2, FileText, Plus, Trash2 } from 'lucide-react';
@@ -29,39 +28,53 @@ export function ScriptEditor({ projectId }: { projectId: string }) {
   const [ideaDialogOpen, setIdeaDialogOpen] = useState(false);
   const [idea, setIdea] = useState('');
   
-  // Load the first episode or create it
-  const episodes = useLiveQuery(() => 
-    db.episodes.where('projectId').equals(projectId).sortBy('episodeNumber')
-  );
-  const project = useLiveQuery(() => db.projects.get(projectId));
-  
+  const [episodes, setEpisodes] = useState<Episode[]>([]);
+  const [project, setProject] = useState<Project | null>(null);
   const [currentEpisode, setCurrentEpisode] = useState<Episode | null>(null);
 
+  const fetchData = useCallback(async () => {
+    try {
+        const [proj, eps] = await Promise.all([
+            api.projects.get(projectId),
+            api.episodes.list(projectId)
+        ]);
+        setProject(proj);
+        setEpisodes(eps);
+        
+        // Handle initialization logic
+        if (eps.length === 0 && proj) {
+            const newEpisode: Episode = {
+                id: crypto.randomUUID(),
+                projectId,
+                episodeNumber: 1,
+                title: proj.language === 'en' ? 'Episode 1' : '第 1 集',
+                content: '',
+                structure: {},
+                lastEdited: Date.now(),
+            };
+            await api.episodes.create(newEpisode);
+            setEpisodes([newEpisode]);
+            setCurrentEpisode(newEpisode);
+        } else if (eps.length > 0 && !currentEpisode) {
+            setCurrentEpisode(eps[0]);
+        }
+    } catch (e) {
+        console.error('Failed to load script data', e);
+    }
+  }, [projectId, currentEpisode]);
+
   useEffect(() => {
-    if (episodes && episodes.length > 0) {
-        if (!currentEpisode) {
+    fetchData();
+  }, [fetchData]);
+
+  // Handle currentEpisode deletion or invalidation
+  useEffect(() => {
+    if (episodes.length > 0 && currentEpisode) {
+        if (!episodes.find(e => e.id === currentEpisode.id)) {
             setCurrentEpisode(episodes[0]);
         }
-        // If current episode is deleted, reset to first available
-        if (currentEpisode && !episodes.find(e => e.id === currentEpisode.id)) {
-            setCurrentEpisode(episodes[0] || null);
-        }
-    } else if (episodes && episodes.length === 0 && project) {
-        // Create initial episode
-        const newEpisode: Episode = {
-            id: crypto.randomUUID(),
-            projectId,
-            episodeNumber: 1,
-            title: project.language === 'en' ? 'Episode 1' : '第 1 集',
-            content: '',
-            structure: {},
-            lastEdited: Date.now(),
-        };
-        db.episodes.add(newEpisode).then(() => {
-             // It will be picked up by useLiveQuery
-        });
     }
-  }, [episodes, projectId, currentEpisode, project]);
+  }, [episodes, currentEpisode]);
 
   const { complete, completion, isLoading } = useCompletion({
     api: '/api/v1/ai/completion',
@@ -75,10 +88,16 @@ export function ScriptEditor({ projectId }: { projectId: string }) {
     if (!currentEpisode) return;
     setStatus('saving');
     try {
-        await db.episodes.update(currentEpisode.id, {
+        await api.episodes.update(currentEpisode.id, {
             content,
             lastEdited: Date.now()
         });
+        
+        // Update local state to reflect changes without full refetch if possible, 
+        // but for content we might not need to update the list immediately unless title changes.
+        // However, updating 'lastEdited' is good.
+        setEpisodes(prev => prev.map(e => e.id === currentEpisode.id ? { ...e, content, lastEdited: Date.now() } : e));
+        
         setStatus('saved');
     } catch (e) {
         console.error(e);
@@ -122,12 +141,8 @@ export function ScriptEditor({ projectId }: { projectId: string }) {
           if (editor.getText() === '' && currentEpisode.content) {
               editor.commands.setContent(currentEpisode.content);
           } 
-          // If we switched episodes (compare IDs indirectly via content check, though ID check is better)
-          // Ideally we should track which episode ID is currently loaded in the editor
-          // But here we can just force load if the content is different and we just switched
-          // A better way is to reset editor content when currentEpisode.id changes
       }
-  }, [editor, currentEpisode]); // Dependencies need care
+  }, [editor, currentEpisode]); 
 
   // Force content update when switching episodes
   const prevEpisodeIdRef = useRef<string | null>(null);
@@ -167,11 +182,12 @@ export function ScriptEditor({ projectId }: { projectId: string }) {
       const outline = data.series_outline;
 
       if (project) {
-          await db.projects.update(projectId, { seriesPlan: data });
+          await api.projects.update(projectId, { seriesPlan: data });
+          setProject(prev => prev ? { ...prev, seriesPlan: data } : null);
       }
 
       // Clear existing episodes
-      await db.episodes.where('projectId').equals(projectId).delete();
+      await api.episodes.deleteByProject(projectId);
 
       // Create new episodes
       const newEpisodes: Episode[] = outline.map((ep: any) => ({
@@ -184,7 +200,10 @@ export function ScriptEditor({ projectId }: { projectId: string }) {
         lastEdited: Date.now(),
       }));
 
-      await db.episodes.bulkAdd(newEpisodes);
+      await api.episodes.bulkCreate(newEpisodes);
+      setEpisodes(newEpisodes);
+      if (newEpisodes.length > 0) setCurrentEpisode(newEpisodes[0]);
+
       setIdeaDialogOpen(false);
       setIdea('');
       
@@ -259,7 +278,8 @@ export function ScriptEditor({ projectId }: { projectId: string }) {
           lastEdited: Date.now(),
       };
       
-      await db.episodes.add(newEpisode);
+      await api.episodes.create(newEpisode);
+      setEpisodes(prev => [...prev, newEpisode]);
       setCurrentEpisode(newEpisode);
   };
 
@@ -267,8 +287,8 @@ export function ScriptEditor({ projectId }: { projectId: string }) {
       e.stopPropagation();
       if (!confirm('确定要删除这一集吗？')) return;
       
-      await db.episodes.delete(episodeId);
-      // Selection logic handled by useEffect
+      await api.episodes.delete(episodeId);
+      setEpisodes(prev => prev.filter(ep => ep.id !== episodeId));
   };
 
   if (!currentEpisode) return <div className="p-8">正在加载剧集...</div>;
@@ -290,7 +310,7 @@ export function ScriptEditor({ projectId }: { projectId: string }) {
                     onClick={() => setCurrentEpisode(ep)}
                     className={cn(
                         "group flex items-center justify-between px-3 py-2 text-sm rounded-md cursor-pointer transition-colors",
-                        currentEpisode.id === ep.id 
+                        currentEpisode?.id === ep.id 
                             ? "bg-black text-white" 
                             : "text-black/70 hover:bg-black/5"
                     )}
@@ -303,7 +323,7 @@ export function ScriptEditor({ projectId }: { projectId: string }) {
                         size="icon"
                         className={cn(
                             "h-6 w-6 opacity-0 group-hover:opacity-100 transition-opacity",
-                            currentEpisode.id === ep.id ? "text-white/70 hover:text-white hover:bg-white/20" : "text-black/40 hover:text-red-600"
+                            currentEpisode?.id === ep.id ? "text-white/70 hover:text-white hover:bg-white/20" : "text-black/40 hover:text-red-600"
                         )}
                         onClick={(e) => handleDeleteEpisode(e, ep.id)}
                      >

@@ -1,11 +1,12 @@
 'use client';
 
 import JSZip from 'jszip';
-import { db } from '@/lib/db';
+import { api } from '@/lib/api';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Download, Loader2 } from 'lucide-react';
 import { useState } from 'react';
+import { Shot } from '@/types';
 
 export function ExportPanel({ projectId }: { projectId: string }) {
   const [isExporting, setIsExporting] = useState(false);
@@ -13,12 +14,15 @@ export function ExportPanel({ projectId }: { projectId: string }) {
   const handleExport = async () => {
     setIsExporting(true);
     try {
-      const project = await db.projects.get(projectId);
+      const project = await api.projects.get(projectId);
       if (!project) throw new Error('未找到项目');
 
-      const episodes = await db.episodes.where('projectId').equals(projectId).toArray();
-      const assets = await db.assets.where('projectId').equals(projectId).toArray();
-      const shots = await db.shots.where('episodeId').anyOf(episodes.map(e => e.id)).toArray();
+      const episodes = await api.episodes.list(projectId);
+      const assets = await api.assets.list(projectId);
+      
+      // Fetch shots for all episodes
+      const shotsArrays = await Promise.all(episodes.map(ep => api.shots.list(ep.id)));
+      const shots = shotsArrays.flat();
 
       const zip = new JSZip();
       // Allow Chinese characters and other safe characters, replace only truly unsafe ones
