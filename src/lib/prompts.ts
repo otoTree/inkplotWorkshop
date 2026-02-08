@@ -91,7 +91,7 @@ Requirements:
    - **Props**: Important objects that drive the plot.
 2. **Visual Prompts**: For EACH asset, generate a specific "visual_prompt" in English suitable for AI image generation (Midjourney/Stable Diffusion style).
    - **Style Constraint**: The visual prompts MUST strictly follow the art style: "${artStyle || 'Cinematic, Realistic'}".
-   - **Characters**: Describe appearance, clothing, style, age. (Do not describe actions or props held in hand).
+   - **Characters**: Describe appearance, clothing, style, age, and **ethnicity/race** based on the script context. If the script implies a specific background (e.g., Western names, settings), ensure the visual prompt reflects that (e.g., 'Caucasian', 'Black', 'Latino'). Do NOT default to Asian/Chinese unless the script context suggests it. (Do not describe actions or props held in hand).
    - **Locations**: Describe atmosphere, lighting, architectural style. (Empty scene, no people).
    - **Props**: Describe material, shape, color. (Object only, neutral background).
 3. **Descriptions**: Provide a short description in the script's language.
