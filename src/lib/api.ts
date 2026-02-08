@@ -230,6 +230,28 @@ export const api = {
       if (error) throw error;
     },
 
+    bulkCreate: async (assets: Asset[]): Promise<void> => {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) throw new Error('User not authenticated');
+      if (assets.length === 0) return;
+
+      const rows = assets.map(asset => ({
+        id: asset.id,
+        user_id: user.id,
+        project_id: asset.projectId,
+        type: asset.type,
+        name: asset.name,
+        description: asset.description,
+        visual_prompt: asset.visualPrompt,
+        image_url: asset.imageUrl,
+        status: asset.status,
+        metadata: asset.metadata,
+      }));
+
+      const { error } = await supabase.from('assets').insert(rows);
+      if (error) throw error;
+    },
+
     update: async (id: string, updates: Partial<Asset>): Promise<void> => {
       const dbUpdates: any = {};
       if (updates.name) dbUpdates.name = updates.name;

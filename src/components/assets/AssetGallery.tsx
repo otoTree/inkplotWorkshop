@@ -4,6 +4,7 @@ import { api } from '@/lib/api';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
+import { Progress } from '@/components/ui/progress';
 import { Plus, User, MapPin, Box, Wand2, Loader2, Sparkles } from 'lucide-react';
 import { Asset, AssetType, Project } from '@/types';
 import { useState, useEffect, useCallback } from 'react';
@@ -26,6 +27,10 @@ export function AssetGallery({ projectId }: { projectId: string }) {
   const [loadingMessage, setLoadingMessage] = useState<string>('');
   const [extractionDialogOpen, setExtractionDialogOpen] = useState(false);
   const [foundAssets, setFoundAssets] = useState<Partial<Asset>[]>([]);
+  const [isImporting, setIsImporting] = useState(false);
+  const [isBatchGeneratingAll, setIsBatchGeneratingAll] = useState(false);
+  const [batchProgress, setBatchProgress] = useState(0);
+  const [batchTotal, setBatchTotal] = useState(0);
 
   // Generation State
   const [generatingAssets, setGeneratingAssets] = useState<Set<string>>(new Set());
@@ -165,9 +170,9 @@ export function AssetGallery({ projectId }: { projectId: string }) {
   };
 
   const handleImportAssets = async (selectedAssets: Partial<Asset>[]) => {
-      const newAssets: Asset[] = [];
-      for (const asset of selectedAssets) {
-        const newAsset: Asset = {
+      setIsImporting(true);
+      try {
+        const newAssets: Asset[] = selectedAssets.map(asset => ({
           id: crypto.randomUUID(),
           projectId,
           type: (asset.type as AssetType) || 'prop', // Default fallback
@@ -177,13 +182,17 @@ export function AssetGallery({ projectId }: { projectId: string }) {
           imageUrl: asset.imageUrl || '', // Preserve generated image url if any
           status: 'draft',
           metadata: {},
-        } as Asset;
-        await api.assets.create(newAsset);
-        newAssets.push(newAsset);
+        } as Asset));
+        
+        await api.assets.bulkCreate(newAssets);
+        setAssets(prev => [...prev, ...newAssets]);
+        setExtractionDialogOpen(false);
+      } catch (error) {
+        console.error('Import failed', error);
+        alert('导入失败，请重试');
+      } finally {
+        setIsImporting(false);
       }
-    
-    setAssets(prev => [...prev, ...newAssets]);
-    setExtractionDialogOpen(false);
   };
 
   const handleGenerateImage = async (e: React.MouseEvent, asset: Asset) => {
@@ -207,7 +216,7 @@ export function AssetGallery({ projectId }: { projectId: string }) {
             await api.assets.update(asset.id, { imageUrl: data.data[0].url });
             setAssets(prev => prev.map(a => a.id === asset.id ? { ...a, imageUrl: data.data[0].url } : a));
         } else {
-            alert('图片生成失败');
+            console.error('Image generation failed', data);
         }
     } catch (error) {
         console.error('Generation error:', error);
@@ -220,15 +229,102 @@ export function AssetGallery({ projectId }: { projectId: string }) {
     }
   };
 
+  const handleBatchGenerateAll = async () => {
+    const assetsToGenerate = assets.filter(a => !a.imageUrl && a.visualPrompt);
+    if (assetsToGenerate.length === 0) {
+        alert('所有已有 Prompt 的资产都已有图片，无需生成。');
+        return;
+    }
+
+    if (!confirm(`准备为 ${assetsToGenerate.length} 个资产生成图片，这可能需要一些时间。是否继续？`)) {
+        return;
+    }
+
+    setIsBatchGeneratingAll(true);
+    setBatchTotal(assetsToGenerate.length);
+    setBatchProgress(0);
+    let completed = 0;
+    
+    // Helper for single generation (reused logic without UI events)
+    const generateOne = async (asset: Asset) => {
+        setGeneratingAssets(prev => new Set(prev).add(asset.id));
+        try {
+            const fullPrompt = getImageGenerationPrompt(asset.visualPrompt, asset.type, project?.artStyle);
+            const response = await fetch('/api/ai/generate-image', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ prompt: fullPrompt }),
+            });
+            const data = await response.json();
+
+            if (data.data && data.data[0]?.url) {
+                await api.assets.update(asset.id, { imageUrl: data.data[0].url });
+                setAssets(prev => prev.map(a => a.id === asset.id ? { ...a, imageUrl: data.data[0].url } : a));
+            }
+        } catch (error) {
+            console.error(`Failed to generate for ${asset.name}:`, error);
+        } finally {
+            completed++;
+            setBatchProgress(completed);
+            setGeneratingAssets(prev => {
+                const next = new Set(prev);
+                next.delete(asset.id);
+                return next;
+            });
+        }
+    };
+
+    // Chunk execution
+    const chunkSize = 3;
+    for (let i = 0; i < assetsToGenerate.length; i += chunkSize) {
+        const chunk = assetsToGenerate.slice(i, i + chunkSize);
+        await Promise.all(chunk.map(a => generateOne(a)));
+    }
+
+    setIsBatchGeneratingAll(false);
+  };
+
+  const characterCount = assets.filter(a => a.type === 'character').length;
+  const locationCount = assets.filter(a => a.type === 'location').length;
+  const propCount = assets.filter(a => a.type === 'prop').length;
+  const missingImageCount = assets.filter(a => !a.imageUrl && a.visualPrompt).length;
+
   return (
     <div className="p-8 max-w-6xl mx-auto">
       <div className="flex justify-between items-center mb-8">
         <div>
             <h1 className="text-3xl font-serif font-bold mb-2">设定集</h1>
-            <p className="text-black/60">管理您的角色、场景和道具。</p>
+            <p className="text-black/60 mb-3">管理您的角色、场景和道具。</p>
+            <div className="flex gap-4 text-sm text-black/50 bg-black/[0.03] px-3 py-1.5 rounded-md w-fit">
+                <span className="flex items-center gap-1.5"><User className="w-3.5 h-3.5" /> {characterCount}</span>
+                <span className="w-px h-3 bg-black/10"></span>
+                <span className="flex items-center gap-1.5"><MapPin className="w-3.5 h-3.5" /> {locationCount}</span>
+                <span className="w-px h-3 bg-black/10"></span>
+                <span className="flex items-center gap-1.5"><Box className="w-3.5 h-3.5" /> {propCount}</span>
+            </div>
         </div>
-        <div className="flex gap-2">
-            <Button variant="outline" onClick={handleExtractFromScript} disabled={isExtracting}>
+        <div className="flex gap-2 items-center">
+            {isBatchGeneratingAll ? (
+                <div className="flex items-center gap-2 min-w-[200px]">
+                    <Progress value={(batchProgress / batchTotal) * 100} className="w-[120px] h-2" />
+                    <span className="text-xs text-black/50 tabular-nums">
+                        {batchProgress}/{batchTotal}
+                    </span>
+                </div>
+            ) : (
+                missingImageCount > 0 && (
+                    <Button 
+                        variant="secondary" 
+                        onClick={handleBatchGenerateAll} 
+                        disabled={isExtracting}
+                        className="border border-black/5"
+                    >
+                        <Sparkles className="w-4 h-4 mr-2" />
+                        一键生成 ({missingImageCount})
+                    </Button>
+                )
+            )}
+            <Button variant="outline" onClick={handleExtractFromScript} disabled={isExtracting || isBatchGeneratingAll}>
                 {isExtracting ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Wand2 className="w-4 h-4 mr-2" />}
                 {isExtracting ? (loadingMessage || '正在分析剧本...') : '从剧本自动提取'}
             </Button>
@@ -322,6 +418,7 @@ export function AssetGallery({ projectId }: { projectId: string }) {
         foundAssets={foundAssets}
         onConfirm={handleImportAssets}
         artStyle={project?.artStyle}
+        isImporting={isImporting}
       />
     </div>
   );

@@ -11,6 +11,7 @@ interface ExtractionPreviewDialogProps {
   foundAssets: Partial<Asset>[];
   onConfirm: (selectedAssets: Partial<Asset>[]) => void;
   artStyle?: string;
+  isImporting?: boolean;
 }
 
 export function ExtractionPreviewDialog({
@@ -18,7 +19,8 @@ export function ExtractionPreviewDialog({
   onOpenChange,
   foundAssets: initialFoundAssets,
   onConfirm,
-  artStyle
+  artStyle,
+  isImporting = false
 }: ExtractionPreviewDialogProps) {
   const [localAssets, setLocalAssets] = useState<Partial<Asset>[]>([]);
   const [selectedIndices, setSelectedIndices] = useState<Set<number>>(new Set());
@@ -195,8 +197,9 @@ export function ExtractionPreviewDialog({
             </div>
             <div className="flex gap-2">
                 <Button variant="outline" onClick={() => onOpenChange(false)}>取消</Button>
-                <Button onClick={handleConfirm} disabled={selectedIndices.size === 0 || isBatchGenerating}>
-                    导入选中的资产
+                <Button onClick={handleConfirm} disabled={selectedIndices.size === 0 || isBatchGenerating || isImporting}>
+                    {isImporting && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
+                    {isImporting ? '导入中...' : '导入选中的资产'}
                 </Button>
             </div>
         </DialogFooter>
