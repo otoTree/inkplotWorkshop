@@ -24,6 +24,7 @@ export function AssetGallery({ projectId }: { projectId: string }) {
 
   // Extraction State
   const [isExtracting, setIsExtracting] = useState(false);
+  const [loadingMessage, setLoadingMessage] = useState<string>('');
   const [extractionDialogOpen, setExtractionDialogOpen] = useState(false);
   const [foundAssets, setFoundAssets] = useState<Partial<Asset>[]>([]);
 
@@ -76,6 +77,7 @@ export function AssetGallery({ projectId }: { projectId: string }) {
 
   const handleExtractFromScript = async () => {
     setIsExtracting(true);
+    setLoadingMessage('正在准备提取...');
     try {
       const episodes = await db.episodes.where('projectId').equals(projectId).toArray();
       if (!episodes || episodes.length === 0) {
@@ -83,34 +85,63 @@ export function AssetGallery({ projectId }: { projectId: string }) {
         return;
       }
       
-      const scriptContent = episodes.map(e => `Episode ${e.episodeNumber}: ${e.title}\n${e.content}`).join('\n\n');
-      
-      const response = await fetch('/api/ai/extract-assets', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ scriptContent, artStyle: project?.artStyle }),
-      });
-      
-      if (!response.ok) throw new Error('Extraction failed');
-      
-      const data = await response.json();
-      if (data.assets && Array.isArray(data.assets)) {
-        // Filter duplicates (simple name check)
-        const existingNames = new Set(assets?.map(a => a.name));
-        const newAssets = data.assets.filter((a: any) => !existingNames.has(a.name));
+      const allFoundAssets: Partial<Asset>[] = [];
+      const existingNames = new Set(assets?.map(a => a.name));
+      // Track names found in this session to avoid duplicates
+      const sessionNames = new Set<string>();
+
+      // Sort episodes by number to ensure logical processing order
+      const sortedEpisodes = episodes.sort((a, b) => a.episodeNumber - b.episodeNumber);
+
+      for (let i = 0; i < sortedEpisodes.length; i++) {
+        const episode = sortedEpisodes[i];
+        setLoadingMessage(`正在分析第 ${episode.episodeNumber} 集 (${i + 1}/${sortedEpisodes.length})...`);
         
-        if (newAssets.length === 0) {
-          alert('未发现新资产 (所有识别到的资产已存在)');
-        } else {
-          setFoundAssets(newAssets);
-          setExtractionDialogOpen(true);
+        const scriptContent = `Episode ${episode.episodeNumber}: ${episode.title}\n${episode.content}`;
+        
+        try {
+          const response = await fetch('/api/ai/extract-assets', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ scriptContent, artStyle: project?.artStyle }),
+          });
+          
+          if (!response.ok) {
+            console.warn(`Failed to extract from episode ${episode.episodeNumber}`);
+            continue; 
+          }
+          
+          const data = await response.json();
+          if (data.assets && Array.isArray(data.assets)) {
+            data.assets.forEach((a: any) => {
+              // Normalize name for comparison (trim)
+              const normalizedName = a.name.trim();
+              
+              if (existingNames.has(normalizedName)) return;
+              if (sessionNames.has(normalizedName)) return;
+              
+              sessionNames.add(normalizedName);
+              // Ensure we keep the normalized name
+              allFoundAssets.push({ ...a, name: normalizedName });
+            });
+          }
+        } catch (err) {
+          console.error(`Error processing episode ${episode.episodeNumber}:`, err);
         }
+      }
+      
+      if (allFoundAssets.length === 0) {
+        alert('未发现新资产 (所有识别到的资产已存在)');
+      } else {
+        setFoundAssets(allFoundAssets);
+        setExtractionDialogOpen(true);
       }
     } catch (error) {
       console.error(error);
       alert('提取失败，请稍后重试');
     } finally {
       setIsExtracting(false);
+      setLoadingMessage('');
     }
   };
 
@@ -176,7 +207,7 @@ export function AssetGallery({ projectId }: { projectId: string }) {
         <div className="flex gap-2">
             <Button variant="outline" onClick={handleExtractFromScript} disabled={isExtracting}>
                 {isExtracting ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Wand2 className="w-4 h-4 mr-2" />}
-                {isExtracting ? '正在分析剧本...' : '从剧本自动提取'}
+                {isExtracting ? (loadingMessage || '正在分析剧本...') : '从剧本自动提取'}
             </Button>
         </div>
       </div>
