@@ -91,9 +91,9 @@ Requirements:
    - **Props**: Important objects that drive the plot.
 2. **Visual Prompts**: For EACH asset, generate a specific "visual_prompt" in English suitable for AI image generation (Midjourney/Stable Diffusion style).
    - **Style Constraint**: The visual prompts MUST strictly follow the art style: "${artStyle || 'Cinematic, Realistic'}".
-   - **Characters**: Describe appearance, clothing, style, age, and **ethnicity/race** based on the script context. If the script implies a specific background (e.g., Western names, settings), ensure the visual prompt reflects that (e.g., 'Caucasian', 'Black', 'Latino'). Do NOT default to Asian/Chinese unless the script context suggests it. (Do not describe actions or props held in hand).
+   - **Characters**: Describe appearance, clothing, style, age, and **ethnicity/race** based on the script context. If the script implies a specific background (e.g., Western names, settings), ensure the visual prompt reflects that (e.g., 'Caucasian', 'Black', 'Latino'). Do NOT default to Asian/Chinese unless the script context suggests it. (Do not describe actions, props, or background. Character ONLY).
    - **Locations**: Describe atmosphere, lighting, architectural style. (Empty scene, no people).
-   - **Props**: Describe material, shape, color. (Object only, neutral background).
+   - **Props**: Describe material, shape, color. (Object only, NO background description).
 3. **Descriptions**: Provide a short description in the script's language.
 
 Output Format: JSON
@@ -116,11 +116,11 @@ export const getImageGenerationPrompt = (basePrompt: string, type: 'character' |
     : ', high quality, 8k, concept art, masterpiece';
   
   if (type === 'character') {
-    return `${basePrompt}, three-view drawing (front view, side view, back view), character sheet, standing pose, neutral expression, pure white background, no props, full body${styleSuffix}`;
+    return `${basePrompt}, three-view drawing (front view, side view, back view), character sheet, standing pose, neutral expression, no props, full body, ${styleSuffix}, isolated on white background, solid white background`;
   } else if (type === 'location') {
     return `${basePrompt}, empty scene, no people, wide shot, atmospheric lighting${styleSuffix}`;
   } else if (type === 'prop') {
-    return `${basePrompt}, three-view drawing, object focus, neutral background, detailed texture${styleSuffix}`;
+    return `${basePrompt}, three-view drawing, object focus, detailed texture, ${styleSuffix}, isolated on white background, solid white background`;
   }
   return basePrompt + styleSuffix;
 };
