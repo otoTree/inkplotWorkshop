@@ -1,11 +1,19 @@
 
 import { NextResponse } from 'next/server';
 import { getStoryboardGenerationPrompt } from '@/lib/prompts';
+import { createClient } from '@/lib/supabase/server';
 
 export const maxDuration = 120; // Longer timeout for storyboard generation
 
 export async function POST(req: Request) {
   try {
+    const supabase = await createClient();
+    const { data: { user } } = await supabase.auth.getUser();
+
+    if (!user) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+
     const { script, assets, artStyle, language } = await req.json();
     const apiKey = process.env.OPENAI_API_KEY;
     const baseUrl = process.env.OPENAI_BASE_URL || 'https://api.openai.com/v1';

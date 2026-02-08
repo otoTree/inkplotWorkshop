@@ -1,6 +1,14 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { createClient } from '@/lib/supabase/server';
 
 export async function GET(req: NextRequest) {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+
+  if (!user) {
+    return new NextResponse('Unauthorized', { status: 401 });
+  }
+
   const searchParams = req.nextUrl.searchParams;
   const url = searchParams.get('url');
 

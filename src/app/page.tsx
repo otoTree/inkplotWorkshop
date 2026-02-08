@@ -1,9 +1,19 @@
 import { ProjectList } from "@/components/dashboard/ProjectList";
 import { ProjectDialog } from "@/components/dashboard/ProjectDialog";
 import { Button } from "@/components/ui/button";
-import { Plus } from "lucide-react";
+import { Plus, LogOut } from "lucide-react";
+import { createClient } from "@/lib/supabase/server";
+import { redirect } from "next/navigation";
+import { signOut } from "./actions";
 
-export default function Home() {
+export default async function Home() {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+
+  if (!user) {
+    redirect("/login");
+  }
+
   return (
     <div className="flex min-h-screen flex-col items-center p-8 sm:p-20 font-sans bg-white">
       <main className="flex flex-col gap-12 w-full max-w-6xl">
@@ -16,11 +26,18 @@ export default function Home() {
               东方极简主义与克制之美
             </p>
           </div>
-          <ProjectDialog>
-            <Button size="lg" className="rounded-full px-8">
-              <Plus className="mr-2 h-4 w-4" /> 新建项目
-            </Button>
-          </ProjectDialog>
+          <div className="flex gap-4">
+            <form action={signOut}>
+              <Button variant="outline" size="lg" className="rounded-full px-8">
+                <LogOut className="mr-2 h-4 w-4" /> 退出登录
+              </Button>
+            </form>
+            <ProjectDialog>
+              <Button size="lg" className="rounded-full px-8">
+                <Plus className="mr-2 h-4 w-4" /> 新建项目
+              </Button>
+            </ProjectDialog>
+          </div>
         </div>
         
         <div className="w-full">
