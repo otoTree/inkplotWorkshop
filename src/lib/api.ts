@@ -272,6 +272,11 @@ export const api = {
     delete: async (id: string): Promise<void> => {
         const { error } = await supabase.from('assets').delete().eq('id', id);
         if (error) throw error;
+    },
+
+    deleteByProject: async (projectId: string): Promise<void> => {
+        const { error } = await supabase.from('assets').delete().eq('project_id', projectId);
+        if (error) throw error;
     }
   },
 

@@ -5,7 +5,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Progress } from '@/components/ui/progress';
-import { Plus, User, MapPin, Box, Wand2, Loader2, Sparkles } from 'lucide-react';
+import { Plus, User, MapPin, Box, Wand2, Loader2, Sparkles, Trash2 } from 'lucide-react';
 import { Asset, AssetType, Project } from '@/types';
 import { useState, useEffect, useCallback } from 'react';
 import { AssetDialog } from './AssetDialog';
@@ -94,9 +94,33 @@ export function AssetGallery({ projectId }: { projectId: string }) {
     }
   };
 
-  const handleDeleteAsset = async (id: string) => {
+  const handleDeleteAsset = async (e: React.MouseEvent, id: string) => {
+    e.stopPropagation();
+    if (!confirm('确定删除此资产吗？')) return;
+    
     await api.assets.delete(id);
     setAssets(prev => prev.filter(a => a.id !== id));
+  };
+
+  const handleClearAllAssets = async () => {
+    if (assets.length === 0) return;
+    
+    if (!confirm('警告：确定要清空所有资产吗？此操作无法撤销。')) {
+        return;
+    }
+    
+    // Double confirm for safety
+    if (!confirm('请再次确认：这将删除当前项目下的所有角色、场景和道具。')) {
+        return;
+    }
+
+    try {
+        await api.assets.deleteByProject(projectId);
+        setAssets([]);
+    } catch (error) {
+        console.error('Failed to clear assets:', error);
+        alert('清空失败，请重试');
+    }
   };
 
   const handleExtractFromScript = async () => {
@@ -304,6 +328,18 @@ export function AssetGallery({ projectId }: { projectId: string }) {
             </div>
         </div>
         <div className="flex gap-2 items-center">
+            {assets.length > 0 && (
+                <Button 
+                    variant="ghost" 
+                    size="icon"
+                    onClick={handleClearAllAssets}
+                    className="text-black/30 hover:text-red-600 hover:bg-red-50 mr-2"
+                    title="清空所有资产"
+                >
+                    <Trash2 className="w-4 h-4" />
+                </Button>
+            )}
+
             {isBatchGeneratingAll ? (
                 <div className="flex items-center gap-2 min-w-[200px]">
                     <Progress value={(batchProgress / batchTotal) * 100} className="w-[120px] h-2" />
@@ -357,6 +393,18 @@ export function AssetGallery({ projectId }: { projectId: string }) {
                         onClick={() => handleOpenEdit(asset)}
                     >
                         <div className="relative w-full">
+                            {/* Delete Button (Top Right) */}
+                            <div className="absolute top-2 right-2 z-10 opacity-0 group-hover:opacity-100 transition-opacity">
+                                <Button
+                                    size="icon"
+                                    variant="secondary"
+                                    className="h-6 w-6 bg-white/90 hover:bg-red-50 hover:text-red-600 shadow-sm"
+                                    onClick={(e) => handleDeleteAsset(e, asset.id)}
+                                >
+                                    <Trash2 className="w-3 h-3" />
+                                </Button>
+                            </div>
+
                             {asset.imageUrl ? (
                                 <img src={asset.imageUrl} alt={asset.name} className="w-full h-auto object-cover" />
                             ) : (
@@ -408,7 +456,7 @@ export function AssetGallery({ projectId }: { projectId: string }) {
         mode={dialogMode}
         assetType={activeTab}
         onSave={handleSaveAsset}
-        onDelete={handleDeleteAsset}
+        onDelete={(id) => api.assets.delete(id).then(() => setAssets(prev => prev.filter(a => a.id !== id)))}
         artStyle={project?.artStyle}
       />
 
