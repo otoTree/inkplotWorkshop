@@ -151,9 +151,9 @@ This Skill synthesizes:
 4. **Viewer Inference Priority**: If the viewer cannot infer the plot from the visual alone, the shot is invalid.
 5. **Multi-track but Locked Sequence**: P0 locks the order, P1 explains causality, P2 expresses it.
 6. **Language Requirement**: All content in the JSON output (narrativeGoal, visualEvidence, description) MUST be in ${isEnglish ? 'English' : 'the target language (' + language + ')'}.
-  7. **15s Self-Contained Narrative**: Each shot should aim for ~15s duration and MUST complete a full narrative loop (Trigger → Action → Result/State Change). Avoid relying solely on empty shots or transitions to fill information.
-8. **Mandatory Visual Continuity (Connecting Links)**: Shot transitions MUST have clear visual logic (e.g., eyeline match, action continuity, reaction shot). If the previous shot is "A looks at something", the next shot MUST be "what A sees" or "B's reaction". No illogical hard cuts.
-9. **High Information Density (Controlled)**: The total information per shot (P0+P1+P2+Dialogue) should be rich but not excessive, aiming for ~300-500 characters to prevent truncation. P2 layer should include key descriptions of lighting, texture, and micro-expressions, but be concise.
+  7. **Flexible Duration (10s-15s)**: Each shot should typically last between 10s to 15s. It must complete a full narrative loop (Trigger → Action → Result/State Change). Do not force every shot to be exactly 15s; adjust based on the complexity of the action.
+  8. **Mandatory Visual Continuity (Connecting Links)**: Shot transitions MUST have clear visual logic (e.g., eyeline match, action continuity, reaction shot). If the previous shot is "A looks at something", the next shot MUST be "what A sees" or "B's reaction". No illogical hard cuts.
+  9. **High Information Density (Controlled)**: The total information per shot (P0+P1+P2+Dialogue) should be rich, aiming for ~500-700 characters, but MUST NOT exceed 900 characters to prevent truncation. P2 layer should include key descriptions of lighting, texture, and micro-expressions.
 
 ## 1. Semantic Priority Levels
 
@@ -184,7 +184,7 @@ This Skill synthesizes:
 Analyze the provided script and generate a storyboard sequence following the P0/P1/P2 model.
 **IMPORTANT**: 
 1. **Continuity**: Ensure fluidity between shots. In P0, explicitly state "Connection to previous shot: ...".
-2. **Length Control**: Ensure P2 description is detailed but not overly long (target 300-500 chars) to prevent JSON truncation. If the script is long, prioritize the integrity of key plot points.
+2. **Length Control**: Ensure P2 description is detailed. Target 500-700 chars, but strictly < 900 chars total per shot (including dialogue).
 
 **Script Content**:
 ${scriptContent.slice(0, 15000)}...
@@ -201,11 +201,11 @@ ${JSON.stringify(existingAssets.map(a => ({ id: a.id, name: a.name, type: a.type
       "sequence": 1,
       "narrativeGoal": "P0: [Connection Logic] + Character A transitions from State X to State Y...",
       "visualEvidence": "P1: Action Anchor + Evidence + Emotion...",
-      "description": "P2: (Detailed ~300-500 chars) Detailed visual description including lighting, composition, micro-expressions, textures...",
+      "description": "P2: (Detailed ~500-700 chars) Detailed visual description including lighting, composition, micro-expressions, textures...",
       "dialogue": "Character Name: Content (or Voiceover: Content)",
       "camera": "Close-up / Pan Right / ...",
       "size": "Medium Shot",
-      "duration": 15, // Estimated duration in seconds (typically around 15s per shot)
+      "duration": 12, // Estimated duration in seconds (10-15s flexible)
       "suggestedAssetNames": ["Char Name", "Prop Name", "Location Name"] // List names of assets used in this shot
     },
     ...
