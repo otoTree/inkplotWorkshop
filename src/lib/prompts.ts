@@ -151,9 +151,10 @@ This Skill synthesizes:
 4. **Viewer Inference Priority**: If the viewer cannot infer the plot from the visual alone, the shot is invalid.
 5. **Multi-track but Locked Sequence**: P0 locks the order, P1 explains causality, P2 expresses it.
 6. **Language Requirement**: All content in the JSON output (narrativeGoal, visualEvidence, description) MUST be in ${isEnglish ? 'English' : 'the target language (' + language + ')'}.
-  7. **Flexible Duration (10s-15s)**: Each shot should typically last between 10s to 15s. It must complete a full narrative loop (Trigger → Action → Result/State Change). Do not force every shot to be exactly 15s; adjust based on the complexity of the action.
-  8. **Mandatory Visual Continuity (Connecting Links)**: Shot transitions MUST have clear visual logic (e.g., eyeline match, action continuity, reaction shot). If the previous shot is "A looks at something", the next shot MUST be "what A sees" or "B's reaction". No illogical hard cuts.
-  9. **Sufficient Information Density**: The total information per shot (P0+P1+P2+Dialogue) should be sufficient to convey the narrative logic and visual atmosphere, aiming for ~200-300 characters. Avoid excessive detail; focus on the core narrative loop and essential visual elements.
+7. **Scene & Character Explicitness (Mandatory)**: Every shot MUST explicitly state the **scene/location** and **characters present**. Props are optional but include if relevant. Put this explicitly in **visualEvidence** using the format: "场景: ... | 人物: ... | 道具: ...(可选)".
+8. **Flexible Duration (10s-15s)**: Each shot should typically last between 10s to 15s. It must complete a full narrative loop (Trigger → Action → Result/State Change). Do not force every shot to be exactly 15s; adjust based on the complexity of the action.
+9. **Mandatory Visual Continuity (Connecting Links)**: Shot transitions MUST have clear visual logic (e.g., eyeline match, action continuity, reaction shot). If the previous shot is "A looks at something", the next shot MUST be "what A sees" or "B's reaction". No illogical hard cuts.
+10. **Sufficient Information Density**: The total information per shot (P0+P1+P2+Dialogue) should be sufficient to convey the narrative logic and visual atmosphere, aiming for ~200-300 characters. Avoid excessive detail; focus on the core narrative loop and essential visual elements.
 
 ## 1. Semantic Priority Levels
 
@@ -184,7 +185,8 @@ This Skill synthesizes:
 Analyze the provided script and generate a storyboard sequence following the P0/P1/P2 model.
 **IMPORTANT**: 
 1. **Continuity**: Ensure fluidity between shots. In P0, explicitly state "Connection to previous shot: ...".
-2. **Length Control**: Ensure P2 description is concise and focused on narrative closure. Target ~200-300 chars total per shot. Avoid verbose descriptions.
+2. **Dialogue Scene Binding**: If dialogue exists, it must clearly occur within the stated scene.
+3. **Length Control**: Ensure P2 description is concise and focused on narrative closure. Target ~200-300 chars total per shot. Avoid verbose descriptions.
 
 **Script Content**:
 ${scriptContent.slice(0, 15000)}...
@@ -200,7 +202,7 @@ ${JSON.stringify(existingAssets.map(a => ({ id: a.id, name: a.name, type: a.type
     {
       "sequence": 1,
       "narrativeGoal": "P0: [Connection Logic] + Character A transitions from State X to State Y...",
-      "visualEvidence": "P1: Action Anchor + Evidence + Emotion...",
+      "visualEvidence": "P1: 场景: ... | 人物: ... | 道具: ...(可选) + Action Anchor + Evidence + Emotion...",
       "description": "P2: (Concise ~200-300 chars) Essential visual description including lighting and composition...",
       "dialogue": "Character Name: Content (or Voiceover: Content)",
       "camera": "Close-up / Pan Right / ...",

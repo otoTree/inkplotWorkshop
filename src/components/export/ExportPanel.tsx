@@ -99,6 +99,7 @@ export function ExportPanel({ projectId }: { projectId: string }) {
                 content += `- **Duration**: ${shot.duration}s\n`;
                 content += `- **Size**: ${shot.size || 'N/A'}\n`;
                 content += `- **Camera**: ${shot.camera || 'N/A'}\n`;
+                content += `- **Art Style**: ${project.artStyle || '未设置'}\n`;
                 content += `- **Narrative Goal**: ${shot.narrativeGoal}\n`;
                 content += `- **Visual Evidence**: ${shot.visualEvidence}\n`;
                 content += `- **Description**: ${shot.description}\n`;
