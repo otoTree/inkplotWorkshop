@@ -56,25 +56,64 @@ export function StoryboardEditor({ projectId }: StoryboardEditorProps) {
 
     setIsGenerating(true);
     try {
-      const res = await fetch('/api/ai/generate-storyboard', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          script: episode.content,
-          assets: assets || [],
-          artStyle: project?.artStyle,
-          language: project?.language
-        })
-      });
-
-      if (!res.ok) throw new Error(await res.text());
-
-      const data = await res.json();
-      
-      // Clear existing shots for this episode
+      // Clear existing shots for this episode first
       await api.shots.deleteByEpisode(selectedEpisodeId);
+      
+      const scriptContent = episode.content || '';
+      
+      // Simple chunking strategy: Split by double newlines (paragraphs) and group them
+      // Goal: Keep each chunk under ~1500 chars to ensure output fits in token limit
+      // A safe output limit is ~4000 tokens. 10 shots * 800 chars = 8000 chars (too big).
+      // If we limit to 3-4 shots per chunk? No, shots count depends on content.
+      // Better: Limit input script chunk to ~500-800 chars.
+      
+      const chunks: string[] = [];
+      let currentChunk = '';
+      const paragraphs = scriptContent.split(/\n\s*\n/);
+      
+      for (const p of paragraphs) {
+        if ((currentChunk + p).length > 800) {
+            if (currentChunk) chunks.push(currentChunk);
+            currentChunk = p;
+        } else {
+            currentChunk += (currentChunk ? '\n\n' : '') + p;
+        }
+      }
+      if (currentChunk) chunks.push(currentChunk);
 
-      const newShots: Shot[] = data.shots.map((s: any) => {
+      let allShots: any[] = [];
+      let lastShotContext = ''; // To maintain continuity across chunks
+
+      for (let i = 0; i < chunks.length; i++) {
+         // Add context from previous chunk if it's not the first one
+         const chunkScript = (i > 0 ? `[Context: Previous shot ended with: ${lastShotContext}]\n\n` : '') + chunks[i];
+
+         const res = await fetch('/api/ai/generate-storyboard', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              script: chunkScript,
+              assets: assets || [],
+              artStyle: project?.artStyle,
+              language: project?.language
+            })
+          });
+
+          if (!res.ok) throw new Error(await res.text());
+          const data = await res.json();
+          
+          if (data.shots && Array.isArray(data.shots)) {
+             allShots = [...allShots, ...data.shots];
+             // Update context for next chunk
+             const lastShot = data.shots[data.shots.length - 1];
+             if (lastShot) {
+                 lastShotContext = lastShot.narrativeGoal || lastShot.description || '';
+             }
+          }
+      }
+
+      // Re-sequence shots
+      const newShots: Shot[] = allShots.map((s: any, index: number) => {
         // Map suggested asset names to IDs
         const relatedIds: string[] = [];
         if (s.suggestedAssetNames && assets) {
@@ -87,7 +126,7 @@ export function StoryboardEditor({ projectId }: StoryboardEditorProps) {
         return {
           id: crypto.randomUUID(),
           episodeId: selectedEpisodeId,
-          sequence: s.sequence,
+          sequence: index + 1,
           narrativeGoal: s.narrativeGoal || '',
           visualEvidence: s.visualEvidence || '',
           description: s.description || '',
