@@ -72,7 +72,7 @@ export function StoryboardEditor({ projectId }: StoryboardEditorProps) {
       const paragraphs = scriptContent.split(/\n\s*\n/);
       
       for (const p of paragraphs) {
-        if ((currentChunk + p).length > 800) {
+        if ((currentChunk + p).length > 600) {
             if (currentChunk) chunks.push(currentChunk);
             currentChunk = p;
         } else {

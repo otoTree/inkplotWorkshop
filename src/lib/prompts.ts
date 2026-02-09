@@ -185,7 +185,8 @@ This Skill synthesizes:
 Analyze the provided script and generate a storyboard sequence following the P0/P1/P2 model.
 **IMPORTANT**: 
 1. **Continuity**: Ensure fluidity between shots. In P0, explicitly state "Connection to previous shot: ...".
-2. **Length Control**: Ensure P2 description is concise and focused on narrative closure. Target ~200-300 chars total per shot. Avoid verbose descriptions.
+2. **Length Control**: Ensure P2 description is concise and focused on narrative closure. Target ~120-180 chars total per shot. Avoid verbose descriptions.
+3. **Shot Count Limit**: For the provided script chunk, output 3-6 shots only. Never exceed 6 shots. If content is dense, merge actions into fewer shots.
 
 **Script Content**:
 ${scriptContent.slice(0, 15000)}...
@@ -202,7 +203,7 @@ ${JSON.stringify(existingAssets.map(a => ({ id: a.id, name: a.name, type: a.type
       "sequence": 1,
       "narrativeGoal": "P0: [Connection Logic] + Character A transitions from State X to State Y...",
       "visualEvidence": "P1: Action Anchor + Evidence + Emotion...",
-      "description": "P2: (Concise ~200-300 chars) Essential visual description including lighting and composition...",
+      "description": "P2: (Concise ~120-180 chars) Essential visual description including lighting and composition...",
       "dialogue": "Character Name: Content (or Voiceover: Content)",
       "camera": "Close-up / Pan Right / ...",
       "size": "Medium Shot",
