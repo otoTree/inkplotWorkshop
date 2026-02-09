@@ -114,12 +114,33 @@ export function StoryboardEditor({ projectId }: StoryboardEditorProps) {
 
       // Re-sequence shots
       const newShots: Shot[] = allShots.map((s: any, index: number) => {
-        // Map suggested asset names to IDs
         const relatedIds: string[] = [];
-        if (s.suggestedAssetNames && assets) {
-          s.suggestedAssetNames.forEach((name: string) => {
-            const asset = assets.find(a => a.name.toLowerCase().includes(name.toLowerCase()));
-            if (asset) relatedIds.push(asset.id);
+        const suggestedNames: string[] = [];
+
+        if (Array.isArray(s.suggestedAssetNames)) {
+          suggestedNames.push(...s.suggestedAssetNames.filter((name: string) => typeof name === 'string'));
+        }
+
+        if (s.suggestedAssets) {
+          if (Array.isArray(s.suggestedAssets)) {
+            suggestedNames.push(...s.suggestedAssets.map((item: any) => item?.name).filter((name: any) => typeof name === 'string'));
+          } else {
+            const { characters, locations, props } = s.suggestedAssets;
+            if (Array.isArray(characters)) suggestedNames.push(...characters);
+            if (Array.isArray(locations)) suggestedNames.push(...locations);
+            if (Array.isArray(props)) suggestedNames.push(...props);
+          }
+        }
+
+        if (assets && suggestedNames.length > 0) {
+          const normalize = (value: string) => value.trim().toLowerCase();
+          const uniqueNames = Array.from(new Set(suggestedNames.map((name: string) => name.trim()).filter(Boolean)));
+          uniqueNames.forEach((name: string) => {
+            const normalizedName = normalize(name);
+            const exact = assets.find(a => normalize(a.name) === normalizedName);
+            const fuzzy = assets.find(a => normalize(a.name).includes(normalizedName) || normalizedName.includes(normalize(a.name)));
+            const asset = exact || fuzzy;
+            if (asset && !relatedIds.includes(asset.id)) relatedIds.push(asset.id);
           });
         }
 
