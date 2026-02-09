@@ -143,7 +143,9 @@ This Skill synthesizes:
 4. **Viewer Inference Priority**: If the viewer cannot infer the plot from the visual alone, the shot is invalid.
 5. **Multi-track but Locked Sequence**: P0 locks the order, P1 explains causality, P2 expresses it.
 6. **Language Requirement**: All content in the JSON output (narrativeGoal, visualEvidence, description) MUST be in ${language === 'en' ? 'English' : language === 'zh' ? 'Chinese' : language}.
-7. **High Information Density & Continuity**: Each shot must be information-dense and self-contained. Avoid fragmented "micro-shots" (e.g., just a hand moving, just a door opening) unless absolutely necessary. A single shot should ideally capture a complete action beat (Action + Reaction or Trigger + Result) to minimize the need for complex editing/transitions. The sequence should flow naturally without gaps.
+7. **15s 完整叙事优先**: 每个镜头目标时长约 15s，单镜头内要完成一个完整的叙事逻辑闭环（触发 → 行动 → 结果/状态变化）。避免仅靠空镜/转场来补足信息。
+8. **必要衔接镜头规则**: 如果完整叙事无法在 15s 内完成，必须拆分为多个镜头，并生成“衔接场景”镜头以补齐因果链。衔接镜头必须承载新的因果信息，不得是空镜或无叙事价值的过渡。
+9. **高信息密度与可独立理解**: 每个镜头都应信息密集、可独立理解，不依赖额外转场或补充解释。避免碎片化“微镜头”（例如只有手移动、只开门）除非它本身承载关键因果信息。
 
 ## 1. Semantic Priority Levels
 
@@ -170,7 +172,7 @@ This Skill synthesizes:
 
 ## Task
 Analyze the provided script and generate a storyboard sequence following the P0/P1/P2 model.
-**IMPORTANT**: Ensure the generated sequence is "edit-ready". The shots should cover the narrative continuously without needing users to insert empty shots or transitions manually. Merge small, related actions into single, longer shots where appropriate.
+**IMPORTANT**: 输出的镜头应“可直接剪辑合并”为完整故事。优先用单镜头在约 15s 内完成完整叙事闭环；若无法完成，拆分为多个镜头并补充衔接镜头，确保镜头之间直接拼接即可理解因果。
 
 **Script Content**:
 ${scriptContent.slice(0, 15000)}...
@@ -191,7 +193,7 @@ ${JSON.stringify(existingAssets.map(a => ({ id: a.id, name: a.name, type: a.type
       "dialogue": "Character Name: Content (or Voiceover: Content)",
       "camera": "Close-up / Pan Right / ...",
       "size": "Medium Shot",
-      "duration": 10, // Estimated duration in seconds (typically 10-15s for dense shots)
+      "duration": 15, // Estimated duration in seconds (typically around 15s per shot)
       "suggestedAssetNames": ["Char Name", "Prop Name", "Location Name"] // List names of assets used in this shot
     },
     ...
