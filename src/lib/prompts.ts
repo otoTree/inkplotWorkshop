@@ -145,7 +145,7 @@ This Skill synthesizes:
 6. **Language Requirement**: All content in the JSON output (narrativeGoal, visualEvidence, description) MUST be in ${language === 'en' ? 'English' : language === 'zh' ? 'Chinese' : language}.
 7. **15s 完整叙事优先**: 每个镜头目标时长约 15s，单镜头内要完成一个完整的叙事逻辑闭环（触发 → 行动 → 结果/状态变化）。避免仅靠空镜/转场来补足信息。
 8. **必要衔接镜头规则 (承上启下)**: 镜头切换必须有明确的视觉逻辑（如：视线匹配、动作接续、反应镜头）。如果上一个镜头是“A看某处”，下一个镜头必须是“A看到的内容”或“B的反应”。禁止无逻辑的硬切。
-9. **高信息密度 (1000字原则)**: 每个镜头的总信息量（P0+P1+P2+对白）应极其丰富，目标约为 800-1000 字符。P2 层级必须包含极度细致的光影、纹理、微表情、环境氛围描述，以满足高保真视频生成的需求。
+9. **高信息密度 (适度控制)**: 每个镜头的总信息量（P0+P1+P2+对白）应丰富但不过度，目标约为 300-500 字符，防止输出截断。P2 层级应包含关键的光影、纹理、微表情描述，但要言简意赅。
 
 ## 1. Semantic Priority Levels
 
@@ -169,14 +169,14 @@ This Skill synthesizes:
 **Definition**: The expression layer used to **enhance emotional and thematic impact** after P0 and P1 are established.
 - Composition, Shot Size, Camera Movement
 - Lighting, Color, Rhythm
-- Stylistic Metaphors (but no new plot information)
-- **Detail Level**: Extreme. Describe the texture of the skin, the exact fall of the light, the background elements, the speed of the movement.
+  - Stylistic Metaphors (but no new plot information)
+  - **Detail Level**: High. Describe the texture, light, and atmosphere efficiently.
 
 ## Task
 Analyze the provided script and generate a storyboard sequence following the P0/P1/P2 model.
 **IMPORTANT**: 
 1. **承上启下**: 确保镜头之间的流动性。在 P0 中明确说明“承接上镜：...”。
-2. **字数控制**: 确保 P2 描述足够长且详尽（目标 800+ 字符），不要简略。
+2. **字数控制**: 确保 P2 描述详尽但不过长（目标 300-500 字符），防止 JSON 截断。如果剧本较长，请优先保证关键情节的完整性。
 
 **Script Content**:
 ${scriptContent.slice(0, 15000)}...
@@ -193,7 +193,7 @@ ${JSON.stringify(existingAssets.map(a => ({ id: a.id, name: a.name, type: a.type
       "sequence": 1,
       "narrativeGoal": "P0: [承接上镜逻辑] + Character A transitions from State X to State Y...",
       "visualEvidence": "P1: Action Anchor + Evidence + Emotion...",
-      "description": "P2: (EXTREMELY DETAILED ~800-1000 chars) Detailed visual description including lighting, composition, micro-expressions, textures, background details...",
+      "description": "P2: (Detailed ~300-500 chars) Detailed visual description including lighting, composition, micro-expressions, textures...",
       "dialogue": "Character Name: Content (or Voiceover: Content)",
       "camera": "Close-up / Pan Right / ...",
       "size": "Medium Shot",
