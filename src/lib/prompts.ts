@@ -144,8 +144,8 @@ This Skill synthesizes:
 5. **Multi-track but Locked Sequence**: P0 locks the order, P1 explains causality, P2 expresses it.
 6. **Language Requirement**: All content in the JSON output (narrativeGoal, visualEvidence, description) MUST be in ${language === 'en' ? 'English' : language === 'zh' ? 'Chinese' : language}.
 7. **15s 完整叙事优先**: 每个镜头目标时长约 15s，单镜头内要完成一个完整的叙事逻辑闭环（触发 → 行动 → 结果/状态变化）。避免仅靠空镜/转场来补足信息。
-8. **必要衔接镜头规则**: 如果完整叙事无法在 15s 内完成，必须拆分为多个镜头，并生成“衔接场景”镜头以补齐因果链。衔接镜头必须承载新的因果信息，不得是空镜或无叙事价值的过渡。
-9. **高信息密度与可独立理解**: 每个镜头都应信息密集、可独立理解，不依赖额外转场或补充解释。避免碎片化“微镜头”（例如只有手移动、只开门）除非它本身承载关键因果信息。
+8. **必要衔接镜头规则 (承上启下)**: 镜头切换必须有明确的视觉逻辑（如：视线匹配、动作接续、反应镜头）。如果上一个镜头是“A看某处”，下一个镜头必须是“A看到的内容”或“B的反应”。禁止无逻辑的硬切。
+9. **高信息密度 (1000字原则)**: 每个镜头的总信息量（P0+P1+P2+对白）应极其丰富，目标约为 800-1000 字符。P2 层级必须包含极度细致的光影、纹理、微表情、环境氛围描述，以满足高保真视频生成的需求。
 
 ## 1. Semantic Priority Levels
 
@@ -155,6 +155,7 @@ This Skill synthesizes:
 - Bound to a [Specific Character]
 - Involves change in [Psychology / Cognition / Goal / Relationship]
 - Has a [Clear Trigger]
+- **Transition Logic**: Why does this shot follow the previous one?
 
 ### 🟧 P1 — Visual Inference Layer
 **Definition**: The **set of explicitly presented visual information** required for the audience to "understand P0".
@@ -169,10 +170,13 @@ This Skill synthesizes:
 - Composition, Shot Size, Camera Movement
 - Lighting, Color, Rhythm
 - Stylistic Metaphors (but no new plot information)
+- **Detail Level**: Extreme. Describe the texture of the skin, the exact fall of the light, the background elements, the speed of the movement.
 
 ## Task
 Analyze the provided script and generate a storyboard sequence following the P0/P1/P2 model.
-**IMPORTANT**: 输出的镜头应“可直接剪辑合并”为完整故事。优先用单镜头在约 15s 内完成完整叙事闭环；若无法完成，拆分为多个镜头并补充衔接镜头，确保镜头之间直接拼接即可理解因果。
+**IMPORTANT**: 
+1. **承上启下**: 确保镜头之间的流动性。在 P0 中明确说明“承接上镜：...”。
+2. **字数控制**: 确保 P2 描述足够长且详尽（目标 800+ 字符），不要简略。
 
 **Script Content**:
 ${scriptContent.slice(0, 15000)}...
@@ -187,9 +191,9 @@ ${JSON.stringify(existingAssets.map(a => ({ id: a.id, name: a.name, type: a.type
   "shots": [
     {
       "sequence": 1,
-      "narrativeGoal": "P0: Character A transitions from State X to State Y because of Z...",
+      "narrativeGoal": "P0: [承接上镜逻辑] + Character A transitions from State X to State Y...",
       "visualEvidence": "P1: Action Anchor + Evidence + Emotion...",
-      "description": "P2: Detailed visual description including lighting, composition...",
+      "description": "P2: (EXTREMELY DETAILED ~800-1000 chars) Detailed visual description including lighting, composition, micro-expressions, textures, background details...",
       "dialogue": "Character Name: Content (or Voiceover: Content)",
       "camera": "Close-up / Pan Right / ...",
       "size": "Medium Shot",
