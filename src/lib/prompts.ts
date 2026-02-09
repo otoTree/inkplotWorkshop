@@ -20,13 +20,15 @@ Key Principles:
 `;
 };
 
-export const getOriginalStoryPrompt = (theme: string, language: string = 'zh') => `
+export const getOriginalStoryPrompt = (theme: string, language: string = 'zh') => {
+  const isEnglish = language === 'en';
+  return `
 Task: Create a complete 10-episode mini-series outline based on the user's theme.
 Theme: ${theme}
 
 Requirements:
 1. **Aesthetic**: The story MUST use character names and settings appropriate for the language: ${language}.
-2. **Language**: The outline MUST be in ${language === 'en' ? 'English' : 'Chinese (or target language)'}.
+2. **Language**: The outline MUST be in ${isEnglish ? 'English' : 'the target language (' + language + ')'}.
 3. **Components**:
    - **core_conflict**: The main conflict of the story.
    - **main_characters**: Key characters and their motivations.
@@ -52,8 +54,11 @@ Output Format: JSON
   ]
 }
 `;
+};
 
-export const getEpisodeContentPrompt = (episodeNum: number, seriesPlan: any, summary: string, language: string = 'zh') => `
+export const getEpisodeContentPrompt = (episodeNum: number, seriesPlan: any, summary: string, language: string = 'zh') => {
+  const isEnglish = language === 'en';
+  return `
 Task: Write the detailed script for **Episode ${episodeNum}**.
 Context:
 - Series Plan: ${JSON.stringify(seriesPlan)}
@@ -62,7 +67,7 @@ Context:
 Requirements:
 1. **Aesthetic**: Ensure dialogue is natural for native speakers of ${language}.
 2. **Structure Consistency**: STRICTLY follow the format below.
-3. **Language**: The script content MUST be in ${language === 'en' ? 'English' : language === 'zh' ? 'Chinese' : language}.
+3. **Language**: The script content MUST be in ${isEnglish ? 'English' : 'the target language (' + language + ')'}.
 4. **Content Quality (CRITICAL)**:
    - **Visual Storytelling**: Use "Show, Don't Tell". Describe actions, expressions, and camera angles.
    - **TikTok Pacing**: 
@@ -73,6 +78,7 @@ Output Format: JSON
     "script_content": "..." // The full script content in ${language}
 }
 `;
+};
 
 // Keeping backward compatibility variables if needed, but ideally we replace usages.
 export const SYSTEM_PROMPT = getSystemPrompt('zh');
@@ -125,7 +131,9 @@ export const getImageGenerationPrompt = (basePrompt: string, type: 'character' |
   return basePrompt + styleSuffix;
 };
 
-export const getStoryboardGenerationPrompt = (scriptContent: string, existingAssets: any[], artStyle?: string, language: string = 'zh') => `
+export const getStoryboardGenerationPrompt = (scriptContent: string, existingAssets: any[], artStyle?: string, language: string = 'zh') => {
+  const isEnglish = language === 'en';
+  return `
 # Skill: Narrative-to-Visual Reasoning (P0 / P1 / P2)
 
 > Goal: Transform the provided script into a sequence of shots where the AI acts as a director, understanding causality, organizing shots, and generating readable visual sequences under "no narration/weak dialogue" conditions.
@@ -142,10 +150,10 @@ This Skill synthesizes:
 3. **Verbs > Nouns**: Action > Scene > Style.
 4. **Viewer Inference Priority**: If the viewer cannot infer the plot from the visual alone, the shot is invalid.
 5. **Multi-track but Locked Sequence**: P0 locks the order, P1 explains causality, P2 expresses it.
-6. **Language Requirement**: All content in the JSON output (narrativeGoal, visualEvidence, description) MUST be in ${language === 'en' ? 'English' : language === 'zh' ? 'Chinese' : language}.
-7. **15s 完整叙事优先**: 每个镜头目标时长约 15s，单镜头内要完成一个完整的叙事逻辑闭环（触发 → 行动 → 结果/状态变化）。避免仅靠空镜/转场来补足信息。
-8. **必要衔接镜头规则 (承上启下)**: 镜头切换必须有明确的视觉逻辑（如：视线匹配、动作接续、反应镜头）。如果上一个镜头是“A看某处”，下一个镜头必须是“A看到的内容”或“B的反应”。禁止无逻辑的硬切。
-9. **高信息密度 (适度控制)**: 每个镜头的总信息量（P0+P1+P2+对白）应丰富但不过度，目标约为 300-500 字符，防止输出截断。P2 层级应包含关键的光影、纹理、微表情描述，但要言简意赅。
+6. **Language Requirement**: All content in the JSON output (narrativeGoal, visualEvidence, description) MUST be in ${isEnglish ? 'English' : 'the target language (' + language + ')'}.
+  7. **15s Self-Contained Narrative**: Each shot should aim for ~15s duration and MUST complete a full narrative loop (Trigger → Action → Result/State Change). Avoid relying solely on empty shots or transitions to fill information.
+8. **Mandatory Visual Continuity (Connecting Links)**: Shot transitions MUST have clear visual logic (e.g., eyeline match, action continuity, reaction shot). If the previous shot is "A looks at something", the next shot MUST be "what A sees" or "B's reaction". No illogical hard cuts.
+9. **High Information Density (Controlled)**: The total information per shot (P0+P1+P2+Dialogue) should be rich but not excessive, aiming for ~300-500 characters to prevent truncation. P2 layer should include key descriptions of lighting, texture, and micro-expressions, but be concise.
 
 ## 1. Semantic Priority Levels
 
@@ -175,8 +183,8 @@ This Skill synthesizes:
 ## Task
 Analyze the provided script and generate a storyboard sequence following the P0/P1/P2 model.
 **IMPORTANT**: 
-1. **承上启下**: 确保镜头之间的流动性。在 P0 中明确说明“承接上镜：...”。
-2. **字数控制**: 确保 P2 描述详尽但不过长（目标 300-500 字符），防止 JSON 截断。如果剧本较长，请优先保证关键情节的完整性。
+1. **Continuity**: Ensure fluidity between shots. In P0, explicitly state "Connection to previous shot: ...".
+2. **Length Control**: Ensure P2 description is detailed but not overly long (target 300-500 chars) to prevent JSON truncation. If the script is long, prioritize the integrity of key plot points.
 
 **Script Content**:
 ${scriptContent.slice(0, 15000)}...
@@ -191,7 +199,7 @@ ${JSON.stringify(existingAssets.map(a => ({ id: a.id, name: a.name, type: a.type
   "shots": [
     {
       "sequence": 1,
-      "narrativeGoal": "P0: [承接上镜逻辑] + Character A transitions from State X to State Y...",
+      "narrativeGoal": "P0: [Connection Logic] + Character A transitions from State X to State Y...",
       "visualEvidence": "P1: Action Anchor + Evidence + Emotion...",
       "description": "P2: (Detailed ~300-500 chars) Detailed visual description including lighting, composition, micro-expressions, textures...",
       "dialogue": "Character Name: Content (or Voiceover: Content)",
@@ -204,3 +212,4 @@ ${JSON.stringify(existingAssets.map(a => ({ id: a.id, name: a.name, type: a.type
   ]
 }
 `;
+};
