@@ -69,7 +69,7 @@ export async function POST(req: Request) {
       body: JSON.stringify({
         model_name: model,
         prompt: prompt,
-        n: images ? (Array.isArray(images) ? images.length : 1) : 1,
+        image_count: 1,
         aspect_ratio: aspectRatio,
       }),
     });
