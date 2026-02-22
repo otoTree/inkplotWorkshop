@@ -4,7 +4,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
-import { Asset, AssetType } from '@/types';
+import { ArtStyleConfig, Asset, AssetType } from '@/types';
 import { Trash2, Wand2, Loader2, ImageIcon } from 'lucide-react';
 import { getImageGenerationPrompt } from '@/lib/prompts';
 
@@ -16,7 +16,7 @@ interface AssetDialogProps {
   assetType: AssetType;
   onSave: (data: Partial<Asset>) => Promise<void>;
   onDelete?: (id: string) => Promise<void>;
-  artStyle?: string;
+  artStyle?: ArtStyleConfig;
 }
 
 export function AssetDialog({ 
@@ -104,7 +104,7 @@ export function AssetDialog({
     setIsGenerating(true);
     try {
       const fullPrompt = getImageGenerationPrompt(formData.visualPrompt, assetType, artStyle);
-      const aspectRatio = assetType === 'character' ? '9:16' : assetType === 'prop' ? '1:1' : '16:9';
+      const aspectRatio = assetType === 'character' ? '16:9' : assetType === 'prop' ? '1:1' : '16:9';
       
       const response = await fetch('/api/ai/generate-image', {
         method: 'POST',
@@ -126,9 +126,10 @@ export function AssetDialog({
         console.error('Generation failed:', data);
         alert('Image generation failed: ' + (data.error || 'Unknown error'));
       }
-    } catch (error: any) {
+    } catch (error) {
+      const err = error as { message?: string };
       console.error('Generation error:', error);
-      alert(`Image generation error: ${error.message}`);
+      alert(`Image generation error: ${err.message || 'Unknown error'}`);
     } finally {
       setIsGenerating(false);
     }

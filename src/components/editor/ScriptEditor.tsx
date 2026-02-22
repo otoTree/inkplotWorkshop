@@ -22,6 +22,12 @@ import {
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 
+type SeriesOutlineItem = {
+  episode_number: number;
+  title: string;
+  summary: string;
+};
+
 export function ScriptEditor({ projectId }: { projectId: string }) {
   const [status, setStatus] = useState<'saved' | 'saving' | 'unsaved'>('saved');
   const [isGenerating, setIsGenerating] = useState(false);
@@ -190,7 +196,7 @@ export function ScriptEditor({ projectId }: { projectId: string }) {
       await api.episodes.deleteByProject(projectId);
 
       // Create new episodes
-      const newEpisodes: Episode[] = outline.map((ep: any) => ({
+      const newEpisodes: Episode[] = (outline as SeriesOutlineItem[]).map((ep) => ({
         id: crypto.randomUUID(),
         projectId,
         episodeNumber: ep.episode_number,

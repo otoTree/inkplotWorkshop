@@ -6,7 +6,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Progress } from '@/components/ui/progress';
 import { Plus, User, MapPin, Box, Wand2, Loader2, Sparkles, Trash2 } from 'lucide-react';
-import { Asset, AssetType, Project } from '@/types';
+import { ArtStyleConfig, Asset, AssetType, Project } from '@/types';
 import { useState, useEffect, useCallback } from 'react';
 import { AssetDialog } from './AssetDialog';
 import { ExtractionPreviewDialog } from './ExtractionPreviewDialog';
@@ -51,6 +51,12 @@ export function AssetGallery({ projectId }: { projectId: string }) {
   useEffect(() => {
       fetchData();
   }, [fetchData]);
+
+  const artStyleConfig: ArtStyleConfig = {
+    artStyle: project?.artStyle,
+    characterArtStyle: project?.characterArtStyle,
+    sceneArtStyle: project?.sceneArtStyle,
+  };
 
   const getAssetsByType = (type: AssetType) => assets?.filter((a) => a.type === type) || [];
 
@@ -151,7 +157,7 @@ export function AssetGallery({ projectId }: { projectId: string }) {
           const response = await fetch('/api/ai/extract-assets', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ scriptContent, artStyle: project?.artStyle }),
+            body: JSON.stringify({ scriptContent, artStyle: artStyleConfig }),
           });
           
           if (!response.ok) {
@@ -159,11 +165,12 @@ export function AssetGallery({ projectId }: { projectId: string }) {
             continue; 
           }
           
-          const data = await response.json();
+          const data = await response.json() as { assets?: Partial<Asset>[] };
           if (data.assets && Array.isArray(data.assets)) {
-            data.assets.forEach((a: any) => {
+            data.assets.forEach((a) => {
               // Normalize name for comparison (trim)
-              const normalizedName = a.name.trim();
+              const normalizedName = (a.name || '').trim();
+              if (!normalizedName) return;
               
               if (existingNames.has(normalizedName)) return;
               if (sessionNames.has(normalizedName)) return;
@@ -228,8 +235,8 @@ export function AssetGallery({ projectId }: { projectId: string }) {
 
     setGeneratingAssets(prev => new Set(prev).add(asset.id));
     try {
-        const fullPrompt = getImageGenerationPrompt(asset.visualPrompt, asset.type, project?.artStyle);
-        const aspectRatio = asset.type === 'character' ? '9:16' : asset.type === 'prop' ? '1:1' : '16:9';
+        const fullPrompt = getImageGenerationPrompt(asset.visualPrompt, asset.type, artStyleConfig);
+        const aspectRatio = asset.type === 'character' ? '16:9' : asset.type === 'prop' ? '1:1' : '16:9';
         
         const response = await fetch('/api/ai/generate-image', {
             method: 'POST',
@@ -278,8 +285,8 @@ export function AssetGallery({ projectId }: { projectId: string }) {
     const generateOne = async (asset: Asset) => {
         setGeneratingAssets(prev => new Set(prev).add(asset.id));
         try {
-            const fullPrompt = getImageGenerationPrompt(asset.visualPrompt, asset.type, project?.artStyle);
-            const aspectRatio = asset.type === 'character' ? '9:16' : asset.type === 'prop' ? '1:1' : '16:9';
+            const fullPrompt = getImageGenerationPrompt(asset.visualPrompt, asset.type, artStyleConfig);
+            const aspectRatio = asset.type === 'character' ? '16:9' : asset.type === 'prop' ? '1:1' : '16:9';
 
             const response = await fetch('/api/ai/generate-image', {
                 method: 'POST',
@@ -467,7 +474,7 @@ export function AssetGallery({ projectId }: { projectId: string }) {
         assetType={activeTab}
         onSave={handleSaveAsset}
         onDelete={(id) => api.assets.delete(id).then(() => setAssets(prev => prev.filter(a => a.id !== id)))}
-        artStyle={project?.artStyle}
+        artStyle={artStyleConfig}
       />
 
       <ExtractionPreviewDialog
@@ -475,7 +482,7 @@ export function AssetGallery({ projectId }: { projectId: string }) {
         onOpenChange={setExtractionDialogOpen}
         foundAssets={foundAssets}
         onConfirm={handleImportAssets}
-        artStyle={project?.artStyle}
+        artStyle={artStyleConfig}
         isImporting={isImporting}
       />
     </div>

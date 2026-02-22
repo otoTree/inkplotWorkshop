@@ -44,7 +44,8 @@ export function ProjectDialog({ children, project, open: controlledOpen, onOpenC
   const [title, setTitle] = useState('');
   const [logline, setLogline] = useState('');
   const [language, setLanguage] = useState('zh');
-  const [artStyle, setArtStyle] = useState('');
+  const [characterArtStyle, setCharacterArtStyle] = useState('');
+  const [sceneArtStyle, setSceneArtStyle] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [ideaInput, setIdeaInput] = useState('');
   const [isGenerating, setIsGenerating] = useState(false);
@@ -56,7 +57,8 @@ export function ProjectDialog({ children, project, open: controlledOpen, onOpenC
         setTitle(project.title);
         setLogline(project.logline);
         setLanguage(project.language || 'zh');
-        setArtStyle(project.artStyle || '');
+        setCharacterArtStyle(project.characterArtStyle || project.artStyle || '');
+        setSceneArtStyle(project.sceneArtStyle || project.artStyle || '');
         setIdeaInput('');
       } else {
         // Only clear if not editing (or if we want to reset on new create)
@@ -65,7 +67,8 @@ export function ProjectDialog({ children, project, open: controlledOpen, onOpenC
           setTitle('');
           setLogline('');
           setLanguage('zh');
-          setArtStyle('');
+          setCharacterArtStyle('');
+          setSceneArtStyle('');
           setIdeaInput('');
         }
       }
@@ -88,7 +91,10 @@ export function ProjectDialog({ children, project, open: controlledOpen, onOpenC
       
       if (data.title) setTitle(data.title);
       if (data.logline) setLogline(data.logline);
-      if (data.artStyle) setArtStyle(data.artStyle);
+      if (data.characterArtStyle) setCharacterArtStyle(data.characterArtStyle);
+      if (data.sceneArtStyle) setSceneArtStyle(data.sceneArtStyle);
+      if (data.artStyle && !data.characterArtStyle) setCharacterArtStyle(data.artStyle);
+      if (data.artStyle && !data.sceneArtStyle) setSceneArtStyle(data.artStyle);
       if (data.language) setLanguage(data.language);
       
     } catch (error) {
@@ -104,13 +110,15 @@ export function ProjectDialog({ children, project, open: controlledOpen, onOpenC
 
     setIsSubmitting(true);
     try {
+      const normalizedLanguage = language || 'zh';
       if (project) {
         // Update existing project
         await api.projects.update(project.id, {
           title,
           logline,
-          language,
-          artStyle,
+          language: normalizedLanguage,
+          characterArtStyle,
+          sceneArtStyle,
           updatedAt: Date.now(),
         });
       } else {
@@ -119,8 +127,9 @@ export function ProjectDialog({ children, project, open: controlledOpen, onOpenC
           id: crypto.randomUUID(),
           title,
           logline,
-          language,
-          artStyle,
+          language: normalizedLanguage,
+          characterArtStyle,
+          sceneArtStyle,
           genre: [],
           createdAt: Date.now(),
           updatedAt: Date.now(),
@@ -134,7 +143,8 @@ export function ProjectDialog({ children, project, open: controlledOpen, onOpenC
         setTitle('');
         setLogline('');
         setLanguage('zh');
-        setArtStyle('');
+        setCharacterArtStyle('');
+        setSceneArtStyle('');
       }
       if (onSuccess) onSuccess();
     } catch (error) {
@@ -171,7 +181,7 @@ export function ProjectDialog({ children, project, open: controlledOpen, onOpenC
                     id="ideaInput"
                     value={ideaInput}
                     onChange={(e) => setIdeaInput(e.target.value)}
-                    placeholder="输入一段简单的想法、小说片段或新闻，AI 将自动提取剧名、梗概和风格..."
+                    placeholder="输入一段简单的想法、小说片段或新闻，AI 将自动提取剧名、梗概与人物/场景美术..."
                     className="flex-1 h-16 text-xs resize-none bg-white"
                   />
                   <Button
@@ -222,15 +232,27 @@ export function ProjectDialog({ children, project, open: controlledOpen, onOpenC
               </div>
             </div>
             <div className="grid grid-cols-4 items-center gap-4">
-              <Label htmlFor="artStyle" className="text-right">
-                美术风格
+              <Label htmlFor="characterArtStyle" className="text-right">
+                人物美术
               </Label>
               <Input
-                id="artStyle"
-                value={artStyle}
-                onChange={(e) => setArtStyle(e.target.value)}
+                id="characterArtStyle"
+                value={characterArtStyle}
+                onChange={(e) => setCharacterArtStyle(e.target.value)}
                 className="col-span-3"
-                placeholder="例如：赛博朋克、水墨、皮克斯..."
+                placeholder="例如：水墨人物、赛博朋克角色、皮克斯风..."
+              />
+            </div>
+            <div className="grid grid-cols-4 items-center gap-4">
+              <Label htmlFor="sceneArtStyle" className="text-right">
+                场景美术
+              </Label>
+              <Input
+                id="sceneArtStyle"
+                value={sceneArtStyle}
+                onChange={(e) => setSceneArtStyle(e.target.value)}
+                className="col-span-3"
+                placeholder="例如：电影感光影、东方水墨场景、复古胶片..."
               />
             </div>
             <div className="grid grid-cols-4 items-center gap-4">

@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useCallback } from 'react';
 import { api } from '@/lib/api';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -30,8 +30,8 @@ import { MoreVertical, Pencil, Trash2, Loader2, Plus } from 'lucide-react';
 import { ProjectDialog } from './ProjectDialog';
 import { SyncButton } from './SyncButton';
 
-export function ProjectList() {
-  const [projects, setProjects] = useState<Project[] | null>(null);
+export function ProjectList({ initialProjects }: { initialProjects?: Project[] }) {
+  const [projects, setProjects] = useState<Project[] | null>(initialProjects ?? null);
   const router = useRouter();
   const setCurrentProject = useStore((state) => state.setCurrentProject);
 
@@ -49,10 +49,6 @@ export function ProjectList() {
       setProjects([]);
     }
   }, []);
-
-  useEffect(() => {
-    fetchProjects();
-  }, [fetchProjects]);
 
   const handleSelectProject = (project: Project) => {
     setCurrentProject(project);

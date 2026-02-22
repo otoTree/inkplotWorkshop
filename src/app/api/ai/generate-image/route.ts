@@ -17,8 +17,10 @@ function encodeJwtToken(ak: string, sk: string) {
   return jwt.sign(payload, sk, { header: headers });
 }
 
+const baseUrl = 'https://api-beijing.klingai.com';
+
 async function checkTaskStatus(taskId: string, token: string) {
-  const url = `https://api.klingai.com/v1/images/omni-image/${taskId}`;
+  const url = `${baseUrl}/v1/images/omni-image/${taskId}`;
   const response = await fetch(url, {
     method: 'GET',
     headers: {
@@ -44,7 +46,7 @@ export async function POST(req: Request) {
     }
 
     const body = await req.json();
-    const { prompt, size = "2K", images, aspectRatio = "16:9" } = body; // size is kept for compatibility but mapped/ignored
+    const { prompt, size = '2K', aspectRatio = '16:9' } = body;
 
     const ak = process.env.KLING_ACCESS_KEY;
     const sk = process.env.KLING_SECRET_KEY;
@@ -60,7 +62,11 @@ export async function POST(req: Request) {
     console.log(`[Image Gen Request] Model: ${model}, Prompt: ${prompt}`);
 
     // Create Task
-    const createResponse = await fetch('https://api.klingai.com/v1/images/omni-image', {
+    const normalizedResolution = String(size).toLowerCase() === '1k' ? '1k' : '2k';
+    const allowedAspectRatios = new Set(['16:9', '9:16', '1:1', '4:3', '3:4', '3:2', '2:3', '21:9', 'auto']);
+    const normalizedAspectRatio = allowedAspectRatios.has(aspectRatio) ? aspectRatio : 'auto';
+
+    const createResponse = await fetch(`${baseUrl}/v1/images/omni-image`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -69,8 +75,9 @@ export async function POST(req: Request) {
       body: JSON.stringify({
         model_name: model,
         prompt: prompt,
-        image_count: 1,
-        aspect_ratio: aspectRatio,
+        resolution: normalizedResolution,
+        n: 1,
+        aspect_ratio: normalizedAspectRatio,
       }),
     });
 
@@ -107,11 +114,11 @@ export async function POST(req: Request) {
       console.log(`[Image Gen] Task ${taskId} status: ${taskStatus}`);
 
       if (taskStatus === 'succeed' || taskStatus === 'completed') { // Handle possible status values
-         const resultImages = statusData.data?.task_result?.images || [];
+         const resultImages = (statusData.data?.task_result?.images || []) as Array<{ url?: string }>;
          // Map to format expected by frontend: { data: [{ url: ... }] }
          // Kling returns [{ url: ..., index: ... }]
          return NextResponse.json({
-           data: resultImages.map((img: any) => ({ url: img.url }))
+           data: resultImages.map((img) => ({ url: img.url }))
          });
       } else if (taskStatus === 'failed') {
          return NextResponse.json({ error: 'Image generation failed', details: statusData.data?.task_status_msg }, { status: 500 });
@@ -121,8 +128,9 @@ export async function POST(req: Request) {
 
     return NextResponse.json({ error: 'Timeout waiting for image generation' }, { status: 504 });
 
-  } catch (error: any) {
+  } catch (error) {
+    const err = error as { message?: string };
     console.error('[Image Gen Error] Exception:', error);
-    return NextResponse.json({ error: error.message || 'Internal Server Error' }, { status: 500 });
+    return NextResponse.json({ error: err.message || 'Internal Server Error' }, { status: 500 });
   }
 }

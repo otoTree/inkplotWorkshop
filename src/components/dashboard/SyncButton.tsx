@@ -56,12 +56,11 @@ export function SyncButton() {
         // Let's rely on: Try Create -> Catch -> Try Update
         try {
             await api.episodes.create(e);
-        } catch (err: any) {
-            // If error is duplicate key, update
-            if (err.code === '23505') { // Postgres unique violation
+        } catch (err) {
+            const error = err as { code?: string };
+            if (error.code === '23505') {
                 await api.episodes.update(e.id, e);
             } else {
-                // Ignore other errors? Or rethrow?
                 console.warn(`Sync episode ${e.id} warning:`, err);
             }
         }
@@ -72,8 +71,9 @@ export function SyncButton() {
       for (const a of assets) {
         try {
             await api.assets.create(a);
-        } catch (err: any) {
-            if (err.code === '23505') {
+        } catch (err) {
+            const error = err as { code?: string };
+            if (error.code === '23505') {
                 await api.assets.update(a.id, a);
             }
         }
@@ -86,8 +86,9 @@ export function SyncButton() {
          // Delete and recreate is safer for shots as they are a list
          try {
              await api.shots.create(s);
-         } catch (err: any) {
-             if (err.code === '23505') {
+         } catch (err) {
+             const error = err as { code?: string };
+             if (error.code === '23505') {
                  // For shots, we usually don't update individual fields, but let's skip
              }
          }

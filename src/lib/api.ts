@@ -3,54 +3,102 @@ import { Project, Episode, Asset, Shot } from '@/types';
 
 const supabase = createClient();
 
-// Helper to convert snake_case (DB) to camelCase (App)
-// and handle Date/Timestamp conversions
-const toProject = (row: any): Project => ({
-  id: row.id,
-  title: row.title,
-  logline: row.logline,
-  genre: row.genre || [],
-  language: row.language || 'zh',
-  artStyle: row.art_style,
-  seriesPlan: row.series_plan,
-  createdAt: new Date(row.created_at).getTime(),
-  updatedAt: new Date(row.updated_at).getTime(),
+type ArtStyleFields = Pick<Project, 'artStyle' | 'characterArtStyle' | 'sceneArtStyle'>;
+
+const parseArtStyle = (value: unknown): ArtStyleFields => {
+  if (!value) return {};
+  if (typeof value === 'object') {
+    const record = value as Record<string, unknown>;
+    return {
+      artStyle: typeof record.artStyle === 'string' ? record.artStyle : undefined,
+      characterArtStyle: typeof record.characterArtStyle === 'string' ? record.characterArtStyle : undefined,
+      sceneArtStyle: typeof record.sceneArtStyle === 'string' ? record.sceneArtStyle : undefined,
+    };
+  }
+  if (typeof value === 'string') {
+    const trimmed = value.trim();
+    if (!trimmed) return {};
+    try {
+      const parsed = JSON.parse(trimmed) as unknown;
+      if (parsed && typeof parsed === 'object') {
+        const record = parsed as Record<string, unknown>;
+        return {
+          artStyle: typeof record.artStyle === 'string' ? record.artStyle : undefined,
+          characterArtStyle: typeof record.characterArtStyle === 'string' ? record.characterArtStyle : undefined,
+          sceneArtStyle: typeof record.sceneArtStyle === 'string' ? record.sceneArtStyle : undefined,
+        };
+      }
+    } catch {
+      return { artStyle: trimmed };
+    }
+    return { artStyle: trimmed };
+  }
+  return {};
+};
+
+const serializeArtStyle = (input: Partial<Project>) => {
+  const artStyle = (input.artStyle || '').trim();
+  const characterArtStyle = (input.characterArtStyle || '').trim();
+  const sceneArtStyle = (input.sceneArtStyle || '').trim();
+  if (!artStyle && !characterArtStyle && !sceneArtStyle) return null;
+  return JSON.stringify({
+    artStyle: artStyle || undefined,
+    characterArtStyle: characterArtStyle || undefined,
+    sceneArtStyle: sceneArtStyle || undefined,
+  });
+};
+
+const toProject = (row: Record<string, unknown>): Project => {
+  const { artStyle, characterArtStyle, sceneArtStyle } = parseArtStyle(row.art_style);
+  return {
+    id: row.id as string,
+    title: row.title as string,
+    logline: (row.logline as string) || '',
+    genre: (row.genre as string[]) || [],
+    language: (row.language as string) || 'zh',
+    artStyle,
+    characterArtStyle,
+    sceneArtStyle,
+    seriesPlan: row.series_plan,
+    createdAt: new Date(row.created_at as string).getTime(),
+    updatedAt: new Date(row.updated_at as string).getTime(),
+  };
+};
+
+const toEpisode = (row: Record<string, unknown>): Episode => ({
+  id: row.id as string,
+  projectId: row.project_id as string,
+  episodeNumber: row.episode_number as number,
+  title: row.title as string,
+  content: (row.content as string) || '',
+  structure: (row.structure as Episode['structure']) || {},
+  lastEdited: new Date(row.last_edited as string).getTime(),
 });
 
-const toEpisode = (row: any): Episode => ({
-  id: row.id,
-  projectId: row.project_id,
-  episodeNumber: row.episode_number,
-  title: row.title,
-  content: row.content || '',
-  structure: row.structure || {},
-  lastEdited: new Date(row.last_edited).getTime(),
+const toAsset = (row: Record<string, unknown>): Asset => ({
+  id: row.id as string,
+  projectId: row.project_id as string,
+  type: row.type as Asset['type'],
+  name: row.name as string,
+  description: (row.description as string) || '',
+  visualPrompt: (row.visual_prompt as string) || '',
+  imageUrl: (row.image_url as string) || '',
+  status: row.status as Asset['status'],
+  metadata: (row.metadata as Asset['metadata']) || {},
 });
 
-const toAsset = (row: any): Asset => ({
-  id: row.id,
-  projectId: row.project_id,
-  type: row.type,
-  name: row.name,
-  description: row.description || '',
-  visualPrompt: row.visual_prompt || '',
-  imageUrl: row.image_url || '',
-  status: row.status,
-  metadata: row.metadata || {},
-});
-
-const toShot = (row: any): Shot => ({
-  id: row.id,
-  episodeId: row.episode_id,
-  sequence: row.sequence_number,
-  narrativeGoal: row.narrative_goal || '',
-  visualEvidence: row.visual_evidence || '',
-  description: row.description || '',
-  dialogue: row.dialogue || '',
-  camera: row.camera || '',
-  size: row.size || '',
-  duration: row.duration,
-  relatedAssetIds: row.related_asset_ids || [],
+const toShot = (row: Record<string, unknown>): Shot => ({
+  id: row.id as string,
+  episodeId: row.episode_id as string,
+  sequence: row.sequence_number as number,
+  narrativeGoal: (row.narrative_goal as string) || '',
+  visualEvidence: (row.visual_evidence as string) || '',
+  description: (row.description as string) || '',
+  dialogue: (row.dialogue as string) || '',
+  camera: (row.camera as string) || '',
+  size: (row.size as string) || '',
+  duration: row.duration as number,
+  relatedAssetIds: (row.related_asset_ids as string[]) || [],
 });
 
 export const api = {
@@ -87,8 +135,8 @@ export const api = {
         title: project.title,
         logline: project.logline,
         genre: project.genre,
-        language: project.language,
-        art_style: project.artStyle,
+        language: project.language || 'zh',
+        art_style: serializeArtStyle(project),
         series_plan: project.seriesPlan,
         created_at: new Date(project.createdAt).toISOString(),
         updated_at: new Date(project.updatedAt).toISOString(),
@@ -97,12 +145,14 @@ export const api = {
     },
 
     update: async (id: string, updates: Partial<Project>): Promise<void> => {
-      const dbUpdates: any = {};
+      const dbUpdates: Record<string, unknown> = {};
       if (updates.title) dbUpdates.title = updates.title;
       if (updates.logline) dbUpdates.logline = updates.logline;
       if (updates.genre) dbUpdates.genre = updates.genre;
-      if (updates.language) dbUpdates.language = updates.language;
-      if (updates.artStyle) dbUpdates.art_style = updates.artStyle;
+      if (updates.language !== undefined) dbUpdates.language = updates.language || 'zh';
+      if ('artStyle' in updates || 'characterArtStyle' in updates || 'sceneArtStyle' in updates) {
+        dbUpdates.art_style = serializeArtStyle(updates);
+      }
       if (updates.seriesPlan) dbUpdates.series_plan = updates.seriesPlan;
       dbUpdates.updated_at = new Date().toISOString();
 
@@ -174,7 +224,7 @@ export const api = {
     },
 
     update: async (id: string, updates: Partial<Episode>): Promise<void> => {
-      const dbUpdates: any = {};
+      const dbUpdates: Record<string, unknown> = {};
       if (updates.title) dbUpdates.title = updates.title;
       if (updates.content) dbUpdates.content = updates.content;
       if (updates.structure) dbUpdates.structure = updates.structure;
@@ -253,7 +303,7 @@ export const api = {
     },
 
     update: async (id: string, updates: Partial<Asset>): Promise<void> => {
-      const dbUpdates: any = {};
+      const dbUpdates: Record<string, unknown> = {};
       if (updates.name) dbUpdates.name = updates.name;
       if (updates.description) dbUpdates.description = updates.description;
       if (updates.visualPrompt) dbUpdates.visual_prompt = updates.visualPrompt;
@@ -338,7 +388,7 @@ export const api = {
     },
 
     update: async (id: string, updates: Partial<Shot>): Promise<void> => {
-        const dbUpdates: any = {};
+        const dbUpdates: Record<string, unknown> = {};
         if (updates.sequence !== undefined) dbUpdates.sequence_number = updates.sequence;
         if (updates.narrativeGoal !== undefined) dbUpdates.narrative_goal = updates.narrativeGoal;
         if (updates.visualEvidence !== undefined) dbUpdates.visual_evidence = updates.visualEvidence;

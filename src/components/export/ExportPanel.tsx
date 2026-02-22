@@ -24,6 +24,9 @@ export function ExportPanel({ projectId }: { projectId: string }) {
       const shotsArrays = await Promise.all(episodes.map(ep => api.shots.list(ep.id)));
       const shots = shotsArrays.flat();
 
+      const characterStyle = project.characterArtStyle || project.artStyle || 'N/A';
+      const sceneStyle = project.sceneArtStyle || project.artStyle || 'N/A';
+
       const zip = new JSZip();
       // Allow Chinese characters and other safe characters, replace only truly unsafe ones
       const folderName = project.title.replace(/[<>:"/\\|?*]/g, '_');
@@ -99,7 +102,8 @@ export function ExportPanel({ projectId }: { projectId: string }) {
                 content += `- **Duration**: ${shot.duration}s\n`;
                 content += `- **Size**: ${shot.size || 'N/A'}\n`;
                 content += `- **Camera**: ${shot.camera || 'N/A'}\n`;
-                content += `- **Art Style**: ${project.artStyle || 'N/A'}\n`;
+                content += `- **Character Art Style**: ${characterStyle}\n`;
+                content += `- **Scene Art Style**: ${sceneStyle}\n`;
                 content += `- **Narrative Goal**: ${shot.narrativeGoal}\n`;
                 content += `- **Visual Evidence**: ${shot.visualEvidence}\n`;
                 content += `- **Description**: ${shot.description}\n`;

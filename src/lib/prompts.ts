@@ -7,14 +7,16 @@ User Input: "${userInput}"
 Requirements:
 1. **Title**: Generate a catchy, short title (max 10 words).
 2. **Logline**: A concise summary of the story (1-2 sentences).
-3. **Art Style**: Suggest a specific and detailed visual style suitable for AI image generation (e.g., Midjourney). Include keywords for lighting, color palette, rendering style, and atmosphere. (e.g., "Cyberpunk, neon lights, rainy streets, high contrast, cinematic lighting, 8k resolution"). Keep it under 20 words.
-4. **Language**: Detect the language of the input and use it for the output fields (title, logline, artStyle). Return the detected language code ('zh', 'en', 'jp', 'kr') in the "language" field. Default to 'zh' if unsure.
+3. **Character Art Style**: Suggest a specific and detailed visual style suitable for character generation. Include keywords for lighting, palette, rendering style, and atmosphere. Avoid background/scene terms. Keep it under 20 words.
+4. **Scene Art Style**: Suggest a specific and detailed visual style suitable for scenes and environments. Include keywords for lighting, palette, rendering style, and atmosphere. Keep it under 20 words.
+5. **Language**: Detect the language of the input and use it for the output fields (title, logline, characterArtStyle, sceneArtStyle). Return the detected language code ('zh', 'en', 'jp', 'kr') in the "language" field. Default to 'zh' if unsure.
 
 Output Format: JSON
 {
   "title": "...",
   "logline": "...",
-  "artStyle": "...",
+  "characterArtStyle": "...",
+  "sceneArtStyle": "...",
   "language": "zh" // or "en", "jp", "kr"
 }
 `;
@@ -77,7 +79,7 @@ Output Format: JSON
 `;
 };
 
-export const getEpisodeContentPrompt = (episodeNum: number, seriesPlan: any, summary: string, language: string = 'zh') => {
+export const getEpisodeContentPrompt = (episodeNum: number, seriesPlan: unknown, summary: string, language: string = 'zh') => {
   const isEnglish = language === 'en';
   return `
 Task: Write the detailed script for **Episode ${episodeNum}**.
@@ -106,7 +108,27 @@ export const SYSTEM_PROMPT = getSystemPrompt('zh');
 export const ORIGINAL_STORY_PROMPT = getOriginalStoryPrompt('{theme}', 'zh');
 export const EPISODE_CONTENT_PROMPT = getEpisodeContentPrompt(1, {}, '{current_summary}', 'zh');
 
-export const getAssetExtractionPrompt = (scriptContent: string, artStyle?: string) => `
+type ArtStyleInput = string | {
+  artStyle?: string;
+  characterArtStyle?: string;
+  sceneArtStyle?: string;
+};
+
+const normalizeArtStyle = (artStyle?: ArtStyleInput) => {
+  if (!artStyle) {
+    return {};
+  }
+  if (typeof artStyle === 'string') {
+    return { artStyle };
+  }
+  return artStyle;
+};
+
+export const getAssetExtractionPrompt = (scriptContent: string, artStyle?: ArtStyleInput) => {
+  const { artStyle: baseStyle, characterArtStyle, sceneArtStyle } = normalizeArtStyle(artStyle);
+  const characterStyle = characterArtStyle || baseStyle || 'Cinematic, Realistic';
+  const sceneStyle = sceneArtStyle || baseStyle || 'Cinematic, Realistic';
+  return `
 Task: Analyze the provided script and extract key assets (Characters, Locations, Props).
 Script Content:
 ${scriptContent.slice(0, 15000)}... (truncated if too long)
@@ -117,8 +139,10 @@ Requirements:
    - **Locations**: Key settings where scenes take place.
    - **Props**: Important objects that drive the plot.
 2. **Visual Prompts**: For EACH asset, generate a specific "visual_prompt" in English suitable for AI image generation (Midjourney/Stable Diffusion style).
-   - **Style Constraint**: The visual prompts MUST strictly follow the art style: "${artStyle || 'Cinematic, Realistic'}".
-   - **Characters**: Describe appearance, clothing, style, age, and **ethnicity/race** based on the script context. If the script implies a specific background (e.g., Western names, settings), ensure the visual prompt reflects that (e.g., 'Caucasian', 'Black', 'Latino'). Do NOT default to Asian/Chinese unless the script context suggests it. (Do not describe actions, props, or background. Character ONLY).
+   - **Style Constraint**:
+     - **Characters** MUST follow: "${characterStyle}".
+     - **Locations/Props** MUST follow: "${sceneStyle}".
+   - **Characters**: Describe appearance, clothing, style, age, and **ethnicity/race** based on the script context. If the script implies a specific background (e.g., Western names, settings), ensure the visual prompt reflects that (e.g., 'Caucasian', 'Black', 'Latino'). Do NOT default to Asian/Chinese unless the script context suggests it. (Do not describe actions, props, or background. Character ONLY. No background, plain white.)
    - **Locations**: Describe atmosphere, lighting, architectural style. (Empty scene, no people).
    - **Props**: Describe material, shape, color. (Object only, NO background description).
 3. **Descriptions**: Provide a short description in the script's language.
@@ -136,14 +160,19 @@ Output Format: JSON
   ]
 }
 `;
+};
 
-export const getImageGenerationPrompt = (basePrompt: string, type: 'character' | 'location' | 'prop', artStyle?: string) => {
-  const styleSuffix = artStyle 
-    ? `, ${artStyle} style, high quality, 8k, concept art, masterpiece`
+export const getImageGenerationPrompt = (basePrompt: string, type: 'character' | 'location' | 'prop', artStyle?: ArtStyleInput) => {
+  const { artStyle: baseStyle, characterArtStyle, sceneArtStyle } = normalizeArtStyle(artStyle);
+  const resolvedStyle = type === 'character'
+    ? (characterArtStyle || baseStyle)
+    : (sceneArtStyle || baseStyle);
+  const styleSuffix = resolvedStyle
+    ? `, ${resolvedStyle} style, high quality, 8k, concept art, masterpiece`
     : ', high quality, 8k, concept art, masterpiece';
   
   if (type === 'character') {
-    return `${basePrompt}, three-view drawing (front view, side view, back view), character sheet, standing pose, neutral expression, no props, full body, ${styleSuffix}, isolated on white background, solid white background`;
+    return `${basePrompt}, three-view drawing (front view, side view, back view), character sheet, standing pose, neutral expression, no props, full body, landscape 16:9, ${styleSuffix}, no background, isolated on white background, solid white background`;
   } else if (type === 'location') {
     return `${basePrompt}, empty scene, no people, wide shot, atmospheric lighting${styleSuffix}`;
   } else if (type === 'prop') {
@@ -152,8 +181,16 @@ export const getImageGenerationPrompt = (basePrompt: string, type: 'character' |
   return basePrompt + styleSuffix;
 };
 
-export const getStoryboardGenerationPrompt = (scriptContent: string, existingAssets: any[], artStyle?: string, language: string = 'zh') => {
+type ExistingAsset = {
+  id?: string;
+  name?: string;
+  type?: string;
+};
+
+export const getStoryboardGenerationPrompt = (scriptContent: string, existingAssets: ExistingAsset[], artStyle?: ArtStyleInput, language: string = 'zh') => {
   const isEnglish = language === 'en';
+  const { artStyle: baseStyle, sceneArtStyle } = normalizeArtStyle(artStyle);
+  const resolvedSceneStyle = sceneArtStyle || baseStyle || 'Cinematic';
   return `
 # Skill: Narrative-to-Visual Reasoning (P0 / P1 / P2)
 
@@ -215,7 +252,7 @@ ${scriptContent.slice(0, 15000)}...
 **Existing Assets Context** (Try to reuse these if applicable, match by name):
 ${JSON.stringify(existingAssets.map(a => ({ id: a.id, name: a.name, type: a.type })))}
 
-**Art Style**: ${artStyle || 'Cinematic'}
+**Scene Art Style**: ${resolvedSceneStyle}
 
 **Output Format**: JSON
 {

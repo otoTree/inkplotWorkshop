@@ -25,7 +25,7 @@ export async function POST(req: Request) {
     }
 
     let prompt = '';
-    let jsonMode = true;
+    const jsonMode = true;
 
     if (type === 'story') {
       prompt = getOriginalStoryPrompt(theme, targetLanguage);

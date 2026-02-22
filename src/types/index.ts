@@ -5,10 +5,14 @@ export interface Project {
   genre: string[];        // 类型标签
   language?: string;      // 剧本语言
   artStyle?: string;      // 美术风格 (e.g. 赛博朋克, 水墨, 皮克斯)
-  seriesPlan?: any;       // 10集连载大纲
+  characterArtStyle?: string;
+  sceneArtStyle?: string;
+  seriesPlan?: unknown;       // 10集连载大纲
   createdAt: number;
   updatedAt: number;
 }
+
+export type ArtStyleConfig = Pick<Project, 'artStyle' | 'characterArtStyle' | 'sceneArtStyle'>;
 
 export interface Episode {
   id: string;             // UUID
@@ -36,7 +40,7 @@ export interface Asset {
   visualPrompt: string;   // AI 生成的绘画 Prompt
   imageUrl: string;       // 本地 Blob URL 或 云端 URL
   status: 'draft' | 'locked'; // 锁定后不可随意更改
-  metadata: Record<string, any>; // 额外属性 (e.g. 年龄, 风格)
+  metadata: Record<string, unknown>; // 额外属性 (e.g. 年龄, 风格)
 }
 
 export interface Shot {

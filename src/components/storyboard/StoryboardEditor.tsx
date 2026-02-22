@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { api } from '@/lib/api';
-import { Episode, Asset, Shot, Project } from '@/types';
+import { ArtStyleConfig, Episode, Asset, Shot, Project } from '@/types';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { ScrollArea } from '@/components/ui/scroll-area';
@@ -15,6 +15,22 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from 
 interface StoryboardEditorProps {
   projectId: string;
 }
+
+type GeneratedShot = {
+  narrativeGoal?: string;
+  visualEvidence?: string;
+  description?: string;
+  dialogue?: string;
+  camera?: string;
+  size?: string;
+  duration?: number;
+  suggestedAssetNames?: string[];
+  suggestedAssets?: {
+    characters?: string[];
+    locations?: string[];
+    props?: string[];
+  } | Array<{ name?: string | null }>;
+};
 
 export function StoryboardEditor({ projectId }: StoryboardEditorProps) {
   const [selectedEpisodeId, setSelectedEpisodeId] = useState<string | null>(null);
@@ -31,6 +47,12 @@ export function StoryboardEditor({ projectId }: StoryboardEditorProps) {
     api.episodes.list(projectId).then(setEpisodes);
     api.assets.list(projectId).then(setAssets);
   }, [projectId]);
+
+  const artStyleConfig: ArtStyleConfig = {
+    artStyle: project?.artStyle,
+    characterArtStyle: project?.characterArtStyle,
+    sceneArtStyle: project?.sceneArtStyle,
+  };
 
   // Fetch shots when episode changes
   useEffect(() => {
@@ -81,7 +103,7 @@ export function StoryboardEditor({ projectId }: StoryboardEditorProps) {
       }
       if (currentChunk) chunks.push(currentChunk);
 
-      let allShots: any[] = [];
+      let allShots: GeneratedShot[] = [];
       let lastShotContext = ''; // To maintain continuity across chunks
 
       for (let i = 0; i < chunks.length; i++) {
@@ -94,13 +116,13 @@ export function StoryboardEditor({ projectId }: StoryboardEditorProps) {
             body: JSON.stringify({
               script: chunkScript,
               assets: assets || [],
-              artStyle: project?.artStyle,
+             artStyle: artStyleConfig,
               language: project?.language
             })
           });
 
           if (!res.ok) throw new Error(await res.text());
-          const data = await res.json();
+          const data = await res.json() as { shots?: GeneratedShot[] };
           
           if (data.shots && Array.isArray(data.shots)) {
              allShots = [...allShots, ...data.shots];
@@ -113,17 +135,17 @@ export function StoryboardEditor({ projectId }: StoryboardEditorProps) {
       }
 
       // Re-sequence shots
-      const newShots: Shot[] = allShots.map((s: any, index: number) => {
+      const newShots: Shot[] = allShots.map((s, index: number) => {
         const relatedIds: string[] = [];
         const suggestedNames: string[] = [];
 
         if (Array.isArray(s.suggestedAssetNames)) {
-          suggestedNames.push(...s.suggestedAssetNames.filter((name: string) => typeof name === 'string'));
+          suggestedNames.push(...s.suggestedAssetNames.filter((name) => typeof name === 'string'));
         }
 
         if (s.suggestedAssets) {
           if (Array.isArray(s.suggestedAssets)) {
-            suggestedNames.push(...s.suggestedAssets.map((item: any) => item?.name).filter((name: any) => typeof name === 'string'));
+            suggestedNames.push(...s.suggestedAssets.map((item) => item?.name).filter((name): name is string => typeof name === 'string'));
           } else {
             const { characters, locations, props } = s.suggestedAssets;
             if (Array.isArray(characters)) suggestedNames.push(...characters);
@@ -319,14 +341,13 @@ function ShotCard({
     onDelete: (id: string) => void
 }) {
   const [isEditing, setIsEditing] = useState(false);
-  const [data, setData] = useState(shot);
-
-  // Sync data if shot changes externally
-  useEffect(() => setData(shot), [shot]);
+  const [draft, setDraft] = useState<Shot | null>(null);
+  const current = draft ?? shot;
 
   const save = async () => {
-    onUpdate(data);
+    onUpdate(current);
     setIsEditing(false);
+    setDraft(null);
   };
 
   const deleteShot = async () => {
@@ -336,12 +357,12 @@ function ShotCard({
   };
 
   const toggleAsset = async (assetId: string) => {
-    const newIds = data.relatedAssetIds.includes(assetId)
-      ? data.relatedAssetIds.filter(id => id !== assetId)
-      : [...data.relatedAssetIds, assetId];
+    const newIds = current.relatedAssetIds.includes(assetId)
+      ? current.relatedAssetIds.filter(id => id !== assetId)
+      : [...current.relatedAssetIds, assetId];
     
-    const newData = { ...data, relatedAssetIds: newIds };
-    setData(newData);
+    const newData = { ...current, relatedAssetIds: newIds };
+    if (isEditing) setDraft(newData);
     onUpdate(newData); // Auto-save asset changes
   };
 
@@ -352,17 +373,17 @@ function ShotCard({
         <div className="flex items-center gap-4">
           <div className="flex flex-col items-center justify-center w-10 h-10 bg-white rounded-full border shadow-sm">
             <span className="text-xs font-bold text-gray-400">序号</span>
-            <span className="text-sm font-bold font-mono">{data.sequence}</span>
+            <span className="text-sm font-bold font-mono">{current.sequence}</span>
           </div>
           <div className="flex gap-2">
             <Badge variant="secondary" className="text-xs font-mono bg-white border">
-              {data.duration}秒
+              {current.duration}秒
             </Badge>
             <Badge variant="secondary" className="text-xs font-mono bg-white border">
-              {data.camera || '未设定'}
+              {current.camera || '未设定'}
             </Badge>
             <Badge variant="secondary" className="text-xs font-mono bg-white border">
-              {data.size || '未设定'}
+              {current.size || '未设定'}
             </Badge>
           </div>
         </div>
@@ -373,7 +394,10 @@ function ShotCard({
               <Save className="w-3 h-3" /> 保存
             </Button>
           ) : (
-            <Button size="sm" variant="ghost" onClick={() => setIsEditing(true)}>编辑</Button>
+            <Button size="sm" variant="ghost" onClick={() => {
+              setDraft(shot);
+              setIsEditing(true);
+            }}>编辑</Button>
           )}
           <Button size="sm" variant="ghost" className="text-red-400 hover:text-red-500 hover:bg-red-50" onClick={deleteShot}>
             <Trash2 className="w-4 h-4" />
@@ -391,13 +415,13 @@ function ShotCard({
             </label>
             {isEditing ? (
               <Textarea 
-                value={data.narrativeGoal} 
-                onChange={e => setData({...data, narrativeGoal: e.target.value})}
+                value={current.narrativeGoal} 
+                onChange={e => setDraft({ ...current, narrativeGoal: e.target.value })}
                 className="text-sm min-h-[60px]"
               />
             ) : (
               <p className="text-sm text-gray-800 leading-relaxed font-serif">
-                {data.narrativeGoal || <span className="text-gray-300 italic">未定义叙事目标</span>}
+                {current.narrativeGoal || <span className="text-gray-300 italic">未定义叙事目标</span>}
               </p>
             )}
           </div>
@@ -409,13 +433,13 @@ function ShotCard({
             </label>
             {isEditing ? (
               <Textarea 
-                value={data.visualEvidence} 
-                onChange={e => setData({...data, visualEvidence: e.target.value})}
+                value={current.visualEvidence} 
+                onChange={e => setDraft({ ...current, visualEvidence: e.target.value })}
                 className="text-sm min-h-[60px]"
               />
             ) : (
               <p className="text-sm text-gray-800 leading-relaxed">
-                {data.visualEvidence || <span className="text-gray-300 italic">未定义视觉证据</span>}
+                {current.visualEvidence || <span className="text-gray-300 italic">未定义视觉证据</span>}
               </p>
             )}
           </div>
@@ -427,13 +451,13 @@ function ShotCard({
             </label>
             {isEditing ? (
               <Textarea 
-                value={data.description} 
-                onChange={e => setData({...data, description: e.target.value})}
+                value={current.description} 
+                onChange={e => setDraft({ ...current, description: e.target.value })}
                 className="text-sm min-h-[80px]"
               />
             ) : (
               <p className="text-sm text-gray-600 leading-relaxed">
-                {data.description || <span className="text-gray-300 italic">暂无描述</span>}
+                {current.description || <span className="text-gray-300 italic">暂无描述</span>}
               </p>
             )}
           </div>
@@ -445,14 +469,14 @@ function ShotCard({
             </label>
             {isEditing ? (
               <Textarea 
-                value={data.dialogue || ''} 
-                onChange={e => setData({...data, dialogue: e.target.value})}
+                value={current.dialogue || ''} 
+                onChange={e => setDraft({ ...current, dialogue: e.target.value })}
                 className="text-sm min-h-[60px]"
                 placeholder="角色名: 对白内容..."
               />
             ) : (
               <p className="text-sm text-gray-800 leading-relaxed font-medium">
-                {data.dialogue || <span className="text-gray-300 italic font-normal">无对白</span>}
+                {current.dialogue || <span className="text-gray-300 italic font-normal">无对白</span>}
               </p>
             )}
           </div>
@@ -462,15 +486,15 @@ function ShotCard({
             <div className="grid grid-cols-3 gap-4 pt-4 border-t">
               <div>
                 <label className="text-xs text-gray-400 mb-1 block">运镜</label>
-                <Input value={data.camera} onChange={e => setData({...data, camera: e.target.value})} className="h-8" />
+                <Input value={current.camera} onChange={e => setDraft({ ...current, camera: e.target.value })} className="h-8" />
               </div>
               <div>
                 <label className="text-xs text-gray-400 mb-1 block">景别</label>
-                <Input value={data.size} onChange={e => setData({...data, size: e.target.value})} className="h-8" />
+                <Input value={current.size} onChange={e => setDraft({ ...current, size: e.target.value })} className="h-8" />
               </div>
               <div>
                 <label className="text-xs text-gray-400 mb-1 block">时长 (秒)</label>
-                <Input type="number" value={data.duration} onChange={e => setData({...data, duration: Number(e.target.value)})} className="h-8" />
+                <Input type="number" value={current.duration} onChange={e => setDraft({ ...current, duration: Number(e.target.value) })} className="h-8" />
               </div>
             </div>
           )}
@@ -493,7 +517,7 @@ function ShotCard({
                 <ScrollArea className="h-[300px] p-1">
                   <div className="grid grid-cols-2 gap-2">
                     {assets.map(asset => {
-                      const isSelected = data.relatedAssetIds.includes(asset.id);
+                      const isSelected = current.relatedAssetIds.includes(asset.id);
                       return (
                         <div 
                           key={asset.id} 
@@ -526,7 +550,7 @@ function ShotCard({
           </div>
 
           <div className="space-y-2">
-            {data.relatedAssetIds.map(id => {
+            {current.relatedAssetIds.map(id => {
               const asset = assets.find(a => a.id === id);
               if (!asset) return null;
               return (
@@ -550,7 +574,7 @@ function ShotCard({
                 </div>
               );
             })}
-            {data.relatedAssetIds.length === 0 && (
+            {current.relatedAssetIds.length === 0 && (
               <div className="text-center py-8 border border-dashed border-gray-200 rounded-lg">
                 <p className="text-xs text-gray-400">未关联资产</p>
               </div>

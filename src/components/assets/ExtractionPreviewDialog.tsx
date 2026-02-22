@@ -1,6 +1,6 @@
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
-import { Asset, AssetType } from '@/types';
+import { ArtStyleConfig, Asset, AssetType } from '@/types';
 import { useState, useEffect } from 'react';
 import { User, MapPin, Box, Wand2, Loader2, Image as ImageIcon } from 'lucide-react';
 import { getImageGenerationPrompt } from '@/lib/prompts';
@@ -10,7 +10,7 @@ interface ExtractionPreviewDialogProps {
   onOpenChange: (open: boolean) => void;
   foundAssets: Partial<Asset>[];
   onConfirm: (selectedAssets: Partial<Asset>[]) => void;
-  artStyle?: string;
+  artStyle?: ArtStyleConfig;
   isImporting?: boolean;
 }
 
@@ -57,7 +57,7 @@ export function ExtractionPreviewDialog({
     setGeneratingIndices(prev => new Set(prev).add(index));
     try {
       const fullPrompt = getImageGenerationPrompt(asset.visualPrompt, asset.type as AssetType, artStyle);
-      const aspectRatio = asset.type === 'character' ? '9:16' : asset.type === 'prop' ? '1:1' : '16:9';
+      const aspectRatio = asset.type === 'character' ? '16:9' : asset.type === 'prop' ? '1:1' : '16:9';
 
       const response = await fetch('/api/ai/generate-image', {
         method: 'POST',
