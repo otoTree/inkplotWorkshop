@@ -104,10 +104,15 @@ export function AssetDialog({
     setIsGenerating(true);
     try {
       const fullPrompt = getImageGenerationPrompt(formData.visualPrompt, assetType, artStyle);
+      const aspectRatio = assetType === 'character' ? '9:16' : assetType === 'prop' ? '1:1' : '16:9';
+      
       const response = await fetch('/api/ai/generate-image', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ prompt: fullPrompt }),
+        body: JSON.stringify({ 
+            prompt: fullPrompt,
+            aspectRatio 
+        }),
       });
       const data = await response.json();
       

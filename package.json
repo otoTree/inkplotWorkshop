@@ -26,6 +26,7 @@
     "dexie": "^4.3.0",
     "dexie-react-hooks": "^4.2.0",
     "framer-motion": "^12.33.0",
+    "jsonwebtoken": "^9.0.3",
     "jszip": "^3.10.1",
     "lucide-react": "^0.563.0",
     "next": "16.1.6",
@@ -37,6 +38,7 @@
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4",
+    "@types/jsonwebtoken": "^9.0.10",
     "@types/node": "^20",
     "@types/react": "^19",
     "@types/react-dom": "^19",

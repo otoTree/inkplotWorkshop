@@ -1,6 +1,6 @@
 
 import { NextResponse } from 'next/server';
-import { getSystemPrompt, getOriginalStoryPrompt, getEpisodeContentPrompt } from '@/lib/prompts';
+import { getSystemPrompt, getOriginalStoryPrompt, getEpisodeContentPrompt, getProjectDetailsPrompt } from '@/lib/prompts';
 import { createClient } from '@/lib/supabase/server';
 
 export const maxDuration = 300; // Allow longer timeout for generation
@@ -31,6 +31,8 @@ export async function POST(req: Request) {
       prompt = getOriginalStoryPrompt(theme, targetLanguage);
     } else if (type === 'episode') {
       prompt = getEpisodeContentPrompt(episode_num, series_plan, summary, targetLanguage);
+    } else if (type === 'project_details') {
+      prompt = getProjectDetailsPrompt(theme);
     } else {
       return NextResponse.json({ error: 'Invalid type' }, { status: 400 });
     }

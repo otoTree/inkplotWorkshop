@@ -1,4 +1,25 @@
 
+export const getProjectDetailsPrompt = (userInput: string) => {
+  return `
+Task: Analyze the user's input and extract project details for a script writing project.
+User Input: "${userInput}"
+
+Requirements:
+1. **Title**: Generate a catchy, short title (max 10 words).
+2. **Logline**: A concise summary of the story (1-2 sentences).
+3. **Art Style**: Suggest a specific and detailed visual style suitable for AI image generation (e.g., Midjourney). Include keywords for lighting, color palette, rendering style, and atmosphere. (e.g., "Cyberpunk, neon lights, rainy streets, high contrast, cinematic lighting, 8k resolution"). Keep it under 20 words.
+4. **Language**: Detect the language of the input and use it for the output fields (title, logline, artStyle). Return the detected language code ('zh', 'en', 'jp', 'kr') in the "language" field. Default to 'zh' if unsure.
+
+Output Format: JSON
+{
+  "title": "...",
+  "logline": "...",
+  "artStyle": "...",
+  "language": "zh" // or "en", "jp", "kr"
+}
+`;
+};
+
 export const getSystemPrompt = (language: string = 'zh') => {
   const isEnglish = language === 'en';
   return `You are an expert AI scriptwriter specializing in adapting stories into 10-episode mini-series for TikTok/Reels.

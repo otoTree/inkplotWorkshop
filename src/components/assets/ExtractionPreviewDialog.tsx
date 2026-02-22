@@ -57,10 +57,15 @@ export function ExtractionPreviewDialog({
     setGeneratingIndices(prev => new Set(prev).add(index));
     try {
       const fullPrompt = getImageGenerationPrompt(asset.visualPrompt, asset.type as AssetType, artStyle);
+      const aspectRatio = asset.type === 'character' ? '9:16' : asset.type === 'prop' ? '1:1' : '16:9';
+
       const response = await fetch('/api/ai/generate-image', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ prompt: fullPrompt }),
+        body: JSON.stringify({ 
+            prompt: fullPrompt,
+            aspectRatio
+        }),
       });
       const data = await response.json();
 
