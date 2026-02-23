@@ -26,6 +26,11 @@ export function ShotCard({ shot, assets, projectId, sensitivityPrompt, onUpdate,
   const [isDetailOpen, setIsDetailOpen] = useState(false);
   const [draft, setDraft] = useState<Shot | null>(null);
   const [isReducing, setIsReducing] = useState(false);
+  const [compareOpen, setCompareOpen] = useState(false);
+  const [compareData, setCompareData] = useState<{
+    before: { narrativeGoal: string; visualEvidence: string; description: string; dialogue: string };
+    after: { narrativeGoal: string; visualEvidence: string; description: string; dialogue: string };
+  } | null>(null);
   const cardRef = useRef<HTMLDivElement>(null);
   
   const current = draft ?? shot;
@@ -113,17 +118,18 @@ ${current.dialogue || 'None'}
     }
     setIsReducing(true);
     try {
+      const before = {
+        narrativeGoal: current.narrativeGoal,
+        visualEvidence: current.visualEvidence,
+        description: current.description,
+        dialogue: current.dialogue || '',
+      };
       const response = await fetch('/api/ai/reduce-shot-sensitivity', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           projectId,
-          shot: {
-            narrativeGoal: current.narrativeGoal,
-            visualEvidence: current.visualEvidence,
-            description: current.description,
-            dialogue: current.dialogue || '',
-          },
+          shot: before,
         }),
       });
 
@@ -144,6 +150,16 @@ ${current.dialogue || 'None'}
       };
       setDraft(updatedShot);
       onUpdate(updatedShot);
+      setCompareData({
+        before,
+        after: {
+          narrativeGoal: updatedShot.narrativeGoal,
+          visualEvidence: updatedShot.visualEvidence,
+          description: updatedShot.description,
+          dialogue: updatedShot.dialogue || '',
+        },
+      });
+      setCompareOpen(true);
     } finally {
       setIsReducing(false);
     }
@@ -399,6 +415,35 @@ ${current.dialogue || 'None'}
           onSave={onUpdate}
         />
       )}
+      <Dialog open={compareOpen} onOpenChange={setCompareOpen}>
+        <DialogContent className="max-w-5xl">
+          <DialogHeader>
+            <DialogTitle>敏感度降低对比</DialogTitle>
+          </DialogHeader>
+          {compareData && (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <div className="space-y-4">
+                <div className="text-xs uppercase tracking-widest text-black/50 font-bold">原始</div>
+                <div className="space-y-3">
+                  <Textarea value={compareData.before.narrativeGoal} readOnly className="min-h-[90px] text-sm bg-white border-black/[0.08]" />
+                  <Textarea value={compareData.before.visualEvidence} readOnly className="min-h-[90px] text-sm bg-white border-black/[0.08]" />
+                  <Textarea value={compareData.before.description} readOnly className="min-h-[120px] text-sm bg-white border-black/[0.08]" />
+                  <Textarea value={compareData.before.dialogue} readOnly className="min-h-[90px] text-sm bg-white border-black/[0.08]" />
+                </div>
+              </div>
+              <div className="space-y-4">
+                <div className="text-xs uppercase tracking-widest text-black/50 font-bold">降低后</div>
+                <div className="space-y-3">
+                  <Textarea value={compareData.after.narrativeGoal} readOnly className="min-h-[90px] text-sm bg-white border-black/[0.08]" />
+                  <Textarea value={compareData.after.visualEvidence} readOnly className="min-h-[90px] text-sm bg-white border-black/[0.08]" />
+                  <Textarea value={compareData.after.description} readOnly className="min-h-[120px] text-sm bg-white border-black/[0.08]" />
+                  <Textarea value={compareData.after.dialogue} readOnly className="min-h-[90px] text-sm bg-white border-black/[0.08]" />
+                </div>
+              </div>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
     </>
   );
 }
