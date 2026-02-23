@@ -26,6 +26,7 @@
     "dexie": "^4.3.0",
     "dexie-react-hooks": "^4.2.0",
     "framer-motion": "^12.33.0",
+    "html-to-image": "^1.11.13",
     "jsonwebtoken": "^9.0.3",
     "jszip": "^3.10.1",
     "lucide-react": "^0.563.0",

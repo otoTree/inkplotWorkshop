@@ -108,7 +108,7 @@ export function ExportPanel({ projectId }: { projectId: string }) {
                 content += `- **Visual Evidence**: ${shot.visualEvidence}\n`;
                 content += `- **Description**: ${shot.description}\n`;
                 if (shot.dialogue) {
-                    content += `- **Dialogue**: ${shot.dialogue}\n`;
+                    content += `- **Dialogue / Voiceover / Soliloquy / Internal Monologue / Voiceover (Narration/Inner Voice) / Subtext / Stage Direction / Opening Poem / Interrupting / Aside / Buffoonery / Soliloquy (Talking to Oneself) / Echo / Pun**: ${shot.dialogue}\n`;
                 }
                 
                 if (shot.relatedAssetIds && shot.relatedAssetIds.length > 0) {
