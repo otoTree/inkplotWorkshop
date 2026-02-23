@@ -59,6 +59,7 @@ const toProject = (row: Record<string, unknown>): Project => {
     artStyle,
     characterArtStyle,
     sceneArtStyle,
+    sensitivityPrompt: (row.sensitivity_prompt as string) || '',
     seriesPlan: row.series_plan,
     createdAt: new Date(row.created_at as string).getTime(),
     updatedAt: new Date(row.updated_at as string).getTime(),
@@ -98,6 +99,7 @@ const toShot = (row: Record<string, unknown>): Shot => ({
   camera: (row.camera as string) || '',
   size: (row.size as string) || '',
   duration: row.duration as number,
+  sensitivityReduction: (row.sensitivity_reduction as number) ?? 0,
   relatedAssetIds: (row.related_asset_ids as string[]) || [],
 });
 
@@ -137,6 +139,7 @@ export const api = {
         genre: project.genre,
         language: project.language || 'zh',
         art_style: serializeArtStyle(project),
+        sensitivity_prompt: project.sensitivityPrompt || '',
         series_plan: project.seriesPlan,
         created_at: new Date(project.createdAt).toISOString(),
         updated_at: new Date(project.updatedAt).toISOString(),
@@ -153,6 +156,7 @@ export const api = {
       if ('artStyle' in updates || 'characterArtStyle' in updates || 'sceneArtStyle' in updates) {
         dbUpdates.art_style = serializeArtStyle(updates);
       }
+      if (updates.sensitivityPrompt !== undefined) dbUpdates.sensitivity_prompt = updates.sensitivityPrompt;
       if (updates.seriesPlan) dbUpdates.series_plan = updates.seriesPlan;
       dbUpdates.updated_at = new Date().toISOString();
 
@@ -359,6 +363,7 @@ export const api = {
          camera: shot.camera,
          size: shot.size,
          duration: shot.duration,
+       sensitivity_reduction: shot.sensitivityReduction,
          related_asset_ids: shot.relatedAssetIds
        });
        if (error) throw error;
@@ -380,6 +385,7 @@ export const api = {
             camera: s.camera,
             size: s.size,
             duration: s.duration,
+            sensitivity_reduction: s.sensitivityReduction,
             related_asset_ids: s.relatedAssetIds
         }));
         
@@ -397,6 +403,7 @@ export const api = {
         if (updates.camera !== undefined) dbUpdates.camera = updates.camera;
         if (updates.size !== undefined) dbUpdates.size = updates.size;
         if (updates.duration !== undefined) dbUpdates.duration = updates.duration;
+        if (updates.sensitivityReduction !== undefined) dbUpdates.sensitivity_reduction = updates.sensitivityReduction;
         if (updates.relatedAssetIds !== undefined) dbUpdates.related_asset_ids = updates.relatedAssetIds;
 
         const { error } = await supabase.from('shots').update(dbUpdates).eq('id', id);

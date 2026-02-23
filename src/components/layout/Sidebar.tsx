@@ -2,12 +2,27 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
+import { useEffect, useState } from 'react';
 import { BookOpen, Users, Film, Download, ArrowLeft } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
+import { Textarea } from '@/components/ui/textarea';
+import { api } from '@/lib/api';
 
 export function Sidebar({ projectId }: { projectId: string }) {
   const pathname = usePathname();
+  const [sensitivityPrompt, setSensitivityPrompt] = useState('');
+  const [isSaving, setIsSaving] = useState(false);
+  const [saveError, setSaveError] = useState('');
+
+  useEffect(() => {
+    api.projects.get(projectId).then((project) => {
+      setSensitivityPrompt(project?.sensitivityPrompt || '');
+    }).catch((error) => {
+      const message = error instanceof Error ? error.message : JSON.stringify(error);
+      setSaveError(message || '加载失败');
+    });
+  }, [projectId]);
 
   const links = [
     { href: `/project/${projectId}`, label: '剧本', icon: BookOpen },
@@ -48,6 +63,47 @@ export function Sidebar({ projectId }: { projectId: string }) {
           );
         })}
       </nav>
+
+      <div className="px-4 pb-4">
+        <div className="rounded-lg border border-black/[0.06] bg-white p-3 space-y-3">
+          <div className="text-[11px] uppercase tracking-widest text-black/50 font-bold">
+            敏感词规则
+          </div>
+          <Textarea
+            value={sensitivityPrompt}
+            onChange={(e) => setSensitivityPrompt(e.target.value)}
+            placeholder="输入你的敏感词提示词，用于降低镜头敏感度"
+            className="min-h-[90px] text-xs leading-relaxed bg-white border-black/[0.08]"
+          />
+          <Button
+            size="sm"
+            className="w-full"
+            disabled={isSaving}
+            onClick={async () => {
+              setIsSaving(true);
+              setSaveError('');
+              try {
+                await api.projects.update(projectId, { sensitivityPrompt });
+              } catch (error) {
+                let message = error instanceof Error ? error.message : JSON.stringify(error);
+                if (typeof message === 'string' && message.includes('sensitivity_prompt')) {
+                  message = '数据库缺少 sensitivity_prompt 字段，请先执行迁移';
+                }
+                setSaveError(message || '保存失败');
+              } finally {
+                setIsSaving(false);
+              }
+            }}
+          >
+            {isSaving ? '保存中...' : '保存规则'}
+          </Button>
+          {saveError && (
+            <div className="text-[11px] text-red-500 leading-relaxed">
+              {saveError}
+            </div>
+          )}
+        </div>
+      </div>
       
       <div className="p-4 border-t border-black/[0.04]">
         <div className="text-xs text-black/30 text-center">

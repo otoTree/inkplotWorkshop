@@ -7,7 +7,7 @@ import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { Save, Trash2, Plus, Box, Maximize2, Download, Copy } from 'lucide-react';
+import { Save, Trash2, Plus, Box, Maximize2, Download, Copy, Shield } from 'lucide-react';
 import { toPng } from 'html-to-image';
 import { ShotDetailDialog } from './ShotDetailDialog';
 
@@ -15,17 +15,26 @@ interface ShotCardProps {
   shot: Shot;
   assets: Asset[];
   index: number;
+  projectId: string;
+  sensitivityPrompt: string;
   onUpdate: (shot: Shot) => void;
   onDelete: (id: string) => void;
 }
 
-export function ShotCard({ shot, assets, onUpdate, onDelete }: ShotCardProps) {
+export function ShotCard({ shot, assets, projectId, sensitivityPrompt, onUpdate, onDelete }: ShotCardProps) {
   const [isEditing, setIsEditing] = useState(false);
   const [isDetailOpen, setIsDetailOpen] = useState(false);
   const [draft, setDraft] = useState<Shot | null>(null);
+  const [isReducing, setIsReducing] = useState(false);
   const cardRef = useRef<HTMLDivElement>(null);
   
   const current = draft ?? shot;
+  const sensitivityLabel = (value: number) => {
+    if (value >= 3) return '强';
+    if (value === 2) return '中度';
+    if (value === 1) return '轻度';
+    return '无';
+  };
 
   const save = async () => {
     onUpdate(current);
@@ -79,6 +88,7 @@ export function ShotCard({ shot, assets, onUpdate, onDelete }: ShotCardProps) {
     const text = `
 Shot #${current.sequence}
 Duration: ${current.duration}s | Camera: ${current.camera} | Size: ${current.size}
+Sensitivity Reduction: ${sensitivityLabel(current.sensitivityReduction)}
 
 [P0 Narrative]
 ${current.narrativeGoal}
@@ -94,6 +104,49 @@ ${current.dialogue || 'None'}
     `.trim();
     navigator.clipboard.writeText(text);
     alert('已复制镜头文本');
+  };
+
+  const handleReduceSensitivity = async () => {
+    if (!sensitivityPrompt.trim()) {
+      alert('请先在侧边栏设置敏感词规则');
+      return;
+    }
+    setIsReducing(true);
+    try {
+      const response = await fetch('/api/ai/reduce-shot-sensitivity', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          projectId,
+          shot: {
+            narrativeGoal: current.narrativeGoal,
+            visualEvidence: current.visualEvidence,
+            description: current.description,
+            dialogue: current.dialogue || '',
+          },
+        }),
+      });
+
+      if (!response.ok) {
+        const error = await response.json().catch(() => ({}));
+        alert(error?.error || '降低敏感度失败');
+        return;
+      }
+
+      const result = await response.json();
+      const updatedShot: Shot = {
+        ...current,
+        narrativeGoal: result.narrativeGoal ?? current.narrativeGoal,
+        visualEvidence: result.visualEvidence ?? current.visualEvidence,
+        description: result.description ?? current.description,
+        dialogue: result.dialogue ?? current.dialogue,
+        sensitivityReduction: Math.min((current.sensitivityReduction || 0) + 1, 3),
+      };
+      setDraft(updatedShot);
+      onUpdate(updatedShot);
+    } finally {
+      setIsReducing(false);
+    }
   };
 
   return (
@@ -116,11 +169,19 @@ ${current.dialogue || 'None'}
               <Badge variant="secondary" className="text-xs font-mono bg-white border text-gray-600">
                 {current.size || 'SIZE?'}
               </Badge>
+              {current.sensitivityReduction > 0 && (
+                <Badge variant="secondary" className="text-xs font-mono bg-white border text-gray-600">
+                  敏感度↓ {sensitivityLabel(current.sensitivityReduction)}
+                </Badge>
+              )}
             </div>
           </div>
           
           {/* Action Buttons (Excluded from Export) */}
           <div className="exclude-from-export flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity bg-white/80 backdrop-blur-sm rounded-lg p-1 border shadow-sm absolute right-4 top-3">
+            <Button size="icon" variant="ghost" className="h-7 w-7" onClick={handleReduceSensitivity} title="降低敏感度" disabled={isReducing}>
+                <Shield className="w-3.5 h-3.5" />
+            </Button>
             <Button size="icon" variant="ghost" className="h-7 w-7" onClick={handleCopyText} title="复制文本">
                 <Copy className="w-3.5 h-3.5" />
             </Button>

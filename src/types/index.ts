@@ -7,6 +7,7 @@ export interface Project {
   artStyle?: string;      // 美术风格 (e.g. 赛博朋克, 水墨, 皮克斯)
   characterArtStyle?: string;
   sceneArtStyle?: string;
+  sensitivityPrompt?: string;
   seriesPlan?: unknown;       // 10集连载大纲
   createdAt: number;
   updatedAt: number;
@@ -61,5 +62,6 @@ export interface Shot {
   size: string;           // 景别 (Close-up, Wide...)
   
   duration?: number;      // 预估时长
+  sensitivityReduction: number;
   relatedAssetIds: string[]; // 关联的 Asset ID 列表
 }

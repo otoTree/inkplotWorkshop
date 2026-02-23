@@ -6,10 +6,15 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Download, Loader2 } from 'lucide-react';
 import { useState } from 'react';
-import { Shot } from '@/types';
 
 export function ExportPanel({ projectId }: { projectId: string }) {
   const [isExporting, setIsExporting] = useState(false);
+  const sensitivityLabel = (value: number) => {
+    if (value >= 3) return '强';
+    if (value === 2) return '中度';
+    if (value === 1) return '轻度';
+    return '无';
+  };
 
   const handleExport = async () => {
     setIsExporting(true);
@@ -102,6 +107,7 @@ export function ExportPanel({ projectId }: { projectId: string }) {
                 content += `- **Duration**: ${shot.duration}s\n`;
                 content += `- **Size**: ${shot.size || 'N/A'}\n`;
                 content += `- **Camera**: ${shot.camera || 'N/A'}\n`;
+                content += `- **Sensitivity Reduction**: ${sensitivityLabel(shot.sensitivityReduction ?? 0)}\n`;
                 content += `- **Character Art Style**: ${characterStyle}\n`;
                 content += `- **Scene Art Style**: ${sceneStyle}\n`;
                 content += `- **Narrative Goal**: ${shot.narrativeGoal}\n`;

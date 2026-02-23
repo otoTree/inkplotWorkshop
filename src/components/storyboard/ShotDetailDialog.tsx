@@ -10,6 +10,7 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { Badge } from '@/components/ui/badge';
 import { Search, Box, Check } from 'lucide-react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 
 interface ShotDetailDialogProps {
   open: boolean;
@@ -22,6 +23,12 @@ interface ShotDetailDialogProps {
 export function ShotDetailDialog({ open, onOpenChange, shot, assets, onSave }: ShotDetailDialogProps) {
   const [data, setData] = useState<Shot>(shot);
   const [assetSearch, setAssetSearch] = useState('');
+  const sensitivityOptions = [
+    { value: '0', label: '无' },
+    { value: '1', label: '轻度' },
+    { value: '2', label: '中度' },
+    { value: '3', label: '强' },
+  ];
 
   const handleSave = () => {
     onSave(data);
@@ -82,6 +89,24 @@ export function ShotDetailDialog({ open, onOpenChange, shot, assets, onSave }: S
                       onChange={e => setData({ ...data, sequence: Number(e.target.value) })}
                       className="h-8 w-20 text-right font-mono"
                     />
+                 </div>
+                 <div className="flex flex-col items-end">
+                   <label className="text-[10px] text-gray-400 uppercase tracking-wider font-bold">敏感度降低</label>
+                   <Select
+                     value={String(data.sensitivityReduction ?? 0)}
+                     onValueChange={(value) => setData({ ...data, sensitivityReduction: Number(value) })}
+                   >
+                     <SelectTrigger size="sm" className="h-8 w-24 font-mono">
+                       <SelectValue placeholder="无" />
+                     </SelectTrigger>
+                     <SelectContent>
+                       {sensitivityOptions.map(option => (
+                         <SelectItem key={option.value} value={option.value}>
+                           {option.label}
+                         </SelectItem>
+                       ))}
+                     </SelectContent>
+                   </Select>
                  </div>
                </div>
             </div>

@@ -22,6 +22,7 @@ type GeneratedShot = {
   camera?: string;
   size?: string;
   duration?: number;
+  sensitivityReduction?: number;
   suggestedAssetNames?: string[];
   suggestedAssets?: {
     characters?: string[];
@@ -175,6 +176,7 @@ export function StoryboardEditor({ projectId }: StoryboardEditorProps) {
           camera: s.camera || '',
           size: s.size || '',
           duration: s.duration || 10,
+          sensitivityReduction: s.sensitivityReduction ?? 0,
           relatedAssetIds: relatedIds
         };
       });
@@ -205,6 +207,7 @@ export function StoryboardEditor({ projectId }: StoryboardEditorProps) {
       camera: '',
       size: '',
       duration: 10,
+      sensitivityReduction: 0,
       relatedAssetIds: []
     };
 
@@ -307,6 +310,8 @@ export function StoryboardEditor({ projectId }: StoryboardEditorProps) {
                   shot={shot} 
                   assets={assets || []} 
                   index={index}
+                  projectId={projectId}
+                  sensitivityPrompt={project?.sensitivityPrompt || ''}
                   onUpdate={handleUpdateShot}
                   onDelete={handleDeleteShot}
                 />
