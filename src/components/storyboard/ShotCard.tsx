@@ -104,7 +104,7 @@ ${current.visualEvidence}
 [P2 Description]
 ${current.description}
 
-[Dialogue]
+[Dialogue / Voiceover / Soliloquy / Internal Monologue / Voiceover (Narration/Inner Voice) / Subtext / Stage Direction / Opening Poem / Interrupting / Aside / Buffoonery / Soliloquy (Talking to Oneself) / Echo / Pun]
 ${current.dialogue || 'None'}
     `.trim();
     navigator.clipboard.writeText(text);
