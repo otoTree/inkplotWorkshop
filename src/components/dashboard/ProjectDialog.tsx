@@ -123,8 +123,37 @@ export function ProjectDialog({ children, project, open: controlledOpen, onOpenC
         });
       } else {
         // Create new project
+        const projectId = crypto.randomUUID();
+
+        // ★ 自动适配电影滤镜
+        let cinematicFilter = undefined;
+        try {
+          const filterResponse = await fetch('/api/ai/adapt-cinematic-filter', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              projectId,
+              genre: [] // 可以从 logline 中提取题材
+            })
+          });
+          if (filterResponse.ok) {
+            const { filter } = await filterResponse.json();
+            cinematicFilter = filter;
+          }
+        } catch (e) {
+          console.warn('Failed to adapt cinematic filter:', e);
+        }
+
+        // ★ 配置内流控制
+        const engagementConfig = {
+          template: 'custom' as const,
+          totalEpisodes: 10,
+          payoffBudget: { S: 2, A: 3, B: 5 },
+          suppressionWeights: {}
+        };
+
         const newProject: Project = {
-          id: crypto.randomUUID(),
+          id: projectId,
           title,
           logline,
           language: normalizedLanguage,
@@ -133,10 +162,13 @@ export function ProjectDialog({ children, project, open: controlledOpen, onOpenC
           genre: [],
           createdAt: Date.now(),
           updatedAt: Date.now(),
+          // ★ 新增字段
+          cinematicFilter,
+          engagementConfig
         };
         await api.projects.create(newProject);
       }
-      
+
       setOpen(false);
       // Clear form if it was create mode
       if (!project) {

@@ -1,7 +1,7 @@
 'use client'
 
 import { useActionState } from 'react'
-import { login, signup, type AuthState } from './actions'
+import { forgotPassword, login, signup, type AuthState } from './actions'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -16,6 +16,7 @@ const initialState: AuthState = {
 export function LoginForm() {
   const [loginState, loginAction, isLoginPending] = useActionState(login, initialState)
   const [signupState, signupAction, isSignupPending] = useActionState(signup, initialState)
+  const [forgotState, forgotAction, isForgotPending] = useActionState(forgotPassword, initialState)
 
   return (
     <div className="w-full">
@@ -71,6 +72,11 @@ export function LoginForm() {
                     {loginState.error}
                   </div>
                 )}
+                {loginState?.message && (
+                  <div className="text-sm text-emerald-600 bg-emerald-50/50 p-3 rounded-lg border border-emerald-100 flex items-center justify-center">
+                    {loginState.message}
+                  </div>
+                )}
               </CardContent>
               <CardFooter className="pb-8 pt-2">
                 <Button 
@@ -81,6 +87,39 @@ export function LoginForm() {
                   {isLoginPending ? '登录中...' : '开始创作'}
                 </Button>
               </CardFooter>
+            </form>
+            <form action={forgotAction}>
+              <CardContent className="space-y-3 pt-0 pb-8">
+                <Label htmlFor="forgot-email" className="text-xs uppercase tracking-wider text-black/40 font-medium pl-1">忘记密码</Label>
+                <div className="flex gap-2">
+                  <Input
+                    id="forgot-email"
+                    name="email"
+                    type="email"
+                    placeholder="输入注册邮箱"
+                    required
+                    className="h-10 bg-black/[0.02] border-transparent focus:bg-white focus:border-black/10 rounded-xl transition-all duration-300 text-black/80 placeholder:text-black/20"
+                  />
+                  <Button
+                    type="submit"
+                    variant="outline"
+                    className="h-10 rounded-xl border-black/10 text-black/70 hover:text-black hover:bg-black/[0.03]"
+                    disabled={isForgotPending}
+                  >
+                    {isForgotPending ? '发送中' : '发送重置'}
+                  </Button>
+                </div>
+                {forgotState?.error && (
+                  <div className="text-sm text-red-600 bg-red-50/50 p-3 rounded-lg border border-red-100 flex items-center justify-center">
+                    {forgotState.error}
+                  </div>
+                )}
+                {forgotState?.message && (
+                  <div className="text-sm text-emerald-600 bg-emerald-50/50 p-3 rounded-lg border border-emerald-100 flex items-center justify-center">
+                    {forgotState.message}
+                  </div>
+                )}
+              </CardContent>
             </form>
           </Card>
         </TabsContent>

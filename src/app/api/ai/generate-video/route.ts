@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
-import { AIAPIError, callAIImageGeneration, extractFirstMessageContent, extractImageUrls } from '@/lib/ai-server';
+import { AIAPIError, callAIVideoGeneration } from '@/lib/ai-server';
 
 export const maxDuration = 300;
 
@@ -14,31 +14,18 @@ export async function POST(req: Request) {
     }
 
     const body = await req.json();
-    const { prompt } = body;
+    const { prompt, duration = 15, metadata } = body;
     if (!prompt || typeof prompt !== 'string') {
       return NextResponse.json({ error: 'Missing prompt' }, { status: 400 });
     }
 
-    const result = await callAIImageGeneration(prompt);
-    const urls = extractImageUrls(result);
-    if (urls.length === 0) {
-      let raw = '';
-      try {
-        raw = extractFirstMessageContent(result);
-      } catch {
-        raw = '';
-      }
-      return NextResponse.json({ error: 'Image generation returned no urls', raw }, { status: 502 });
-    }
-
-    return NextResponse.json({ data: urls.map((url) => ({ url })) });
-
+    const result = await callAIVideoGeneration(prompt, Number(duration) || 15, metadata);
+    return NextResponse.json(result);
   } catch (error) {
     if (error instanceof AIAPIError) {
       return NextResponse.json({ error: error.message, details: error.details }, { status: error.status });
     }
     const err = error as { message?: string };
-    console.error('[Image Gen Error] Exception:', error);
     return NextResponse.json({ error: err.message || 'Internal Server Error' }, { status: 500 });
   }
 }
