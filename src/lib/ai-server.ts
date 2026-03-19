@@ -143,7 +143,7 @@ const withThrottle = async <T>(config: AIAPIConfig, fn: () => Promise<T>) => {
 
 export type AIChatMessage = {
   role: string;
-  content: string;
+  content: string | any[];
 };
 
 type ChatCompletionParams = {
@@ -204,15 +204,30 @@ export const extractFirstMessageContent = (result: unknown) => {
   return content;
 };
 
-export const callAIImageGeneration = async (prompt: string, aspectRatio: string = '1:1') => {
+export const callAIImageGeneration = async (prompt: string, aspectRatio: string = '1:1', n: number = 1, referenceImageUrl?: string) => {
   const config = getAIAPIConfig();
   const imageModel = process.env.AI_API_IMAGE_MODEL || process.env.OPENAI_IMAGE_MODEL || config.model;
 
   const finalPrompt = aspectRatio !== '1:1' ? `${prompt}, aspect ratio ${aspectRatio}` : prompt;
 
+  let messages: AIChatMessage[] = [{ role: 'user', content: finalPrompt }];
+
+  // 如果提供了参考图（并且不是普通的模型），可以通过图片消息格式传入
+  if (referenceImageUrl) {
+    messages = [
+      {
+        role: 'user',
+        content: [
+          { type: 'image_url', image_url: { url: referenceImageUrl } },
+          { type: 'text', text: finalPrompt }
+        ]
+      }
+    ];
+  }
+
   return await callAIChatCompletion({
-    messages: [{ role: 'user', content: finalPrompt }],
-    extraPayload: { model: imageModel },
+    messages,
+    extraPayload: { model: imageModel, n },
   });
 };
 

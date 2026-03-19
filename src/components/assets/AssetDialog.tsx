@@ -5,7 +5,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { ArtStyleConfig, Asset, AssetType } from '@/types';
-import { Trash2, Wand2, Loader2, ImageIcon } from 'lucide-react';
+import { Trash2, Wand2, Loader2, ImageIcon, ZoomIn } from 'lucide-react';
 import { getImageGenerationPrompt } from '@/lib/prompts';
 
 interface AssetDialogProps {
@@ -37,6 +37,7 @@ export function AssetDialog({
   });
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isGenerating, setIsGenerating] = useState(false);
+  const [isPreviewOpen, setIsPreviewOpen] = useState(false);
 
   const typeMap: Record<string, string> = {
     character: '角色',
@@ -142,8 +143,9 @@ export function AssetDialog({
   };
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-[800px] sm:max-h-[90vh] overflow-y-auto">
+    <>
+      <Dialog open={open} onOpenChange={onOpenChange}>
+        <DialogContent className="sm:max-w-[1000px] sm:max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>
             {mode === 'create' ? `新建${typeMap[assetType]}` : `编辑${typeMap[assetType]}`}
@@ -162,6 +164,19 @@ export function AssetDialog({
                     required
                     />
                 </div>
+
+                {assetType === 'character' && (
+                  <div className="flex items-center space-x-2">
+                    <input 
+                      type="checkbox" 
+                      id="isMain" 
+                      checked={!!formData.isMain}
+                      onChange={(e) => setFormData({ ...formData, isMain: e.target.checked })}
+                      className="w-4 h-4 rounded border-gray-300"
+                    />
+                    <Label htmlFor="isMain" className="cursor-pointer">核心主角 (用于封面生成)</Label>
+                  </div>
+                )}
                 
                 <div className="space-y-2">
                     <Label htmlFor="description">描述</Label>
@@ -205,16 +220,27 @@ export function AssetDialog({
 
             <div className="space-y-2">
                 <Label>图片预览</Label>
-                <div className="border-2 border-dashed rounded-lg aspect-[3/4] flex items-center justify-center bg-muted/30 relative overflow-hidden group">
+                <div className="border-2 border-dashed rounded-lg aspect-video flex items-center justify-center bg-muted/30 relative overflow-hidden group">
                     {formData.imageUrl ? (
                         <>
-                            <img src={formData.imageUrl} alt="Preview" className="w-full h-full object-cover" />
-                            <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+                            <img src={formData.imageUrl} alt="Preview" className="w-full h-full object-contain cursor-pointer" onClick={() => setIsPreviewOpen(true)} />
+                            <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex flex-col sm:flex-row items-center justify-center gap-2 pointer-events-none">
+                                <Button 
+                                    type="button" 
+                                    variant="secondary" 
+                                    size="sm"
+                                    onClick={() => setIsPreviewOpen(true)}
+                                    className="pointer-events-auto"
+                                >
+                                    <ZoomIn className="w-4 h-4 mr-2" />
+                                    放大预览
+                                </Button>
                                 <Button 
                                     type="button" 
                                     variant="destructive" 
                                     size="sm"
                                     onClick={() => setFormData({ ...formData, imageUrl: '' })}
+                                    className="pointer-events-auto"
                                 >
                                     <Trash2 className="w-4 h-4 mr-2" />
                                     移除图片
@@ -271,5 +297,15 @@ export function AssetDialog({
         </DialogFooter>
       </DialogContent>
     </Dialog>
+
+    <Dialog open={isPreviewOpen} onOpenChange={setIsPreviewOpen}>
+        <DialogContent className="max-w-[90vw] max-h-[90vh] p-0 border-none bg-transparent shadow-none flex justify-center items-center">
+          <DialogTitle className="sr-only">图片预览</DialogTitle>
+          {formData.imageUrl && (
+            <img src={formData.imageUrl} alt="Full Preview" className="max-w-full max-h-[90vh] object-contain rounded-md" />
+          )}
+        </DialogContent>
+    </Dialog>
+    </>
   );
 }

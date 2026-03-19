@@ -37,6 +37,7 @@ type BlueprintAssetItem = {
   name: string;
   description?: string;
   visualPrompt?: string;
+  isMain?: boolean;
 };
 
 type BlueprintAssets = {
@@ -377,6 +378,7 @@ export function ScriptEditor({ projectId }: { projectId: string }) {
             imageUrl: '',
             status: 'draft',
             metadata: {},
+            isMain: !!item.isMain,
           });
         });
       };

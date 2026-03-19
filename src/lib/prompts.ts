@@ -7,8 +7,8 @@ User Input: "${userInput}"
 Requirements:
 1. **Title**: Generate a catchy, short title (max 10 words).
 2. **Logline**: A concise summary of the story (1-2 sentences).
-3. **Character Art Style**: Suggest a specific and detailed visual style suitable for character generation. Include keywords for lighting, palette, rendering style, and atmosphere. Avoid background/scene terms. Keep it under 20 words.
-4. **Scene Art Style**: Suggest a specific and detailed visual style suitable for scenes and environments. Include keywords for lighting, palette, rendering style, and atmosphere. Keep it under 20 words.
+3. **Character Art Style**: Suggest a specific and detailed visual style suitable for character generation. Include keywords for lighting, palette, rendering style, and atmosphere. Avoid background/scene terms, 3D, game CG, or anime styles. Prefer cinematic live-action styles. Keep it under 20 words.
+4. **Scene Art Style**: Suggest a specific and detailed visual style suitable for scenes and environments. Include keywords for lighting, palette, rendering style, and atmosphere. Avoid 3D, game CG, or anime styles. Prefer cinematic live-action styles. Keep it under 20 words.
 5. **Language**: Detect the language of the input and use it for the output fields (title, logline, characterArtStyle, sceneArtStyle). Return the detected language code ('zh', 'en', 'jp', 'kr') in the "language" field. Default to 'zh' if unsure.
 
 Output Format: JSON
@@ -62,6 +62,7 @@ Requirements:
 4. **Asset Pack**:
    - Include at least 6 characters and 8 locations.
    - Each asset must include concise description and a visualPrompt in English for image generation.
+   - **For characters, explicitly identify up to 2 protagonists (main characters) and mark them with \`"isMain": true\`. All other supporting characters MUST have \`"isMain": false\`.**
 5. **Output Scope**:
    - Do NOT output any episode list in this step.
    - Only output project_blueprint, story_analysis, and assets.
@@ -81,7 +82,7 @@ Output Format: JSON
   },
   "assets": {
     "characters": [
-      { "name": "...", "description": "...", "visualPrompt": "..." }
+      { "name": "...", "description": "...", "visualPrompt": "...", "isMain": true }
     ],
     "locations": [
       { "name": "...", "description": "...", "visualPrompt": "..." }
@@ -270,7 +271,8 @@ Requirements:
    - **Style Constraint**:
      - **Characters** MUST follow: "${characterStyle}".
      - **Locations** MUST follow: "${sceneStyle}".
-   - **Characters**: Describe appearance, clothing, style, age, and **ethnicity/race** based on the script context. If the script implies a specific background (e.g., Western names, settings), ensure the visual prompt reflects that (e.g., 'Caucasian', 'Black', 'Latino'). Do NOT default to Asian/Chinese unless the script context suggests it. (Do not describe actions, props, or background. Character ONLY. No background, plain white.)
+     - **Note**: Strictly avoid 3D, game CG, anime, or cartoon terms in the visual prompt. Always prefer cinematic live-action terminology.
+   - **Characters**: Describe appearance, clothing, style, age, and **ethnicity/race** based on the script context. If the script implies a specific background (e.g., Western names, settings), ensure the visual prompt reflects that (e.g., 'Caucasian', 'Black', 'Latino'). Do NOT default to Asian/Chinese unless the script context suggests it. (Do not describe actions, props, or background. Character ONLY. No background, plain white.) Identify up to 2 main protagonists and mark them with \`"isMain": true\`. Other characters should have \`"isMain": false\`.
    - **Locations**: Describe atmosphere, lighting, architectural style. (Empty scene, no people).
 3. **Descriptions**: Provide a short description in the script's language.
 
@@ -281,7 +283,8 @@ Output Format: JSON
       "type": "character", // or "location"
       "name": "...",
       "description": "...",
-      "visualPrompt": "..."
+      "visualPrompt": "...",
+      "isMain": false
     },
     ...
   ]
@@ -295,8 +298,8 @@ export const getImageGenerationPrompt = (basePrompt: string, type: 'character' |
     ? (characterArtStyle || baseStyle)
     : (sceneArtStyle || baseStyle);
   const styleSuffix = resolvedStyle
-    ? `, ${resolvedStyle} style, cinematic realism, photorealistic, highly detailed, professional cinematography, 8k resolution, masterpiece`
-    : ', cinematic realism, photorealistic, highly detailed, professional cinematography, 8k resolution, masterpiece';
+    ? `, ${resolvedStyle} style, cinematic realism, photorealistic, highly detailed, professional cinematography, film grain, live-action, 8k resolution`
+    : ', cinematic realism, photorealistic, highly detailed, professional cinematography, film grain, live-action, 8k resolution';
   
   if (type === 'character') {
     return `${basePrompt}, three-view drawing (front view, side view, back view), character sheet, standing pose, neutral expression, full body, landscape 16:9, ${styleSuffix}, no background, isolated on white background, solid white background`;
@@ -326,7 +329,7 @@ export const getStoryboardGenerationPrompt = (scriptContent: string, existingAss
 1. **State Change is the Minimal Unit**: Not "what happened", but "what the character became after it happened".
 2. **Verbs > Nouns**: Action > Scene > Style.
 3. **Language Requirement**: All content in the JSON output MUST be in ${isEnglish ? 'English' : 'the target language (' + language + ')'}.
-4. **Flexible Duration (10s-15s)**: Each shot should typically last between 10s to 15s. It must complete a full action loop.
+4. **Flexible Duration (3s-5s)**: Each shot should typically last between 3s to 5s. It must capture a specific action, reaction, or dialogue beat.
 5. **Mandatory Visual Continuity**: Shot transitions MUST have clear visual logic (e.g., eyeline match, action continuity, reaction shot). No illogical hard cuts.
 6. **Asset Coverage & Matching**: Each shot MUST list all involved **characters and locations**. If an asset exists in the provided list, use its exact name (case-insensitive match). Always include at least one location per shot.
 
@@ -351,7 +354,7 @@ When generating the \`videoPrompt\`, assume the AI video model has zero context.
 Analyze the provided script and generate a storyboard sequence.
 **IMPORTANT**: 
 1. **Detail Level**: You MUST generate extremely detailed descriptions and Video Prompts as specified above. Do not summarize or be concise. The more granular detail about lighting, physics, and camera movement, the better.
-2. **Shot Count Limit**: For the provided script chunk, output 3-6 shots only. Never exceed 6 shots. If content is dense, merge actions into fewer shots.
+2. **Shot Breakdown Strategy**: There is NO limit on the maximum number of shots. Break down actions and dialogue into as many short shots (3-5s each) as necessary to perfectly capture the pacing. Do not over-compress. Ensure the total episode duration (across all chunks) exceeds 70 seconds.
 
 **Script Content**:
 ${scriptContent.slice(0, 15000)}...
@@ -375,8 +378,8 @@ ${JSON.stringify(existingAssets.map(a => ({ id: a.id, name: a.name, type: a.type
       "dialogue": "Character Name: Content (or Voiceover: Content)",
       "camera": "Close-up / Pan Right / ...",
       "size": "Medium Shot / Close-up / Long Shot",
-      "duration": 12, // Estimated duration in seconds (10-15s flexible)
-      "videoPrompt": "Detailed English prompt for video generation. MUST emphasize cinematic realism, photorealistic textures, and professional cinematography. MUST include camera movement (e.g. 'Explosive fast push-in'), physical dynamics (muscle contraction, fluid/particle physics), action impact, and environmental reactions. Be extremely specific.",
+      "duration": 4, // Estimated duration in seconds (3-5s flexible)
+      "videoPrompt": "Detailed English prompt for video generation. MUST emphasize cinematic realism, photorealistic textures, and professional cinematography. Strictly avoid 3D, game CG, or anime styles. MUST include camera movement (e.g. 'Explosive fast push-in'), physical dynamics (muscle contraction, fluid/particle physics), action impact, and environmental reactions. Be extremely specific.",
       "suggestedAssetNames": ["Char Name", "Location Name"],
       "characters": [
         {
@@ -391,6 +394,82 @@ ${JSON.stringify(existingAssets.map(a => ({ id: a.id, name: a.name, type: a.type
     },
     ...
   ]
+}
+`;
+};
+
+export const getCoverDesignPrompt = (title: string, logline: string, characters: string[] = [], language: string = 'zh') => {
+  const charactersStr = characters.length > 0 ? characters.join(', ') : '无具体主角名称（请根据剧情推断）';
+  return `
+你是专业的短剧封面设计专家。请严格遵循以下设计规则生成封面方案。
+
+短剧信息：
+剧名：${title}
+故事介绍：${logline}
+主角名称：${charactersStr}
+目标受众语言：${language}
+
+## 短剧封面设计规则
+
+### 1. 题材识别
+根据故事介绍判断题材：
+- romance_ceo 霸总爱情：总裁、豪门、商战、婚约
+- romance_fantasy 奇幻爱情：穿越、古代、修仙、王爷
+- vampire 吸血鬼：永生、血族、夜族、黑暗力量
+- werewolf 狼人：狼族、变身、月圆、野性
+- campus 青春校园：高中、大学、初恋、社团
+- crime 黑帮犯罪：黑帮、复仇、地下、枪战
+- thriller 悬疑惊悚：失忆、追杀、秘密、推理
+- apocalypse 末日灾难：末日、病毒、废土、生存
+- scifi 科幻：外星、AI、未来、太空
+- historical 历史古装：朝代、将军、皇帝、宫廷
+
+### 2. 标题结构（5种类型）
+1. 情节关系型：身份A + 情节关系 + 身份B
+2. 情绪冲突型：情绪词 + 情绪词
+3. 身份叙事型：身份 + 属性
+4. 命运悬念型：疑问/宿命 + 转折
+5. 动作宣言型：动词 + 宾语
+
+### 3. Slogan 规则
+- 字数：8-20字
+- 语气：补充情绪，不重复标题
+- 结构：[限制条件] + [情感动作] + [对象]
+
+### 4. 题材→设计映射
+| 题材 | 版式 | 字体 | 材质 | 颜色 | 光影 | 场景 |
+|---|---|---|---|---|---|---|
+| 霸总爱情 | couple_center | Luxury Serif | Gold Foil | Gold+Black | Golden Backlight | luxury_mansion |
+| 吸血鬼 | face_off | Serif(Trajan) | Stone/Metal | Red+Black+White | Cold Rim Light | dark_castle |
+| 末日灾难 | hero_portrait | Bold Sans | Metal | Crimson+Black | Environmental Light | burning_city |
+| 黑帮犯罪 | face_off | Condensed Sans | Scratch | Black+Red | Dramatic Lighting | neon_street |
+| 奇幻狼人 | hero_portrait | Decorative Serif | Ice/Stone | Purple+Blue | Moonlight | forest_night |
+| 青春校园 | couple_center | Handwritten | Neon Glow | Yellow+White | Soft Diffused | campus |
+| 历史古装 | hero_portrait | 宋体/仿宋 | Stone Carving | Gold+Red | Moonlight | ancient_palace |
+| 科幻 | hero_portrait | Geometric Sans | Metal | Blue+Silver | Cold Rim Light | futuristic |
+
+### 5. Prompt 结构模板
+[画幅比例] [版式布局] [景别选择] [主角描述 (必须包含这里提供的主角名称)] [角色站位+姿态] [视线结构] [光影模式] [场景背景] [标题文字设计] [整体氛围词]
+
+通用质量词：cinematic poster, ultra-detailed, 8K, professional photography, volumetric lighting, depth of field, photorealistic, real human actors
+
+### 6. 关键规则
+1. 脸部面积 ≥ 画面 40%
+2. 双字体系统：Script手写体 + Serif/Sans衬线体叠加
+3. 字号层级：核心名词最大，形容词次之，介词最小
+4. 背景虚化，聚焦主角面部情绪
+5. **文字必须全部英文**：title 和 slogan 必须是英文（或者根据受众语言调整，但图片 Prompt 中描述的字必须是英文以适应生图模型）
+6. **画面必须是真人摄影风格**：禁止漫画风、动漫风、游戏仿真人风
+7. **景别选择（重要）**：禁止使用近景全身。只能使用：远景全身(wide shot)、近景半身(medium close-up)、面部特写(close-up)。必须包含明确的情绪和表情描述。
+8. **角色一致性（极度重要）**：图片 Prompt 中的角色描述**必须且只能**基于提供的主角名称进行设定。绝对禁止引入或描述未在主角列表中出现的人物！如果是单人剧，画面只能有主角一人。
+
+请以 JSON 格式返回，包含以下字段：
+{
+  "genre": "识别的题材类型（如 romance_ceo）",
+  "title": "封面标题（英文或目标语言）",
+  "slogan": "副标题（英文或目标语言）",
+  "image_prompt": "9:16 总封面的图片生成 Prompt（纯英文，极其详细）",
+  "episode_prompt": "3:4 分集封面的图片生成 Prompt（纯英文，极其详细）"
 }
 `;
 };

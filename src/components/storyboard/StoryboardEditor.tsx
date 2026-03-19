@@ -316,6 +316,7 @@ export function StoryboardEditor({ projectId }: StoryboardEditorProps) {
           currentShot.sceneLabel ? `[Scene] ${currentShot.sceneLabel}` : '',
           currentShot.emotion ? `[Emotion] ${currentShot.emotion}` : '',
           (currentShot.camera || currentShot.size) ? `[Camera/Size] ${currentShot.camera || ''} ${currentShot.size || ''}`.trim() : '',
+          currentShot.dialogue ? `[Dialogue] ${currentShot.dialogue}` : '',
           currentShot.soundEffect ? `[Sound Effect] ${currentShot.soundEffect}` : '',
         ].filter(Boolean).join('\n');
 
@@ -417,7 +418,7 @@ export function StoryboardEditor({ projectId }: StoryboardEditorProps) {
       dialogue: '',
       camera: '',
       size: '',
-      duration: 10,
+      duration: 4,
       sensitivityReduction: 0,
       videoPrompt: '',
       characters: [],

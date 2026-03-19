@@ -1,0 +1,5 @@
+requests>=2.31.0
+python-dotenv>=1.0.0
+replicate>=0.25.0
+openai>=1.0.0
+lark-oapi>=1.5.0

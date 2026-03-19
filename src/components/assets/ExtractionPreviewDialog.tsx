@@ -174,6 +174,11 @@ export function ExtractionPreviewDialog({
                                         {typeMap[asset.type || 'location']}
                                     </span>
                                     {asset.name}
+                                    {asset.isMain && (
+                                        <span className="text-[10px] bg-amber-500 hover:bg-amber-600 text-white px-1.5 py-0.5 rounded">
+                                            核心主角
+                                        </span>
+                                    )}
                                 </label>
                                 {!asset.imageUrl && (
                                     <Button 

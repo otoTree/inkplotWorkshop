@@ -12,6 +12,13 @@ export interface Project {
   createdAt: number;
   updatedAt: number;
 
+  // ★NEW: 封面生成字段
+  coverImageUrl?: string;
+  coverImageCandidates?: string[]; // ★NEW: 用于存储多张候选图的 URL
+  coverTitle?: string;
+  coverSlogan?: string;
+  coverPrompt?: string;
+
   // ★NEW: 动态利益矩阵
   characterMatrices?: CharacterMatrix[];
 
@@ -75,6 +82,7 @@ export interface Asset {
   imageUrl: string;       // 本地 Blob URL 或 云端 URL
   status: 'draft' | 'locked'; // 锁定后不可随意更改
   metadata: Record<string, unknown>; // 额外属性 (e.g. 年龄, 风格)
+  isMain?: boolean;       // ★NEW: 是否为核心主角 (最多2个)
 }
 
 export interface Shot {

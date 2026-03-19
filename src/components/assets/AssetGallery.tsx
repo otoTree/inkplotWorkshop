@@ -457,7 +457,7 @@ export function AssetGallery({ projectId }: { projectId: string }) {
                             {asset.imageUrl ? (
                                 <img src={asset.imageUrl} alt={asset.name} className="w-full h-auto object-cover" />
                             ) : (
-                                <div className="w-full aspect-[3/4] bg-black/[0.04] flex items-center justify-center text-black/10 group-hover:text-black/20 transition-colors">
+                                <div className="w-full aspect-video bg-black/[0.04] flex items-center justify-center text-black/10 group-hover:text-black/20 transition-colors">
                                     {activeTab === 'character' && <User className="w-16 h-16" />}
                                     {activeTab === 'location' && <MapPin className="w-16 h-16" />}
                                 </div>
@@ -485,7 +485,14 @@ export function AssetGallery({ projectId }: { projectId: string }) {
                         </div>
                         <CardHeader className="p-4 pb-2">
                             <CardTitle className="text-base font-serif flex justify-between items-center">
-                                {asset.name}
+                                <div className="flex items-center gap-2">
+                                    <span className="truncate">{asset.name}</span>
+                                    {asset.type === 'character' && asset.isMain && (
+                                        <span className="shrink-0 px-1.5 py-0.5 rounded text-[10px] font-medium bg-amber-500 text-white">
+                                            核心主角
+                                        </span>
+                                    )}
+                                </div>
                             </CardTitle>
                         </CardHeader>
                         <CardContent className="p-4 pt-0 text-xs text-black/50">

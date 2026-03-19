@@ -9,6 +9,7 @@ import { Badge } from '@/components/ui/badge';
 import { Loader2, BookOpen, Users, Image as ImageIcon, Film, Video, Layers, Activity } from 'lucide-react';
 import { formatDistanceToNow } from 'date-fns';
 import { zhCN } from 'date-fns/locale';
+import { ProjectCoverCard } from './ProjectCoverCard';
 
 interface DashboardData {
   project: Project | null;
@@ -108,6 +109,13 @@ export function ProjectOverview({ projectId }: { projectId: string }) {
           </div>
         )}
       </div>
+
+      {/* AI Cover Generation Card */}
+      <ProjectCoverCard 
+        project={project} 
+        assets={assets}
+        onUpdate={(updated) => setData(prev => prev ? { ...prev, project: updated } : null)} 
+      />
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
         {/* Stat Cards */}

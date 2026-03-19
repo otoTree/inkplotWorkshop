@@ -125,6 +125,7 @@ export function ShotCard({ shot, assets, projectId, sensitivityPrompt, onUpdate,
       current.sceneLabel ? `[Scene] ${current.sceneLabel}` : '',
       current.emotion ? `[Emotion] ${current.emotion}` : '',
       (current.camera || current.size) ? `[Camera/Size] ${current.camera || ''} ${current.size || ''}`.trim() : '',
+      current.dialogue ? `[Dialogue] ${current.dialogue}` : '',
       current.soundEffect ? `[Sound Effect] ${current.soundEffect}` : '',
     ].filter(Boolean).join('\n');
 

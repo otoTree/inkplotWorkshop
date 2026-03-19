@@ -120,7 +120,8 @@ export function OneClickWorkflowDialog({ projectId, open, onOpenChange }: OneCli
                   visualPrompt: item.visualPrompt || '',
                   imageUrl: '',
                   status: 'draft',
-                  metadata: {}
+                  metadata: {},
+                  isMain: !!item.isMain
                 } as Asset);
               });
             };
@@ -393,6 +394,7 @@ export function OneClickWorkflowDialog({ projectId, open, onOpenChange }: OneCli
               currentShot.sceneLabel ? `[Scene] ${currentShot.sceneLabel}` : '',
               currentShot.emotion ? `[Emotion] ${currentShot.emotion}` : '',
               (currentShot.camera || currentShot.size) ? `[Camera/Size] ${currentShot.camera || ''} ${currentShot.size || ''}`.trim() : '',
+              currentShot.dialogue ? `[Dialogue] ${currentShot.dialogue}` : '',
               currentShot.soundEffect ? `[Sound Effect] ${currentShot.soundEffect}` : '',
             ].filter(Boolean).join('\n');
 

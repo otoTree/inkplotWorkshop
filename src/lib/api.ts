@@ -61,6 +61,11 @@ const toProject = (row: Record<string, unknown>): Project => {
     sceneArtStyle,
     sensitivityPrompt: (row.sensitivity_prompt as string) || '',
     seriesPlan: row.series_plan,
+    coverImageUrl: row.cover_image_url as string | undefined,
+    coverImageCandidates: row.cover_image_candidates as string[] | undefined,
+    coverTitle: row.cover_title as string | undefined,
+    coverSlogan: row.cover_slogan as string | undefined,
+    coverPrompt: row.cover_prompt as string | undefined,
     createdAt: new Date(row.created_at as string).getTime(),
     updatedAt: new Date(row.updated_at as string).getTime(),
   };
@@ -86,6 +91,7 @@ const toAsset = (row: Record<string, unknown>): Asset => ({
   imageUrl: (row.image_url as string) || '',
   status: row.status as Asset['status'],
   metadata: (row.metadata as Asset['metadata']) || {},
+  isMain: row.is_main as boolean | undefined,
 });
 
 const toShot = (row: Record<string, unknown>): Shot => ({
@@ -167,6 +173,11 @@ export const api = {
       }
       if (updates.sensitivityPrompt !== undefined) dbUpdates.sensitivity_prompt = updates.sensitivityPrompt;
       if (updates.seriesPlan) dbUpdates.series_plan = updates.seriesPlan;
+      if (updates.coverImageUrl !== undefined) dbUpdates.cover_image_url = updates.coverImageUrl;
+      if (updates.coverImageCandidates !== undefined) dbUpdates.cover_image_candidates = updates.coverImageCandidates;
+      if (updates.coverTitle !== undefined) dbUpdates.cover_title = updates.coverTitle;
+      if (updates.coverSlogan !== undefined) dbUpdates.cover_slogan = updates.coverSlogan;
+      if (updates.coverPrompt !== undefined) dbUpdates.cover_prompt = updates.coverPrompt;
       dbUpdates.updated_at = new Date().toISOString();
 
       const { error } = await supabase
@@ -289,6 +300,7 @@ export const api = {
         image_url: asset.imageUrl,
         status: asset.status,
         metadata: asset.metadata,
+        is_main: asset.isMain,
       });
       if (error) throw error;
     },
@@ -309,6 +321,7 @@ export const api = {
         image_url: asset.imageUrl,
         status: asset.status,
         metadata: asset.metadata,
+        is_main: asset.isMain,
       }));
 
       const { error } = await supabase.from('assets').insert(rows);
@@ -323,6 +336,7 @@ export const api = {
       if (updates.imageUrl) dbUpdates.image_url = updates.imageUrl;
       if (updates.status) dbUpdates.status = updates.status;
       if (updates.metadata) dbUpdates.metadata = updates.metadata;
+      if (updates.isMain !== undefined) dbUpdates.is_main = updates.isMain;
 
       const { error } = await supabase
         .from('assets')
