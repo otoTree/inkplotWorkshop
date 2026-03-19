@@ -26,7 +26,18 @@ export function ShotDetailDialog({ open, onOpenChange, shot, assets, onSave }: S
 
   useEffect(() => {
     if (open) {
-      setData(shot);
+      setData(prev => {
+        // If it's a new opening (or prev id doesn't match), reset entirely
+        if (!prev || prev.id !== shot.id) return shot;
+        // Otherwise, just merge background updates (like video status) to preserve user edits
+        return {
+          ...prev,
+          videoGenerationId: shot.videoGenerationId,
+          videoStatus: shot.videoStatus,
+          videoUrl: shot.videoUrl,
+        };
+      });
+    } else {
       setAssetSearch('');
     }
   }, [open, shot]);

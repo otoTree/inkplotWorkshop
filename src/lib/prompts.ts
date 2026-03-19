@@ -204,9 +204,9 @@ Requirements:
      - **60-75s**: Consequence and stronger confrontation.
      - **75-90s**: Cliffhanger setup and unresolved ending.
 5. **Asset Consistency (HARD CONSTRAINT)**:
-   - Character names in the script MUST come from Allowed Characters.
-   - Scene locations in the script MUST come from Allowed Locations.
-   - New major characters or new locations are NOT allowed.
+   - Character names in the script MUST ONLY come from Allowed Characters.
+   - Scene locations in the script MUST ONLY come from Allowed Locations.
+   - You are STRICTLY FORBIDDEN from inventing or introducing any new characters or locations not listed in the Allowed list.
    - If the summary implies an unavailable role/location, adapt the plot using the closest allowed assets instead of inventing.
 6. **Output Template (MANDATORY)**:
    - script_content MUST be plain text.

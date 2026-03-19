@@ -3,17 +3,19 @@
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useEffect, useState } from 'react';
-import { BookOpen, Users, Film, Download, ArrowLeft } from 'lucide-react';
+import { BookOpen, Users, Film, Download, ArrowLeft, Rocket, LayoutDashboard } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { api } from '@/lib/api';
+import { OneClickWorkflowDialog } from '@/components/workflow/OneClickWorkflowDialog';
 
 export function Sidebar({ projectId }: { projectId: string }) {
   const pathname = usePathname();
   const [sensitivityPrompt, setSensitivityPrompt] = useState('');
   const [isSaving, setIsSaving] = useState(false);
   const [saveError, setSaveError] = useState('');
+  const [workflowOpen, setWorkflowOpen] = useState(false);
 
   useEffect(() => {
     api.projects.get(projectId).then((project) => {
@@ -25,6 +27,7 @@ export function Sidebar({ projectId }: { projectId: string }) {
   }, [projectId]);
 
   const links = [
+    { href: `/project/${projectId}/overview`, label: '总览', icon: LayoutDashboard },
     { href: `/project/${projectId}`, label: '剧本', icon: BookOpen },
     { href: `/project/${projectId}/assets`, label: '设定', icon: Users },
     { href: `/project/${projectId}/storyboard`, label: '分镜', icon: Film },
@@ -62,6 +65,17 @@ export function Sidebar({ projectId }: { projectId: string }) {
             </Link>
           );
         })}
+
+        <div className="pt-4 mt-2 border-t border-black/[0.04]">
+          <Button 
+            onClick={() => setWorkflowOpen(true)}
+            variant="outline" 
+            className="w-full justify-start border-black/10 text-black/80 hover:bg-black/5"
+          >
+            <Rocket className="w-4 h-4 mr-3 text-black/60" />
+            一键全流程生成
+          </Button>
+        </div>
       </nav>
 
       <div className="px-4 pb-4">
@@ -110,6 +124,12 @@ export function Sidebar({ projectId }: { projectId: string }) {
           项目 ID: {projectId.slice(0, 8)}...
         </div>
       </div>
+
+      <OneClickWorkflowDialog 
+        projectId={projectId} 
+        open={workflowOpen} 
+        onOpenChange={setWorkflowOpen} 
+      />
     </div>
   );
 }

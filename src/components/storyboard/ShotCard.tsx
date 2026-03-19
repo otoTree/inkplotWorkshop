@@ -35,6 +35,22 @@ export function ShotCard({ shot, assets, projectId, sensitivityPrompt, onUpdate,
   const cardRef = useRef<HTMLDivElement>(null);
   
   const current = draft ?? shot;
+
+  // Keep draft synced with background video generation updates
+  useEffect(() => {
+    if (draft) {
+      setDraft(prev => {
+        if (!prev) return prev;
+        return {
+          ...prev,
+          videoGenerationId: shot.videoGenerationId,
+          videoStatus: shot.videoStatus,
+          videoUrl: shot.videoUrl,
+        };
+      });
+    }
+  }, [shot.videoGenerationId, shot.videoStatus, shot.videoUrl]);
+
   const sensitivityLabel = (value: number) => {
     if (value >= 3) return '强';
     if (value === 2) return '中度';
