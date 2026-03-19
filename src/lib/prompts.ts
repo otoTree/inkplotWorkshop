@@ -43,62 +43,191 @@ Key Principles:
 `;
 };
 
-export const getOriginalStoryPrompt = (theme: string, language: string = 'zh') => {
+export const getProjectBlueprintPrompt = (theme: string, language: string = 'zh', episodeCount: number = 10) => {
   const isEnglish = language === 'en';
+  const safeEpisodeCount = Math.max(10, Math.min(120, Math.floor(episodeCount || 10)));
   return `
-Task: Create a complete 10-episode mini-series outline based on the user's theme.
+Task: Create a consistent long-form short drama project blueprint based on the user's theme.
 Theme: ${theme}
+Target episode count: ${safeEpisodeCount}
 
 Requirements:
 1. **Aesthetic**: The story MUST use character names and settings appropriate for the language: ${language}.
-2. **Language**: The outline MUST be in ${isEnglish ? 'English' : 'the target language (' + language + ')'}.
-3. **Components**:
-   - **core_conflict**: The main conflict of the story.
-   - **main_characters**: Key characters and their motivations.
-   - **key_plot_points**: Major turning points.
-   - **episodes**: A structured list of 10 episodes.
-4. **Quality**: Concise, high-stakes, suitable for short video serialization.
-5. **Detail**: The summary for EACH episode must be detailed enough (at least 3-4 sentences) to guide a full script generation.
+2. **Language**: The output MUST be in ${isEnglish ? 'English' : 'the target language (' + language + ')'}.
+3. **Structure Methodology**:
+   - Use a three-stage structure:
+     - Stage 1 (Episodes 1-10): Establishment
+     - Stage 2 (Episodes 11-30): Expansion
+     - Stage 3 (Episodes 31-${safeEpisodeCount}): Endgame
+4. **Asset Pack**:
+   - Include at least 6 characters and 8 locations.
+   - Each asset must include concise description and a visualPrompt in English for image generation.
+5. **Output Scope**:
+   - Do NOT output any episode list in this step.
+   - Only output project_blueprint, story_analysis, and assets.
+6. **Quality**: High-stakes, serialized retention-first pacing with clear escalation.
 
 Output Format: JSON
 {
+  "project_blueprint": {
+    "title": "...",
+    "logline": "...",
+    "full_synopsis": "..."
+  },
   "story_analysis": {
     "core_conflict": "...",
     "main_characters": "...",
     "key_plot_points": "..."
   },
+  "assets": {
+    "characters": [
+      { "name": "...", "description": "...", "visualPrompt": "..." }
+    ],
+    "locations": [
+      { "name": "...", "description": "...", "visualPrompt": "..." }
+    ]
+  }
+}
+`;
+};
+
+export const getStoryBatchPrompt = (
+  theme: string,
+  language: string = 'zh',
+  episodeCount: number = 10,
+  startEpisode: number = 1,
+  endEpisode: number = 10,
+  projectBlueprint: unknown = {},
+  storyAnalysis: unknown = {},
+  existingEpisodes: unknown = []
+) => {
+  const isEnglish = language === 'en';
+  const safeEpisodeCount = Math.max(10, Math.min(120, Math.floor(episodeCount || 10)));
+  const safeStart = Math.max(1, Math.floor(startEpisode || 1));
+  const safeEnd = Math.min(safeEpisodeCount, Math.max(safeStart, Math.floor(endEpisode || safeStart)));
+  return `
+Task: Generate episode outlines in a batch range for a long-form short drama.
+
+Theme: ${theme}
+Language: ${language}
+Total episodes: ${safeEpisodeCount}
+Current batch range: Episode ${safeStart} to Episode ${safeEnd}
+
+Project Blueprint:
+${JSON.stringify(projectBlueprint)}
+
+Story Analysis:
+${JSON.stringify(storyAnalysis)}
+
+Previously generated episodes for continuity:
+${JSON.stringify(existingEpisodes)}
+
+Requirements:
+1. **Language**: All fields must be in ${isEnglish ? 'English' : 'the target language (' + language + ')'}.
+2. **Scope**: Output only episodes from ${safeStart} to ${safeEnd}, no extra episodes.
+3. **Consistency**: Keep names, setting rules, relationship arcs, and stakes aligned with the blueprint.
+4. **Per-episode fields**:
+   - episode_number
+   - title
+   - summary
+   - hook
+   - cliffhanger
+   - duration_seconds (must be >= 60)
+5. **Retention**: Each episode must contain at least one clear hook and one clear end cliffhanger.
+6. **Escalation**: Stakes should escalate and align with long-arc progression.
+
+Output Format: JSON
+{
   "series_outline": [
     {
-      "episode_number": 1,
+      "episode_number": ${safeStart},
       "title": "...",
-      "summary": "..."
-    },
-    ...
+      "summary": "...",
+      "hook": "...",
+      "cliffhanger": "...",
+      "duration_seconds": 60
+    }
   ]
 }
 `;
 };
 
-export const getEpisodeContentPrompt = (episodeNum: number, seriesPlan: unknown, summary: string, language: string = 'zh') => {
+export const getOriginalStoryPrompt = (theme: string, language: string = 'zh', episodeCount: number = 10) => {
+  return getProjectBlueprintPrompt(theme, language, episodeCount);
+};
+
+type ScriptGenerationAsset = {
+  name?: string;
+  type?: string;
+  description?: string;
+};
+
+export const getEpisodeContentPrompt = (
+  episodeNum: number,
+  seriesPlan: unknown,
+  summary: string,
+  language: string = 'zh',
+  existingAssets: ScriptGenerationAsset[] = []
+) => {
   const isEnglish = language === 'en';
+  const normalizedAssets = Array.isArray(existingAssets)
+    ? existingAssets
+        .filter((asset) => asset?.name && asset?.type)
+        .map((asset) => ({
+          name: asset.name,
+          type: asset.type,
+          description: asset.description || '',
+        }))
+    : [];
+  const allowedCharacters = normalizedAssets.filter((asset) => asset.type === 'character');
+  const allowedLocations = normalizedAssets.filter((asset) => asset.type === 'location');
   return `
 Task: Write the detailed script for **Episode ${episodeNum}**.
 Context:
 - Series Plan: ${JSON.stringify(seriesPlan)}
 - Episode Summary: ${summary}
+- Allowed Characters: ${JSON.stringify(allowedCharacters)}
+- Allowed Locations: ${JSON.stringify(allowedLocations)}
 
 Requirements:
 1. **Aesthetic**: Ensure dialogue is natural for native speakers of ${language}.
-2. **Structure Consistency**: STRICTLY follow the format below.
+2. **Structure Consistency (HARD CONSTRAINT)**: script_content MUST use time-slice structure only. Scene-based headers are forbidden.
 3. **Language**: The script content MUST be in ${isEnglish ? 'English' : 'the target language (' + language + ')'}.
 4. **Content Quality (CRITICAL)**:
    - **Visual Storytelling**: Use "Show, Don't Tell". Describe actions, expressions, and camera angles.
-   - **TikTok Pacing**: 
-     - **0-3s**: Visual hook / Shocking moment.
+   - **TikTok Pacing**:
+     - **0-3s**: Visual hook / shocking moment.
+     - **3-15s**: Immediate conflict expansion.
+     - **15-30s**: New information or reversal.
+     - **30-45s**: Escalation and pressure increase.
+     - **45-60s**: Decision/action with visible risk.
+     - **60-75s**: Consequence and stronger confrontation.
+     - **75-90s**: Cliffhanger setup and unresolved ending.
+5. **Asset Consistency (HARD CONSTRAINT)**:
+   - Character names in the script MUST come from Allowed Characters.
+   - Scene locations in the script MUST come from Allowed Locations.
+   - New major characters or new locations are NOT allowed.
+   - If the summary implies an unavailable role/location, adapt the plot using the closest allowed assets instead of inventing.
+6. **Output Template (MANDATORY)**:
+   - script_content MUST be plain text.
+   - script_content MUST contain exactly these 7 sections in this order:
+     [0-3${isEnglish ? 's' : '秒'}]
+     [3-15${isEnglish ? 's' : '秒'}]
+     [15-30${isEnglish ? 's' : '秒'}]
+     [30-45${isEnglish ? 's' : '秒'}]
+     [45-60${isEnglish ? 's' : '秒'}]
+     [60-75${isEnglish ? 's' : '秒'}]
+     [75-90${isEnglish ? 's' : '秒'}]
+   - Each section must include:
+     - One location/action line in parentheses.
+     - 2-4 lines of dialogue/action beats.
+   - Do not use headers like "场景1/场景2", "开场3秒", "Scene 1/Scene 2", or any other custom structure.
 
 Output Format: JSON
 {
-    "script_content": "..." // The full script content in ${language}
+    "script_content": "...",
+    "used_characters": ["..."],
+    "used_locations": ["..."]
 }
 `;
 };
@@ -126,10 +255,10 @@ const normalizeArtStyle = (artStyle?: ArtStyleInput) => {
 
 export const getAssetExtractionPrompt = (scriptContent: string, artStyle?: ArtStyleInput) => {
   const { artStyle: baseStyle, characterArtStyle, sceneArtStyle } = normalizeArtStyle(artStyle);
-  const characterStyle = characterArtStyle || baseStyle || 'Cinematic, Realistic';
-  const sceneStyle = sceneArtStyle || baseStyle || 'Cinematic, Realistic';
+  const characterStyle = characterArtStyle || baseStyle || 'Cinematic realism, Photorealistic, Highly detailed';
+  const sceneStyle = sceneArtStyle || baseStyle || 'Cinematic realism, Photorealistic, Highly detailed';
   return `
-Task: Analyze the provided script and extract key assets (Characters, Locations, Props).
+Task: Analyze the provided script and extract key assets (Characters, Locations).
 Script Content:
 ${scriptContent.slice(0, 15000)}... (truncated if too long)
 
@@ -137,21 +266,19 @@ Requirements:
 1. **Identify**:
    - **Characters**: Main and supporting characters.
    - **Locations**: Key settings where scenes take place.
-   - **Props**: Important objects that drive the plot.
 2. **Visual Prompts**: For EACH asset, generate a specific "visual_prompt" in English suitable for AI image generation (Midjourney/Stable Diffusion style).
    - **Style Constraint**:
      - **Characters** MUST follow: "${characterStyle}".
-     - **Locations/Props** MUST follow: "${sceneStyle}".
+     - **Locations** MUST follow: "${sceneStyle}".
    - **Characters**: Describe appearance, clothing, style, age, and **ethnicity/race** based on the script context. If the script implies a specific background (e.g., Western names, settings), ensure the visual prompt reflects that (e.g., 'Caucasian', 'Black', 'Latino'). Do NOT default to Asian/Chinese unless the script context suggests it. (Do not describe actions, props, or background. Character ONLY. No background, plain white.)
    - **Locations**: Describe atmosphere, lighting, architectural style. (Empty scene, no people).
-   - **Props**: Describe material, shape, color. (Object only, NO background description).
 3. **Descriptions**: Provide a short description in the script's language.
 
 Output Format: JSON
 {
   "assets": [
     {
-      "type": "character", // or "location", "prop"
+      "type": "character", // or "location"
       "name": "...",
       "description": "...",
       "visualPrompt": "..."
@@ -162,21 +289,19 @@ Output Format: JSON
 `;
 };
 
-export const getImageGenerationPrompt = (basePrompt: string, type: 'character' | 'location' | 'prop', artStyle?: ArtStyleInput) => {
+export const getImageGenerationPrompt = (basePrompt: string, type: 'character' | 'location', artStyle?: ArtStyleInput) => {
   const { artStyle: baseStyle, characterArtStyle, sceneArtStyle } = normalizeArtStyle(artStyle);
   const resolvedStyle = type === 'character'
     ? (characterArtStyle || baseStyle)
     : (sceneArtStyle || baseStyle);
   const styleSuffix = resolvedStyle
-    ? `, ${resolvedStyle} style, high quality, 8k, concept art, masterpiece`
-    : ', high quality, 8k, concept art, masterpiece';
+    ? `, ${resolvedStyle} style, cinematic realism, photorealistic, highly detailed, professional cinematography, 8k resolution, masterpiece`
+    : ', cinematic realism, photorealistic, highly detailed, professional cinematography, 8k resolution, masterpiece';
   
   if (type === 'character') {
-    return `${basePrompt}, three-view drawing (front view, side view, back view), character sheet, standing pose, neutral expression, no props, full body, landscape 16:9, ${styleSuffix}, no background, isolated on white background, solid white background`;
+    return `${basePrompt}, three-view drawing (front view, side view, back view), character sheet, standing pose, neutral expression, full body, landscape 16:9, ${styleSuffix}, no background, isolated on white background, solid white background`;
   } else if (type === 'location') {
     return `${basePrompt}, empty scene, no people, wide shot, atmospheric lighting${styleSuffix}`;
-  } else if (type === 'prop') {
-    return `${basePrompt}, three-view drawing, object focus, detailed texture, ${styleSuffix}, isolated on white background, solid white background`;
   }
   return basePrompt + styleSuffix;
 };
@@ -190,61 +315,43 @@ type ExistingAsset = {
 export const getStoryboardGenerationPrompt = (scriptContent: string, existingAssets: ExistingAsset[], artStyle?: ArtStyleInput, language: string = 'zh') => {
   const isEnglish = language === 'en';
   const { artStyle: baseStyle, sceneArtStyle } = normalizeArtStyle(artStyle);
-  const resolvedSceneStyle = sceneArtStyle || baseStyle || 'Cinematic';
+  const resolvedSceneStyle = sceneArtStyle || baseStyle || 'Cinematic realism, Photorealistic';
   return `
-# Skill: Narrative-to-Visual Reasoning (P0 / P1 / P2)
+# Skill: Narrative-to-Visual Reasoning
 
-> Goal: Transform the provided script into a sequence of shots where the AI acts as a director, understanding causality, organizing shots, and generating readable visual sequences under "no narration/weak dialogue" conditions.
-
-This Skill synthesizes:
-- Narrative Cognition (Causality / State Change)
-- Micro-film Directing (Blocking, Camera, Action, Evidence)
-- Multi-track Generation (Structure first, Aesthetics second)
+> Goal: Transform the provided script into a sequence of shots where the AI acts as a director, organizing shots, and generating extremely detailed visual sequences for video generation models.
 
 ## 0. Core Principles (Inviolable)
 
-1. **Causality First, Visuals Second**: Every shot must serve a clear causal node.
-2. **State Change is the Minimal Unit**: Not "what happened", but "what the character became after it happened".
-3. **Verbs > Nouns**: Action > Scene > Style.
-4. **Viewer Inference Priority**: If the viewer cannot infer the plot from the visual alone, the shot is invalid.
-5. **Multi-track but Locked Sequence**: P0 locks the order, P1 explains causality, P2 expresses it.
-6. **Language Requirement**: All content in the JSON output (narrativeGoal, visualEvidence, description) MUST be in ${isEnglish ? 'English' : 'the target language (' + language + ')'}.
-  7. **Flexible Duration (10s-15s)**: Each shot should typically last between 10s to 15s. It must complete a full narrative loop (Trigger → Action → Result/State Change). Do not force every shot to be exactly 15s; adjust based on the complexity of the action.
-  8. **Mandatory Visual Continuity (Connecting Links)**: Shot transitions MUST have clear visual logic (e.g., eyeline match, action continuity, reaction shot). If the previous shot is "A looks at something", the next shot MUST be "what A sees" or "B's reaction". No illogical hard cuts.
-  9. **Sufficient Information Density**: The total information per shot (P0+P1+P2+Dialogue) should be sufficient to convey the narrative logic and visual atmosphere, aiming for ~200-300 characters. Avoid excessive detail; focus on the core narrative loop and essential visual elements.
-  10. **Asset Coverage & Matching**: Each shot MUST list all involved **characters, locations, and props**. If an asset exists in the provided list, use its exact name (case-insensitive match). Always include at least one location per shot. If no matching asset exists, still list it under the appropriate type.
+1. **State Change is the Minimal Unit**: Not "what happened", but "what the character became after it happened".
+2. **Verbs > Nouns**: Action > Scene > Style.
+3. **Language Requirement**: All content in the JSON output MUST be in ${isEnglish ? 'English' : 'the target language (' + language + ')'}.
+4. **Flexible Duration (10s-15s)**: Each shot should typically last between 10s to 15s. It must complete a full action loop.
+5. **Mandatory Visual Continuity**: Shot transitions MUST have clear visual logic (e.g., eyeline match, action continuity, reaction shot). No illogical hard cuts.
+6. **Asset Coverage & Matching**: Each shot MUST list all involved **characters and locations**. If an asset exists in the provided list, use its exact name (case-insensitive match). Always include at least one location per shot.
 
-## 1. Semantic Priority Levels
+## 1. Visual & Aesthetic Layer
+**Definition**: The expression layer used to **enhance emotional and thematic impact**.
+- **Composition & Depth**: Specify framing (e.g., Extreme Close-Up, Dutch Angle) and depth of field.
+- **Character Detailing**: Include highly specific character descriptions within brackets \`[Name: Age, traits, clothing, muscle tension, micro-expressions]\`.
+- **Spatial Relations**: Define foreground, midground, and background clearly. Describe exactly what is blocking or passing through the frame.
+- **Lighting & Atmosphere**: Specify lighting geometry (e.g., high contrast hard light, side backlighting) and color contrast.
+- **Cinematic Texture**: Specify film stock feel, grain, and aesthetic (e.g., Kodak 500T, high grain, dirty aesthetic).
+- **Detail Level**: EXTREMELY HIGH. Do not trust the video model to infer details. Provide granular visual information.
 
-### 🟥 P0 — Narrative Causality Layer
-**Definition**: The **irreducible state chain** constituting the story's "Because A → Therefore B".
-**Criteria**:
-- Bound to a [Specific Character]
-- Involves change in [Psychology / Cognition / Goal / Relationship]
-- Has a [Clear Trigger]
-- **Transition Logic**: Why does this shot follow the previous one?
-
-### 🟧 P1 — Visual Inference Layer
-**Definition**: The **set of explicitly presented visual information** required for the audience to "understand P0".
-**Elements**:
-- **Action Anchor**: Stop, approach, retreat, obscure, snatch, avoid gaze
-- **Evidence / Trigger**: Objects, information, traces left by others
-- **Externalized Emotion**: Expression changes, body posture, action rhythm
-- **Continuity**: Spatial/Temporal cues
-
-### 🟨 P2 — Expression & Aesthetic Layer
-**Definition**: The expression layer used to **enhance emotional and thematic impact** after P0 and P1 are established.
-- Composition, Shot Size, Camera Movement
-- Lighting, Color, Rhythm
-  - Stylistic Metaphors (but no new plot information)
-  - **Detail Level**: Moderate. Describe essential visual elements efficiently. Do not over-describe textures or micro-details unless crucial for the plot.
+### 🎬 Video Generation Prompt Rules
+When generating the \`videoPrompt\`, assume the AI video model has zero context. You MUST include:
+1. **Cinematic Realism**: Emphasize photorealistic, cinematic lighting, highly detailed textures, and professional cinematography.
+2. **Camera Movement**: Start with specific, dynamic camera movements (e.g., "Explosive fast push-in", "Slow tracking shot").
+3. **Physical Dynamics**: Describe muscle contractions, physics of fluids/particles (e.g., "blood splashing in slow motion", "dust swirling from the wind").
+4. **Action Impact**: Describe the force and weight of the action.
+5. **Environmental Reaction**: How does the environment react to the action? (e.g., flickering firelight, shaking camera).
 
 ## Task
-Analyze the provided script and generate a storyboard sequence following the P0/P1/P2 model.
+Analyze the provided script and generate a storyboard sequence.
 **IMPORTANT**: 
-1. **Continuity**: Ensure fluidity between shots. In P0, explicitly state "Connection to previous shot: ...".
-2. **Length Control**: Ensure P2 description is concise and focused on narrative closure. Target ~120-180 chars total per shot. Avoid verbose descriptions.
-3. **Shot Count Limit**: For the provided script chunk, output 3-6 shots only. Never exceed 6 shots. If content is dense, merge actions into fewer shots.
+1. **Detail Level**: You MUST generate extremely detailed descriptions and Video Prompts as specified above. Do not summarize or be concise. The more granular detail about lighting, physics, and camera movement, the better.
+2. **Shot Count Limit**: For the provided script chunk, output 3-6 shots only. Never exceed 6 shots. If content is dense, merge actions into fewer shots.
 
 **Script Content**:
 ${scriptContent.slice(0, 15000)}...
@@ -259,18 +366,27 @@ ${JSON.stringify(existingAssets.map(a => ({ id: a.id, name: a.name, type: a.type
   "shots": [
     {
       "sequence": 1,
-      "narrativeGoal": "P0: [Connection Logic] + Character A transitions from State X to State Y...",
-      "visualEvidence": "P1: Action Anchor + Evidence + Emotion...",
-      "description": "P2: (Concise ~120-180 chars) Essential visual description including lighting and composition...",
+      "description": "EXTREMELY DETAILED visual description. Include composition (e.g. Extreme Close-Up, Dutch angle), character details [Name: traits, clothing, micro-expressions], spatial relations, lighting geometry, and cinematic texture (e.g. Kodak 500T).",
+      "sceneLabel": "Scene location tag (e.g. City Ruins, Supermarket)",
+      "characterAction": "Main character actions in this shot",
+      "emotion": "Dominant emotion (e.g. Panic, Despair)",
+      "lightingAtmosphere": "Lighting and atmosphere (e.g. High contrast hard light, Dim orange firelight)",
+      "soundEffect": "Key sound effects (e.g. Heavy footsteps, Distant sirens)",
       "dialogue": "Character Name: Content (or Voiceover: Content)",
       "camera": "Close-up / Pan Right / ...",
-      "size": "Medium Shot",
+      "size": "Medium Shot / Close-up / Long Shot",
       "duration": 12, // Estimated duration in seconds (10-15s flexible)
-      "suggestedAssetNames": ["Char Name", "Prop Name", "Location Name"],
+      "videoPrompt": "Detailed English prompt for video generation. MUST emphasize cinematic realism, photorealistic textures, and professional cinematography. MUST include camera movement (e.g. 'Explosive fast push-in'), physical dynamics (muscle contraction, fluid/particle physics), action impact, and environmental reactions. Be extremely specific.",
+      "suggestedAssetNames": ["Char Name", "Location Name"],
+      "characters": [
+        {
+          "name": "Character Name",
+          "description": "Character appearance and clothing description for this shot"
+        }
+      ],
       "suggestedAssets": {
         "characters": ["Character Name"],
-        "locations": ["Location Name"],
-        "props": ["Prop Name"]
+        "locations": ["Location Name"]
       }
     },
     ...

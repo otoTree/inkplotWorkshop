@@ -63,7 +63,7 @@ export interface Episode {
   };
 }
 
-export type AssetType = 'character' | 'location' | 'prop';
+export type AssetType = 'character' | 'location';
 
 export interface Asset {
   id: string;             // UUID
@@ -82,13 +82,7 @@ export interface Shot {
   episodeId: string;      // FK -> Episode.id
   sequence: number;       // 镜头序号
 
-  // P0: Narrative Causality (因果/状态变化)
-  narrativeGoal: string;
-
-  // P1: Visual Inference (视觉推断线索)
-  visualEvidence: string;
-
-  // P2: Expression (画面描述)
+  // 画面描述
   description: string;    // 最终画面描述
   dialogue?: string;      // 对白或旁白
   camera: string;         // 运镜 (Pan, Tilt, Zoom...)
@@ -97,6 +91,25 @@ export interface Shot {
   duration?: number;      // 预估时长
   sensitivityReduction: number;
   relatedAssetIds: string[]; // 关联的 Asset ID 列表
+
+  // ★NEW: 工业级分镜字段 (Industrial-grade storyboard fields)
+  sceneLabel?: string;         // 场景标签 (如: 城市废墟)
+  characterAction?: string;    // 角色动作 (如: 极度恐慌、抱紧孩子)
+  emotion?: string;            // 情绪 (如: 绝望)
+  lightingAtmosphere?: string; // 光影氛围 (如: 末日黄昏的暗橙色火光)
+  soundEffect?: string;        // 音效 (如: 沉闷的斧头入肉声)
+  referenceImage?: string;     // 参考图URL
+  videoPrompt?: string;        // 视频提示词 (用于生成视频)
+  videoUrl?: string;           // ★NEW: 生成的视频URL
+  videoGenerationId?: string;  // ★NEW: 视频生成任务ID
+  videoStatus?: 'pending' | 'processing' | 'completed' | 'failed'; // ★NEW: 视频生成状态
+  
+  // 支持单镜头多角色描述 (最多3个)
+  characters?: Array<{
+    name: string;
+    description: string;
+    imageUrl?: string;
+  }>;
 
   // ★NEW: 导演思维元素
   directorIntent?: {

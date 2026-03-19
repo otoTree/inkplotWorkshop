@@ -41,7 +41,6 @@ export function AssetDialog({
   const typeMap: Record<string, string> = {
     character: '角色',
     location: '场景',
-    prop: '道具',
   };
 
   useEffect(() => {
@@ -104,7 +103,7 @@ export function AssetDialog({
     setIsGenerating(true);
     try {
       const fullPrompt = getImageGenerationPrompt(formData.visualPrompt, assetType, artStyle);
-      const aspectRatio = assetType === 'character' ? '16:9' : assetType === 'prop' ? '1:1' : '16:9';
+      const aspectRatio = assetType === 'character' ? '16:9' : '16:9';
       
       const response = await fetch('/api/ai/generate-image', {
         method: 'POST',
@@ -114,22 +113,29 @@ export function AssetDialog({
             aspectRatio 
         }),
       });
-      const data = await response.json();
       
       if (!response.ok) {
-        throw new Error(data.error || 'Failed to generate image');
+        let errorMsg = `请求失败 (状态码: ${response.status})`;
+        try {
+            const errData = await response.json();
+            if (errData.error) errorMsg = errData.error;
+            if (errData.details) errorMsg += ` - ${errData.details}`;
+        } catch (e) {
+            // ignore
+        }
+        throw new Error(errorMsg);
       }
+
+      const data = await response.json();
 
       if (data.data && data.data[0]?.url) {
         setFormData(prev => ({ ...prev, imageUrl: data.data[0].url }));
       } else {
-        console.error('Generation failed:', data);
-        alert('Image generation failed: ' + (data.error || 'Unknown error'));
+        throw new Error(data.error || '生成失败，未返回图片链接');
       }
-    } catch (error) {
-      const err = error as { message?: string };
+    } catch (error: any) {
       console.error('Generation error:', error);
-      alert(`Image generation error: ${err.message || 'Unknown error'}`);
+      alert(`生成图片失败: ${error.message || '未知错误'}`);
     } finally {
       setIsGenerating(false);
     }
@@ -152,7 +158,7 @@ export function AssetDialog({
                     id="name"
                     value={formData.name}
                     onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                    placeholder={`例如：${assetType === 'character' ? '张三' : assetType === 'location' ? '老旧公寓' : '神秘钥匙'}`}
+                    placeholder={`例如：${assetType === 'character' ? '张三' : '老旧公寓'}`}
                     required
                     />
                 </div>
@@ -193,7 +199,6 @@ export function AssetDialog({
                     <p className="text-[10px] text-muted-foreground">
                         {assetType === 'character' && '自动添加：三视图、白背景等约束'}
                         {assetType === 'location' && '自动添加：无人场景、环境光等约束'}
-                        {assetType === 'prop' && '自动添加：三视图、物体特写等约束'}
                     </p>
                 </div>
             </div>

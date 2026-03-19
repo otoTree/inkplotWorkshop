@@ -63,7 +63,6 @@ export function AssetGallery({ projectId }: { projectId: string }) {
   const typeMap: Record<string, string> = {
     character: '角色',
     location: '场景',
-    prop: '道具',
   };
 
   const handleOpenCreate = () => {
@@ -206,7 +205,7 @@ export function AssetGallery({ projectId }: { projectId: string }) {
         const newAssets: Asset[] = selectedAssets.map(asset => ({
           id: crypto.randomUUID(),
           projectId,
-          type: (asset.type as AssetType) || 'prop', // Default fallback
+          type: (asset.type as AssetType) || 'location', // Default fallback
           name: asset.name || '未命名',
           description: asset.description || '',
           visualPrompt: asset.visualPrompt || '',
@@ -236,7 +235,7 @@ export function AssetGallery({ projectId }: { projectId: string }) {
     setGeneratingAssets(prev => new Set(prev).add(asset.id));
     try {
         const fullPrompt = getImageGenerationPrompt(asset.visualPrompt, asset.type, artStyleConfig);
-        const aspectRatio = asset.type === 'character' ? '16:9' : asset.type === 'prop' ? '1:1' : '16:9';
+        const aspectRatio = asset.type === 'character' ? '16:9' : '16:9';
         
         const response = await fetch('/api/ai/generate-image', {
             method: 'POST',
@@ -246,16 +245,30 @@ export function AssetGallery({ projectId }: { projectId: string }) {
                 aspectRatio
             }),
         });
+        
+        if (!response.ok) {
+            let errorMsg = `请求失败 (状态码: ${response.status})`;
+            try {
+                const errData = await response.json();
+                if (errData.error) errorMsg = errData.error;
+                if (errData.details) errorMsg += ` - ${errData.details}`;
+            } catch (e) {
+                // ignore json parse error
+            }
+            throw new Error(errorMsg);
+        }
+
         const data = await response.json();
 
         if (data.data && data.data[0]?.url) {
             await api.assets.update(asset.id, { imageUrl: data.data[0].url });
             setAssets(prev => prev.map(a => a.id === asset.id ? { ...a, imageUrl: data.data[0].url } : a));
         } else {
-            console.error('Image generation failed', data);
+            throw new Error(data.error || '生成失败，未返回图片链接');
         }
-    } catch (error) {
+    } catch (error: any) {
         console.error('Generation error:', error);
+        alert(`生成图片失败: ${error.message || '未知错误'}`);
     } finally {
         setGeneratingAssets(prev => {
             const next = new Set(prev);
@@ -286,7 +299,7 @@ export function AssetGallery({ projectId }: { projectId: string }) {
         setGeneratingAssets(prev => new Set(prev).add(asset.id));
         try {
             const fullPrompt = getImageGenerationPrompt(asset.visualPrompt, asset.type, artStyleConfig);
-            const aspectRatio = asset.type === 'character' ? '16:9' : asset.type === 'prop' ? '1:1' : '16:9';
+            const aspectRatio = asset.type === 'character' ? '16:9' : '16:9';
 
             const response = await fetch('/api/ai/generate-image', {
                 method: 'POST',
@@ -296,14 +309,30 @@ export function AssetGallery({ projectId }: { projectId: string }) {
                     aspectRatio
                 }),
             });
+            
+            if (!response.ok) {
+                let errorMsg = `请求失败 (状态码: ${response.status})`;
+                try {
+                    const errData = await response.json();
+                    if (errData.error) errorMsg = errData.error;
+                    if (errData.details) errorMsg += ` - ${errData.details}`;
+                } catch (e) {
+                    // ignore json parse error
+                }
+                throw new Error(errorMsg);
+            }
+
             const data = await response.json();
 
             if (data.data && data.data[0]?.url) {
                 await api.assets.update(asset.id, { imageUrl: data.data[0].url });
                 setAssets(prev => prev.map(a => a.id === asset.id ? { ...a, imageUrl: data.data[0].url } : a));
+            } else {
+                throw new Error(data.error || '生成失败，未返回图片链接');
             }
-        } catch (error) {
-            console.error(`Failed to generate for ${asset.name}:`, error);
+        } catch (error: any) {
+            console.error(`Batch generation error for ${asset.name}:`, error);
+            // Don't alert here to avoid spamming the user, but we could collect errors.
         } finally {
             completed++;
             setBatchProgress(completed);
@@ -327,7 +356,6 @@ export function AssetGallery({ projectId }: { projectId: string }) {
 
   const characterCount = assets.filter(a => a.type === 'character').length;
   const locationCount = assets.filter(a => a.type === 'location').length;
-  const propCount = assets.filter(a => a.type === 'prop').length;
   const missingImageCount = assets.filter(a => !a.imageUrl && a.visualPrompt).length;
 
   return (
@@ -335,13 +363,11 @@ export function AssetGallery({ projectId }: { projectId: string }) {
       <div className="flex justify-between items-center mb-8">
         <div>
             <h1 className="text-3xl font-serif font-bold mb-2">设定集</h1>
-            <p className="text-black/60 mb-3">管理您的角色、场景和道具。</p>
+            <p className="text-black/60 mb-3">管理您的角色和场景。</p>
             <div className="flex gap-4 text-sm text-black/50 bg-black/[0.03] px-3 py-1.5 rounded-md w-fit">
                 <span className="flex items-center gap-1.5"><User className="w-3.5 h-3.5" /> {characterCount}</span>
                 <span className="w-px h-3 bg-black/10"></span>
                 <span className="flex items-center gap-1.5"><MapPin className="w-3.5 h-3.5" /> {locationCount}</span>
-                <span className="w-px h-3 bg-black/10"></span>
-                <span className="flex items-center gap-1.5"><Box className="w-3.5 h-3.5" /> {propCount}</span>
             </div>
         </div>
         <div className="flex gap-2 items-center">
@@ -388,7 +414,6 @@ export function AssetGallery({ projectId }: { projectId: string }) {
         <TabsList className="mb-8">
           <TabsTrigger value="character" className="px-8">角色</TabsTrigger>
           <TabsTrigger value="location" className="px-8">场景</TabsTrigger>
-          <TabsTrigger value="prop" className="px-8">道具</TabsTrigger>
         </TabsList>
 
         <TabsContent value={activeTab} className="mt-0">
@@ -428,7 +453,6 @@ export function AssetGallery({ projectId }: { projectId: string }) {
                                 <div className="w-full aspect-[3/4] bg-black/[0.04] flex items-center justify-center text-black/10 group-hover:text-black/20 transition-colors">
                                     {activeTab === 'character' && <User className="w-16 h-16" />}
                                     {activeTab === 'location' && <MapPin className="w-16 h-16" />}
-                                    {activeTab === 'prop' && <Box className="w-16 h-16" />}
                                 </div>
                             )}
                             

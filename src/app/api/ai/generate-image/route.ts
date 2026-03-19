@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 import { AIAPIError, callAIImageGeneration, extractFirstMessageContent, extractImageUrls } from '@/lib/ai-server';
+import { put } from '@vercel/blob';
 
 export const maxDuration = 300;
 
@@ -14,13 +15,14 @@ export async function POST(req: Request) {
     }
 
     const body = await req.json();
-    const { prompt } = body;
+    const { prompt, aspectRatio = '1:1' } = body;
     if (!prompt || typeof prompt !== 'string') {
       return NextResponse.json({ error: 'Missing prompt' }, { status: 400 });
     }
 
-    const result = await callAIImageGeneration(prompt);
-    const urls = extractImageUrls(result);
+    const result = await callAIImageGeneration(prompt, aspectRatio);
+    let urls = extractImageUrls(result);
+    
     if (urls.length === 0) {
       let raw = '';
       try {
@@ -30,6 +32,27 @@ export async function POST(req: Request) {
       }
       return NextResponse.json({ error: 'Image generation returned no urls', raw }, { status: 502 });
     }
+
+    // Upload base64 Data URIs to Vercel Blob
+    urls = await Promise.all(urls.map(async (url) => {
+      if (url.startsWith('data:image/')) {
+        const matches = url.match(/^data:(image\/[^;]+);base64,(.+)$/);
+        if (matches && matches.length === 3) {
+          const contentType = matches[1];
+          const b64Data = matches[2];
+          const buffer = Buffer.from(b64Data, 'base64');
+          const ext = contentType.split('/')[1] || 'png';
+          const filename = `generated-images/img_${Date.now()}_${Math.random().toString(36).substring(2, 8)}.${ext}`;
+          
+          const blob = await put(filename, buffer, {
+            access: 'public',
+            contentType,
+          });
+          return blob.url;
+        }
+      }
+      return url;
+    }));
 
     return NextResponse.json({ data: urls.map((url) => ({ url })) });
 

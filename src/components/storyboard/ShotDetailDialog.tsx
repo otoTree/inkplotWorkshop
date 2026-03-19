@@ -1,5 +1,5 @@
 /* eslint-disable @next/next/no-img-element */
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Shot, Asset } from '@/types';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
@@ -21,8 +21,16 @@ interface ShotDetailDialogProps {
 }
 
 export function ShotDetailDialog({ open, onOpenChange, shot, assets, onSave }: ShotDetailDialogProps) {
-  const [data, setData] = useState<Shot>(shot);
+    const [data, setData] = useState<Shot>(shot);
   const [assetSearch, setAssetSearch] = useState('');
+
+  useEffect(() => {
+    if (open) {
+      setData(shot);
+      setAssetSearch('');
+    }
+  }, [open, shot]);
+
   const sensitivityOptions = [
     { value: '0', label: '无' },
     { value: '1', label: '轻度' },
@@ -119,54 +127,19 @@ export function ShotDetailDialog({ open, onOpenChange, shot, assets, onSave }: S
             <ScrollArea className="flex-1">
               <div className="p-8 max-w-5xl mx-auto space-y-8">
                 
-                {/* P0 & P1 Grid */}
-                <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-                  {/* P0 */}
-                  <div className="space-y-3">
-                    <div className="flex items-center justify-between">
-                      <Label className="text-xs uppercase tracking-widest text-red-500 font-bold flex items-center gap-2 whitespace-nowrap">
-                        <span className="w-2 h-2 rounded-full bg-red-500"></span>
-                        P0 · 叙事因果 (Narrative Goal)
-                      </Label>
-                    </div>
-                    <Textarea 
-                      value={data.narrativeGoal} 
-                      onChange={e => setData({ ...data, narrativeGoal: e.target.value })}
-                      className="font-serif text-base min-h-[120px] bg-white border-red-100 focus:border-red-300 focus:ring-red-100 shadow-sm resize-none"
-                      placeholder="本镜头的叙事目的是什么？状态发生了什么变化？"
-                    />
-                  </div>
-
-                  {/* P1 */}
-                  <div className="space-y-3">
-                    <div className="flex items-center justify-between">
-                      <Label className="text-xs uppercase tracking-widest text-orange-500 font-bold flex items-center gap-2 whitespace-nowrap">
-                         <span className="w-2 h-2 rounded-full bg-orange-500"></span>
-                        P1 · 视觉证据 (Visual Evidence)
-                      </Label>
-                    </div>
-                    <Textarea 
-                      value={data.visualEvidence} 
-                      onChange={e => setData({ ...data, visualEvidence: e.target.value })}
-                      className="text-base min-h-[120px] bg-white border-orange-100 focus:border-orange-300 focus:ring-orange-100 shadow-sm resize-none"
-                      placeholder="观众通过什么视觉元素推断出P0？"
-                    />
-                  </div>
-                </div>
-
                 {/* P2 (Full Width) */}
                 <div className="space-y-3">
                   <div className="flex items-center justify-between">
                     <Label className="text-xs uppercase tracking-widest text-yellow-600 font-bold flex items-center gap-2 whitespace-nowrap">
                       <span className="w-2 h-2 rounded-full bg-yellow-500"></span>
-                      P2 · 画面描述 (Description)
+                      画面描述 (Visual Description)
                     </Label>
                   </div>
                   <Textarea 
                     value={data.description} 
                     onChange={e => setData({ ...data, description: e.target.value })}
-                    className="text-lg leading-relaxed min-h-[200px] bg-white border-yellow-100 focus:border-yellow-300 focus:ring-yellow-100 shadow-sm p-6"
-                    placeholder="具体的画面描述，包含构图、光影等..."
+                    className="text-sm leading-relaxed min-h-[250px] bg-white border-yellow-100 focus:border-yellow-300 focus:ring-yellow-100 shadow-sm p-6"
+                    placeholder="画面构图：极近特写，极浅景深配合荷兰角倾斜机位。[角色名: 年龄，状态，穿着...] 占据画面主体... 人物空间与互动关系... 明确的场景环境元素... 光影几何与大气效果... 视觉风格/胶片质感... 技术参数..."
                   />
                 </div>
 
@@ -205,6 +178,70 @@ export function ShotDetailDialog({ open, onOpenChange, shot, assets, onSave }: S
                       />
                     </div>
                   </div>
+                </div>
+
+                {/* Industrial Controls */}
+                <div className="pt-8 border-t border-gray-100 space-y-8">
+                  <div className="flex items-center gap-2">
+                    <h3 className="font-serif text-lg font-medium">工业化分镜属性</h3>
+                    <Badge variant="secondary" className="font-mono text-[10px]">AI Video/Image Gen</Badge>
+                  </div>
+                  
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <div className="space-y-2">
+                      <Label className="text-xs text-gray-500 font-bold">场景标签 (Scene Label)</Label>
+                      <Input value={data.sceneLabel || ''} onChange={e => setData({ ...data, sceneLabel: e.target.value })} placeholder="e.g. 城市废墟" />
+                    </div>
+                    <div className="space-y-2">
+                      <Label className="text-xs text-gray-500 font-bold">角色动作 (Character Action)</Label>
+                      <Input value={data.characterAction || ''} onChange={e => setData({ ...data, characterAction: e.target.value })} placeholder="e.g. 极度恐慌、抱紧孩子" />
+                    </div>
+                    <div className="space-y-2">
+                      <Label className="text-xs text-gray-500 font-bold">情绪 (Emotion)</Label>
+                      <Input value={data.emotion || ''} onChange={e => setData({ ...data, emotion: e.target.value })} placeholder="e.g. 绝望" />
+                    </div>
+                    <div className="space-y-2">
+                      <Label className="text-xs text-gray-500 font-bold">光影氛围 (Lighting Atmosphere)</Label>
+                      <Input value={data.lightingAtmosphere || ''} onChange={e => setData({ ...data, lightingAtmosphere: e.target.value })} placeholder="e.g. 末日黄昏的暗橙色火光" />
+                    </div>
+                    <div className="space-y-2 md:col-span-2">
+                      <Label className="text-xs text-gray-500 font-bold">音效 (Sound Effect)</Label>
+                      <Input value={data.soundEffect || ''} onChange={e => setData({ ...data, soundEffect: e.target.value })} placeholder="e.g. 沉闷的斧头入肉声" />
+                    </div>
+                  </div>
+
+                  <div className="space-y-4">
+                    <div className="space-y-2">
+                      <Label className="text-xs text-indigo-600 font-bold">视频运镜提示词 (Video Generation Prompt)</Label>
+                      <Textarea value={data.videoPrompt || ''} onChange={e => setData({ ...data, videoPrompt: e.target.value })} className="font-mono text-sm min-h-[160px]" placeholder="极具爆发力的快速推镜头。林峰的手臂肌肉剧烈收缩，双手握紧消防斧以雷霆之势迎面劈向镜头前方。带有强烈的物理冲击力，斧头落下的瞬间，暗黑色的液体和碎肉以慢动作呈放射状溅在镜头玻璃上..." />
+                    </div>
+                    {data.videoUrl && (
+                      <div className="space-y-2">
+                        <Label className="text-xs text-indigo-600 font-bold">生成结果预览 (Generated Video)</Label>
+                        <div className="bg-gray-50/50 rounded-lg border border-gray-100 p-2">
+                          <video 
+                            src={data.videoUrl} 
+                            controls 
+                            className="w-full max-h-[300px] object-contain rounded bg-black/5"
+                          />
+                        </div>
+                      </div>
+                    )}
+                  </div>
+
+                  {data.characters && data.characters.length > 0 && (
+                    <div className="space-y-3">
+                      <Label className="text-xs uppercase tracking-widest text-gray-500 font-bold">当前出场角色 ({data.characters.length}/3)</Label>
+                      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
+                        {data.characters.map((char, idx) => (
+                          <div key={idx} className="p-4 border border-gray-100 rounded-lg bg-white shadow-sm space-y-2">
+                            <div className="font-bold text-sm text-gray-800">{char.name}</div>
+                            <div className="text-xs text-gray-500">{char.description}</div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
                 </div>
 
               </div>
@@ -311,7 +348,7 @@ function AssetItem({ asset, selected, onClick }: { asset: Asset, selected: boole
         <div className="text-sm font-medium truncate text-gray-900">{asset.name}</div>
         <div className="text-[10px] text-gray-500 uppercase flex items-center gap-2 mt-0.5">
           <Badge variant="secondary" className="text-[10px] h-4 px-1 rounded-sm font-normal text-gray-500 bg-gray-100">
-            {asset.type === 'character' ? '角色' : asset.type === 'location' ? '场景' : asset.type === 'prop' ? '道具' : asset.type}
+            {asset.type === 'character' ? '角色' : asset.type === 'location' ? '场景' : asset.type}
           </Badge>
         </div>
       </div>

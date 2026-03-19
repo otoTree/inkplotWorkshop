@@ -1,13 +1,14 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { api } from '@/lib/api';
 import { ArtStyleConfig, Episode, Asset, Shot, Project } from '@/types';
 import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Badge } from '@/components/ui/badge';
-import { Loader2, Plus, Wand2, FileText } from 'lucide-react';
+import { Loader2, Plus, Wand2, FileText, Sparkles } from 'lucide-react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
+import { Progress } from '@/components/ui/progress';
 import { ShotCard } from './ShotCard';
 
 interface StoryboardEditorProps {
@@ -15,25 +16,41 @@ interface StoryboardEditorProps {
 }
 
 type GeneratedShot = {
-  narrativeGoal?: string;
-  visualEvidence?: string;
   description?: string;
+  sceneLabel?: string;
+  characterAction?: string;
+  emotion?: string;
+  lightingAtmosphere?: string;
+  soundEffect?: string;
   dialogue?: string;
   camera?: string;
   size?: string;
   duration?: number;
   sensitivityReduction?: number;
+  videoPrompt?: string;
+  characters?: Array<{
+    name: string;
+    description: string;
+    imageUrl?: string;
+  }>;
   suggestedAssetNames?: string[];
   suggestedAssets?: {
     characters?: string[];
     locations?: string[];
-    props?: string[];
   } | Array<{ name?: string | null }>;
 };
 
 export function StoryboardEditor({ projectId }: StoryboardEditorProps) {
   const [selectedEpisodeId, setSelectedEpisodeId] = useState<string | null>(null);
   const [isGenerating, setIsGenerating] = useState(false);
+  const [isGeneratingAll, setIsGeneratingAll] = useState(false);
+  const [generationCurrent, setGenerationCurrent] = useState(0);
+  const [generationTotal, setGenerationTotal] = useState(0);
+
+  const selectedEpisodeIdRef = useRef<string | null>(null);
+  useEffect(() => {
+    selectedEpisodeIdRef.current = selectedEpisodeId;
+  }, [selectedEpisodeId]);
 
   const [project, setProject] = useState<Project | null>(null);
   const [episodes, setEpisodes] = useState<Episode[]>([]);
@@ -69,6 +86,119 @@ export function StoryboardEditor({ projectId }: StoryboardEditorProps) {
     }
   }, [episodes, selectedEpisodeId]);
 
+  const generateShotsForEpisode = async (episode: Episode) => {
+    await api.shots.deleteByEpisode(episode.id);
+    
+    const scriptContent = episode.content || '';
+    if (!scriptContent.trim()) return [];
+    
+    const chunks: string[] = [];
+    let currentChunk = '';
+    const paragraphs = scriptContent.split(/\n\s*\n/);
+    
+    for (const p of paragraphs) {
+      if ((currentChunk + p).length > 600) {
+          if (currentChunk) chunks.push(currentChunk);
+          currentChunk = p;
+      } else {
+          currentChunk += (currentChunk ? '\n\n' : '') + p;
+      }
+    }
+    if (currentChunk) chunks.push(currentChunk);
+
+    let allShots: GeneratedShot[] = [];
+    let lastShotContext = '';
+
+    for (let i = 0; i < chunks.length; i++) {
+       const chunkScript = (i > 0 ? `[Context: Previous shot ended with: ${lastShotContext}]\n\n` : '') + chunks[i];
+
+       const res = await fetch('/api/ai/generate-storyboard', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            script: chunkScript,
+            assets: assets || [],
+           artStyle: artStyleConfig,
+            language: project?.language
+          })
+        });
+
+        if (!res.ok) throw new Error(await res.text());
+        const data = await res.json() as { shots?: GeneratedShot[] };
+        
+        if (data.shots && Array.isArray(data.shots)) {
+           if (data.shots.length === 0) {
+               console.warn('AI 返回的 shots 数组为空', data);
+           }
+           allShots = [...allShots, ...data.shots];
+           const lastShot = data.shots[data.shots.length - 1];
+           if (lastShot) {
+               lastShotContext = lastShot.description || '';
+           }
+        } else {
+           console.error('AI 返回的数据格式不正确，缺少 shots 数组:', data);
+        }
+    }
+
+    if (allShots.length === 0) {
+      return [];
+    }
+
+    const newShots: Shot[] = allShots.map((s, index: number) => {
+      const relatedIds: string[] = [];
+      const suggestedNames: string[] = [];
+
+      if (Array.isArray(s.suggestedAssetNames)) {
+        suggestedNames.push(...s.suggestedAssetNames.filter((name) => typeof name === 'string'));
+      }
+
+      if (s.suggestedAssets) {
+        if (Array.isArray(s.suggestedAssets)) {
+          suggestedNames.push(...s.suggestedAssets.map((item) => item?.name).filter((name): name is string => typeof name === 'string'));
+        } else {
+          const { characters, locations } = s.suggestedAssets;
+          if (Array.isArray(characters)) suggestedNames.push(...characters);
+          if (Array.isArray(locations)) suggestedNames.push(...locations);
+        }
+      }
+
+      if (assets && suggestedNames.length > 0) {
+        const normalize = (value: string) => value.trim().toLowerCase();
+        const uniqueNames = Array.from(new Set(suggestedNames.map((name: string) => name.trim()).filter(Boolean)));
+        uniqueNames.forEach((name: string) => {
+          const normalizedName = normalize(name);
+          const exact = assets.find(a => normalize(a.name) === normalizedName);
+          const fuzzy = assets.find(a => normalize(a.name).includes(normalizedName) || normalizedName.includes(normalize(a.name)));
+          const asset = exact || fuzzy;
+          if (asset && !relatedIds.includes(asset.id)) relatedIds.push(asset.id);
+        });
+      }
+
+      return {
+        id: crypto.randomUUID(),
+        episodeId: episode.id,
+        sequence: index + 1,
+        description: s.description || '',
+        sceneLabel: s.sceneLabel || '',
+        characterAction: s.characterAction || '',
+        emotion: s.emotion || '',
+        lightingAtmosphere: s.lightingAtmosphere || '',
+        soundEffect: s.soundEffect || '',
+        dialogue: s.dialogue || '',
+        camera: s.camera || '',
+        size: s.size || '',
+        duration: s.duration || 10,
+        sensitivityReduction: s.sensitivityReduction ?? 0,
+        videoPrompt: s.videoPrompt || '',
+        characters: Array.isArray(s.characters) ? s.characters : [],
+        relatedAssetIds: relatedIds
+      };
+    });
+
+    await api.shots.bulkCreate(newShots);
+    return newShots;
+  };
+
   const handleGenerate = async () => {
     if (!selectedEpisodeId || !episodes) return;
     
@@ -77,118 +207,67 @@ export function StoryboardEditor({ projectId }: StoryboardEditorProps) {
 
     setIsGenerating(true);
     try {
-      // Clear existing shots for this episode first
-      await api.shots.deleteByEpisode(selectedEpisodeId);
-      
-      const scriptContent = episode.content || '';
-      
-      // Simple chunking strategy: Split by double newlines (paragraphs) and group them
-      // Goal: Keep each chunk under ~1500 chars to ensure output fits in token limit
-      // A safe output limit is ~4000 tokens. 10 shots * 800 chars = 8000 chars (too big).
-      // If we limit to 3-4 shots per chunk? No, shots count depends on content.
-      // Better: Limit input script chunk to ~500-800 chars.
-      
-      const chunks: string[] = [];
-      let currentChunk = '';
-      const paragraphs = scriptContent.split(/\n\s*\n/);
-      
-      for (const p of paragraphs) {
-        if ((currentChunk + p).length > 600) {
-            if (currentChunk) chunks.push(currentChunk);
-            currentChunk = p;
-        } else {
-            currentChunk += (currentChunk ? '\n\n' : '') + p;
-        }
+      const newShots = await generateShotsForEpisode(episode);
+      if (newShots.length === 0) {
+        alert('未能生成任何镜头，请检查剧本内容或重试。');
+        return;
       }
-      if (currentChunk) chunks.push(currentChunk);
-
-      let allShots: GeneratedShot[] = [];
-      let lastShotContext = ''; // To maintain continuity across chunks
-
-      for (let i = 0; i < chunks.length; i++) {
-         // Add context from previous chunk if it's not the first one
-         const chunkScript = (i > 0 ? `[Context: Previous shot ended with: ${lastShotContext}]\n\n` : '') + chunks[i];
-
-         const res = await fetch('/api/ai/generate-storyboard', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              script: chunkScript,
-              assets: assets || [],
-             artStyle: artStyleConfig,
-              language: project?.language
-            })
-          });
-
-          if (!res.ok) throw new Error(await res.text());
-          const data = await res.json() as { shots?: GeneratedShot[] };
-          
-          if (data.shots && Array.isArray(data.shots)) {
-             allShots = [...allShots, ...data.shots];
-             // Update context for next chunk
-             const lastShot = data.shots[data.shots.length - 1];
-             if (lastShot) {
-                 lastShotContext = lastShot.narrativeGoal || lastShot.description || '';
-             }
-          }
+      if (episode.id === selectedEpisodeIdRef.current) {
+        setShots(newShots);
       }
-
-      // Re-sequence shots
-      const newShots: Shot[] = allShots.map((s, index: number) => {
-        const relatedIds: string[] = [];
-        const suggestedNames: string[] = [];
-
-        if (Array.isArray(s.suggestedAssetNames)) {
-          suggestedNames.push(...s.suggestedAssetNames.filter((name) => typeof name === 'string'));
-        }
-
-        if (s.suggestedAssets) {
-          if (Array.isArray(s.suggestedAssets)) {
-            suggestedNames.push(...s.suggestedAssets.map((item) => item?.name).filter((name): name is string => typeof name === 'string'));
-          } else {
-            const { characters, locations, props } = s.suggestedAssets;
-            if (Array.isArray(characters)) suggestedNames.push(...characters);
-            if (Array.isArray(locations)) suggestedNames.push(...locations);
-            if (Array.isArray(props)) suggestedNames.push(...props);
-          }
-        }
-
-        if (assets && suggestedNames.length > 0) {
-          const normalize = (value: string) => value.trim().toLowerCase();
-          const uniqueNames = Array.from(new Set(suggestedNames.map((name: string) => name.trim()).filter(Boolean)));
-          uniqueNames.forEach((name: string) => {
-            const normalizedName = normalize(name);
-            const exact = assets.find(a => normalize(a.name) === normalizedName);
-            const fuzzy = assets.find(a => normalize(a.name).includes(normalizedName) || normalizedName.includes(normalize(a.name)));
-            const asset = exact || fuzzy;
-            if (asset && !relatedIds.includes(asset.id)) relatedIds.push(asset.id);
-          });
-        }
-
-        return {
-          id: crypto.randomUUID(),
-          episodeId: selectedEpisodeId,
-          sequence: index + 1,
-          narrativeGoal: s.narrativeGoal || '',
-          visualEvidence: s.visualEvidence || '',
-          description: s.description || '',
-          dialogue: s.dialogue || '',
-          camera: s.camera || '',
-          size: s.size || '',
-          duration: s.duration || 10,
-          sensitivityReduction: s.sensitivityReduction ?? 0,
-          relatedAssetIds: relatedIds
-        };
-      });
-
-      await api.shots.bulkCreate(newShots);
-      setShots(newShots);
-
     } catch (error) {
       console.error('Failed to generate storyboard:', error);
       alert('生成失败，请查看控制台详情。');
     } finally {
       setIsGenerating(false);
+    }
+  };
+
+  const handleGenerateAll = async () => {
+    if (!episodes || episodes.length === 0) return;
+    
+    const validEpisodes = episodes.filter(e => e.content && e.content.trim().length > 0);
+    if (validEpisodes.length === 0) {
+      alert('没有找到包含剧本内容的剧集。');
+      return;
+    }
+
+    if (!confirm('一键生成将覆盖这些剧集已有的分镜，确认继续吗？')) {
+      return;
+    }
+
+    setIsGeneratingAll(true);
+    setGenerationTotal(validEpisodes.length);
+    setGenerationCurrent(0);
+    let failedCount = 0;
+
+    try {
+      for (let i = 0; i < validEpisodes.length; i++) {
+        const ep = validEpisodes[i];
+        setGenerationCurrent(i + 1);
+        try {
+          const newShots = await generateShotsForEpisode(ep);
+          if (ep.id === selectedEpisodeIdRef.current) {
+            setShots(newShots);
+          }
+        } catch (err) {
+          console.error(`Failed to generate storyboard for episode ${ep.episodeNumber}:`, err);
+          failedCount++;
+        }
+      }
+      
+      if (failedCount > 0) {
+        alert(`一键生成完成，成功 ${validEpisodes.length - failedCount} 集，失败 ${failedCount} 集。`);
+      } else {
+        alert(`一键生成完成，共生成 ${validEpisodes.length} 集。`);
+      }
+    } catch (error) {
+      console.error('Failed to generate all storyboards:', error);
+      alert('批量生成过程中发生错误，请查看控制台详情。');
+    } finally {
+      setIsGeneratingAll(false);
+      setGenerationCurrent(0);
+      setGenerationTotal(0);
     }
   };
 
@@ -200,14 +279,19 @@ export function StoryboardEditor({ projectId }: StoryboardEditorProps) {
       id: crypto.randomUUID(),
       episodeId: selectedEpisodeId,
       sequence: maxSeq + 1,
-      narrativeGoal: '',
-      visualEvidence: '',
       description: '',
+      sceneLabel: '',
+      characterAction: '',
+      emotion: '',
+      lightingAtmosphere: '',
+      soundEffect: '',
       dialogue: '',
       camera: '',
       size: '',
       duration: 10,
       sensitivityReduction: 0,
+      videoPrompt: '',
+      characters: [],
       relatedAssetIds: []
     };
 
@@ -226,6 +310,9 @@ export function StoryboardEditor({ projectId }: StoryboardEditorProps) {
   };
 
   if (episodes.length === 0 && !project) return <div className="p-8">加载中...</div>;
+
+  const validEpisodesCount = episodes.filter(e => e.content && e.content.trim().length > 0).length;
+  const canGenerateAllStoryboards = validEpisodesCount > 0;
 
   return (
     <div className="flex h-full bg-white">
@@ -287,17 +374,36 @@ export function StoryboardEditor({ projectId }: StoryboardEditorProps) {
 
             <Button 
               onClick={handleGenerate} 
-              disabled={isGenerating || !selectedEpisodeId}
+              disabled={isGenerating || isGeneratingAll || !selectedEpisodeId}
               className="gap-2 bg-black hover:bg-black/80 text-white"
             >
               {isGenerating ? <Loader2 className="w-4 h-4 animate-spin" /> : <Wand2 className="w-4 h-4" />}
               AI 智能生成 (P0-P2)
+            </Button>
+            <Button 
+              onClick={handleGenerateAll} 
+              disabled={isGenerating || isGeneratingAll || !canGenerateAllStoryboards}
+              variant="outline"
+              className="gap-2 border-black/10"
+            >
+              {isGeneratingAll ? <Loader2 className="w-4 h-4 animate-spin" /> : <Sparkles className="w-4 h-4" />}
+              {isGeneratingAll ? `批量生成中 ${generationCurrent}/${generationTotal}` : '一键生成全部'}
             </Button>
             <Button variant="outline" size="icon" onClick={handleAddShot}>
               <Plus className="w-4 h-4" />
             </Button>
           </div>
         </div>
+
+        {isGeneratingAll && generationTotal > 0 && (
+          <div className="px-6 py-3 border-b border-black/[0.04] bg-black/[0.01] shrink-0">
+            <div className="flex items-center justify-between text-xs text-black/60 mb-2">
+              <span>正在批量生成分镜 {generationCurrent}/{generationTotal}</span>
+              <span>{Math.round((generationCurrent / generationTotal) * 100)}%</span>
+            </div>
+            <Progress value={(generationCurrent / generationTotal) * 100} className="h-2" />
+          </div>
+        )}
 
         {/* Shot List */}
         <div className="flex-1 relative bg-gray-50/50 min-h-0">

@@ -95,6 +95,17 @@ create table shots (
   size text,
   duration integer,
   related_asset_ids uuid[],
+  
+  -- ★NEW: Industrial-grade storyboard fields
+  scene_label text,
+  character_action text,
+  emotion text,
+  lighting_atmosphere text,
+  sound_effect text,
+  reference_image text,
+  video_prompt text,
+  characters jsonb, -- Array of { name, description, imageUrl }
+  
   created_at timestamp with time zone default timezone('utc'::text, now()) not null
 );
 

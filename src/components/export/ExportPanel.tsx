@@ -49,7 +49,6 @@ export function ExportPanel({ projectId }: { projectId: string }) {
       const assetsFolder = root.folder('assets');
       const charFolder = assetsFolder?.folder('characters');
       const locFolder = assetsFolder?.folder('locations');
-      const propFolder = assetsFolder?.folder('props');
 
       // Map to store asset filenames for linking in markdown
       const assetFilenames: Record<string, string> = {};
@@ -83,14 +82,9 @@ export function ExportPanel({ projectId }: { projectId: string }) {
                 if (asset.type === 'character') {
                     charFolder?.file(filename, blob);
                     assetFilenames[asset.id] = `../assets/characters/${filename}`;
-                }
-                else if (asset.type === 'location') {
+                } else if (asset.type === 'location') {
                     locFolder?.file(filename, blob);
                     assetFilenames[asset.id] = `../assets/locations/${filename}`;
-                }
-                else if (asset.type === 'prop') {
-                    propFolder?.file(filename, blob);
-                    assetFilenames[asset.id] = `../assets/props/${filename}`;
                 }
             }
         }
@@ -110,9 +104,13 @@ export function ExportPanel({ projectId }: { projectId: string }) {
                 content += `- **Sensitivity Reduction**: ${sensitivityLabel(shot.sensitivityReduction ?? 0)}\n`;
                 content += `- **Character Art Style**: ${characterStyle}\n`;
                 content += `- **Scene Art Style**: ${sceneStyle}\n`;
-                content += `- **Narrative Goal**: ${shot.narrativeGoal}\n`;
-                content += `- **Visual Evidence**: ${shot.visualEvidence}\n`;
-                content += `- **Description**: ${shot.description}\n`;
+                content += `- **Visual Description**: ${shot.description}\n`;
+                if (shot.sceneLabel) content += `- **Scene**: ${shot.sceneLabel}\n`;
+                if (shot.emotion) content += `- **Emotion**: ${shot.emotion}\n`;
+                if (shot.lightingAtmosphere) content += `- **Atmosphere**: ${shot.lightingAtmosphere}\n`;
+                if (shot.soundEffect) content += `- **Sound**: ${shot.soundEffect}\n`;
+                if (shot.characterAction) content += `- **Action**: ${shot.characterAction}\n`;
+                
                 if (shot.dialogue) {
                     content += `- **Dialogue / Voiceover / Soliloquy / Internal Monologue / Voiceover (Narration/Inner Voice) / Subtext / Stage Direction / Opening Poem / Interrupting / Aside / Buffoonery / Soliloquy (Talking to Oneself) / Echo / Pun**: ${shot.dialogue}\n`;
                 }
@@ -136,6 +134,11 @@ export function ExportPanel({ projectId }: { projectId: string }) {
                     });
                    content += `\n`;
                 }
+
+                if (shot.videoPrompt) {
+                    content += `- **Video Generation Prompt**: ${shot.videoPrompt}\n`;
+                }
+                
                 content += `\n---\n\n`;
             });
             storyboardsFolder?.file(`episode_${episode.episodeNumber}_storyboard.md`, content);

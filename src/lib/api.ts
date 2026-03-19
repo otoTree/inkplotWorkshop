@@ -92,15 +92,21 @@ const toShot = (row: Record<string, unknown>): Shot => ({
   id: row.id as string,
   episodeId: row.episode_id as string,
   sequence: row.sequence_number as number,
-  narrativeGoal: (row.narrative_goal as string) || '',
-  visualEvidence: (row.visual_evidence as string) || '',
   description: (row.description as string) || '',
   dialogue: (row.dialogue as string) || '',
   camera: (row.camera as string) || '',
   size: (row.size as string) || '',
-  duration: row.duration as number,
-  sensitivityReduction: (row.sensitivity_reduction as number) ?? 0,
+  duration: row.duration as number | undefined,
+  sensitivityReduction: (row.sensitivity_reduction as number) || 0,
   relatedAssetIds: (row.related_asset_ids as string[]) || [],
+  sceneLabel: row.scene_label as string | undefined,
+  characterAction: row.character_action as string | undefined,
+  emotion: row.emotion as string | undefined,
+  lightingAtmosphere: row.lighting_atmosphere as string | undefined,
+  soundEffect: row.sound_effect as string | undefined,
+  referenceImage: row.reference_image as string | undefined,
+  videoPrompt: row.video_prompt as string | undefined,
+  characters: row.characters as any,
 });
 
 export const api = {
@@ -356,15 +362,21 @@ export const api = {
          user_id: user.id,
          episode_id: shot.episodeId,
          sequence_number: shot.sequence,
-         narrative_goal: shot.narrativeGoal,
-         visual_evidence: shot.visualEvidence,
          description: shot.description,
          dialogue: shot.dialogue,
          camera: shot.camera,
          size: shot.size,
          duration: shot.duration,
-       sensitivity_reduction: shot.sensitivityReduction,
-         related_asset_ids: shot.relatedAssetIds
+         sensitivity_reduction: shot.sensitivityReduction,
+         related_asset_ids: shot.relatedAssetIds,
+         scene_label: shot.sceneLabel,
+         character_action: shot.characterAction,
+         emotion: shot.emotion,
+         lighting_atmosphere: shot.lightingAtmosphere,
+         sound_effect: shot.soundEffect,
+         reference_image: shot.referenceImage,
+         video_prompt: shot.videoPrompt,
+         characters: shot.characters
        });
        if (error) throw error;
     },
@@ -372,21 +384,28 @@ export const api = {
     bulkCreate: async (shots: Shot[]): Promise<void> => {
         const { data: { user } } = await supabase.auth.getUser();
         if (!user) throw new Error('User not authenticated');
+        if (shots.length === 0) return;
         
         const rows = shots.map(s => ({
             id: s.id,
             user_id: user.id,
             episode_id: s.episodeId,
             sequence_number: s.sequence,
-            narrative_goal: s.narrativeGoal,
-            visual_evidence: s.visualEvidence,
             description: s.description,
             dialogue: s.dialogue,
             camera: s.camera,
             size: s.size,
             duration: s.duration,
             sensitivity_reduction: s.sensitivityReduction,
-            related_asset_ids: s.relatedAssetIds
+            related_asset_ids: s.relatedAssetIds,
+            scene_label: s.sceneLabel,
+            character_action: s.characterAction,
+            emotion: s.emotion,
+            lighting_atmosphere: s.lightingAtmosphere,
+            sound_effect: s.soundEffect,
+            reference_image: s.referenceImage,
+            video_prompt: s.videoPrompt,
+            characters: s.characters
         }));
         
         const { error } = await supabase.from('shots').insert(rows);
@@ -396,8 +415,6 @@ export const api = {
     update: async (id: string, updates: Partial<Shot>): Promise<void> => {
         const dbUpdates: Record<string, unknown> = {};
         if (updates.sequence !== undefined) dbUpdates.sequence_number = updates.sequence;
-        if (updates.narrativeGoal !== undefined) dbUpdates.narrative_goal = updates.narrativeGoal;
-        if (updates.visualEvidence !== undefined) dbUpdates.visual_evidence = updates.visualEvidence;
         if (updates.description !== undefined) dbUpdates.description = updates.description;
         if (updates.dialogue !== undefined) dbUpdates.dialogue = updates.dialogue;
         if (updates.camera !== undefined) dbUpdates.camera = updates.camera;
@@ -405,6 +422,14 @@ export const api = {
         if (updates.duration !== undefined) dbUpdates.duration = updates.duration;
         if (updates.sensitivityReduction !== undefined) dbUpdates.sensitivity_reduction = updates.sensitivityReduction;
         if (updates.relatedAssetIds !== undefined) dbUpdates.related_asset_ids = updates.relatedAssetIds;
+        if (updates.sceneLabel !== undefined) dbUpdates.scene_label = updates.sceneLabel;
+        if (updates.characterAction !== undefined) dbUpdates.character_action = updates.characterAction;
+        if (updates.emotion !== undefined) dbUpdates.emotion = updates.emotion;
+        if (updates.lightingAtmosphere !== undefined) dbUpdates.lighting_atmosphere = updates.lightingAtmosphere;
+        if (updates.soundEffect !== undefined) dbUpdates.sound_effect = updates.soundEffect;
+        if (updates.referenceImage !== undefined) dbUpdates.reference_image = updates.referenceImage;
+        if (updates.videoPrompt !== undefined) dbUpdates.video_prompt = updates.videoPrompt;
+        if (updates.characters !== undefined) dbUpdates.characters = updates.characters;
 
         const { error } = await supabase.from('shots').update(dbUpdates).eq('id', id);
         if (error) throw error;

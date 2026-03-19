@@ -131,11 +131,11 @@ def _get_ai_api_client(config: AIAPIConfig) -> OpenAI:
 
 
 def _get_ai_api_interval_seconds(config: AIAPIConfig | None = None, prefix: str = "ai_api") -> float:
-    """从 config.json 获取 API 调用最小间隔（毫秒）"""
+    """从 config.json 获取 API 调用最小间隔，返回秒数"""
     config_data = _load_config_file()
 
     if prefix not in config_data:
-        return 1.0/1000  # 默认 1 毫秒
+        return 1.0 / 1000.0  # 默认 1 毫秒
 
     api_config = config_data[prefix]
     interval_ms = api_config.get("min_interval_ms", 1)
@@ -145,7 +145,7 @@ def _get_ai_api_interval_seconds(config: AIAPIConfig | None = None, prefix: str 
     if interval_ms < 0:
         raise AIAPIError(f"配置项 '{prefix}.min_interval_ms' 不能小于 0")
 
-    return float(interval_ms) 
+    return float(interval_ms) / 1000.0
 
 
 def _wait_for_ai_api_interval(config: AIAPIConfig, min_interval_seconds: float):
@@ -332,8 +332,10 @@ def call_ai_image_edit(
     semaphore.acquire()
     try:
         _wait_for_ai_api_interval(current_config, min_interval_seconds=min_interval_seconds)
+        files = []
         try:
-            files = [("image[]", open(path, "rb")) for path in image_paths]
+            for path in image_paths:
+                files.append(("image[]", open(path, "rb")))
             data = {
                 "model": current_config.model,
                 "prompt": prompt,
@@ -365,6 +367,8 @@ def call_ai_video_generation(
     config: AIAPIConfig | None = None,
     duration: int = 15,
     metadata: dict[str, Any] | None = None,
+    image_url: str | None = None,
+    aspect_ratio: str | None = None,
 ) -> dict[str, Any]:
     """
     调用 AI 视频生成 API（异步）
@@ -374,6 +378,8 @@ def call_ai_video_generation(
         config: API 配置，如果为 None 则从 config.json 加载
         duration: 视频时长（秒）
         metadata: 可选元数据，支持 multi_shot、element_list 等字段
+        image_url: 参考图 URL
+        aspect_ratio: 视频比例，如 "9:16"
 
     Returns:
         包含 task_id 的响应字典
@@ -393,6 +399,10 @@ def call_ai_video_generation(
             }
             if metadata is not None:
                 payload["metadata"] = metadata
+            if image_url is not None:
+                payload["image_url"] = image_url
+            if aspect_ratio is not None:
+                payload["aspect_ratio"] = aspect_ratio
 
             headers = {
                 "Content-Type": "application/json",

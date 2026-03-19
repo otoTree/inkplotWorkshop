@@ -13,13 +13,17 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    const body = await req.json();
-    const { prompt, duration = 15, metadata } = body;
+    const { prompt, duration = 15, metadata } = await req.json();
     if (!prompt || typeof prompt !== 'string') {
       return NextResponse.json({ error: 'Missing prompt' }, { status: 400 });
     }
 
-    const result = await callAIVideoGeneration(prompt, Number(duration) || 15, metadata);
+
+    const result = await callAIVideoGeneration(
+      prompt,
+      Number(duration) || 15,
+      metadata || undefined,
+    );
     return NextResponse.json(result);
   } catch (error) {
     if (error instanceof AIAPIError) {

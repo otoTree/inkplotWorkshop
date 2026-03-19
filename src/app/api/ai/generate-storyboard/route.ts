@@ -31,7 +31,34 @@ export async function POST(req: Request) {
     const content = extractFirstMessageContent(data);
 
     try {
-      const jsonContent = JSON.parse(content);
+      // Safely parse JSON even if it's wrapped in markdown code blocks or has <think> tags
+      let cleanContent = content;
+      // Remove <think>...</think> blocks
+      cleanContent = cleanContent.replace(/<think>[\s\S]*?<\/think>/g, '').trim();
+      // Remove markdown JSON formatting
+      cleanContent = cleanContent.replace(/^```json\n?/, '').replace(/^```\n?/, '').replace(/\n?```$/, '').trim();
+      
+      // Sometimes AI might output some text before or after the JSON, try to extract the JSON object
+      const jsonStart = cleanContent.indexOf('{');
+      const jsonEnd = cleanContent.lastIndexOf('}');
+      if (jsonStart !== -1 && jsonEnd !== -1 && jsonEnd >= jsonStart) {
+        cleanContent = cleanContent.substring(jsonStart, jsonEnd + 1);
+      }
+      
+      const parsed = JSON.parse(cleanContent);
+      
+      let jsonContent: any = {};
+      if (Array.isArray(parsed)) {
+          jsonContent.shots = parsed;
+      } else {
+          jsonContent = parsed;
+      }
+      
+      // Ensure the return structure always has a 'shots' array
+      if (!jsonContent.shots && jsonContent.shot_list) {
+          jsonContent.shots = jsonContent.shot_list;
+      }
+
       return NextResponse.json(jsonContent);
     } catch (e) {
       console.error('JSON Parse Error:', e);

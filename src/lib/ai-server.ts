@@ -204,25 +204,54 @@ export const extractFirstMessageContent = (result: unknown) => {
   return content;
 };
 
-export const callAIImageGeneration = async (prompt: string) => {
+export const callAIImageGeneration = async (prompt: string, aspectRatio: string = '1:1') => {
+  const config = getAIAPIConfig();
+  const imageModel = process.env.AI_API_IMAGE_MODEL || process.env.OPENAI_IMAGE_MODEL || config.model;
+
+  const finalPrompt = aspectRatio !== '1:1' ? `${prompt}, aspect ratio ${aspectRatio}` : prompt;
+
   return await callAIChatCompletion({
-    messages: [{ role: 'user', content: prompt }],
+    messages: [{ role: 'user', content: finalPrompt }],
+    extraPayload: { model: imageModel },
   });
 };
 
 export const callAIVideoGeneration = async (
   prompt: string,
   duration: number,
-  metadata?: Record<string, unknown>
+  metadata?: Record<string, unknown>,
+  extraParams?: Record<string, unknown>
 ) => {
   const config = getAIAPIConfig();
+  const videoModel = process.env.AI_API_VIDEO_MODEL || process.env.OPENAI_VIDEO_MODEL || config.model;
+
   return await withThrottle(config, async () => {
     const payload: Record<string, unknown> = {
-      model: config.model,
+      model: videoModel,
       prompt,
-      duration,
     };
-    if (metadata) payload.metadata = metadata;
+    
+    // Some models/providers might reject 'duration' or expect it in metadata, but standard API uses it
+    if (duration) payload.duration = duration;
+    
+    // For specific APIs like Kling, images should be an array in metadata or payload depending on spec.
+    // The previous frontend passes `image_url` but some APIs expect `metadata.images` or `image`
+    if (extraParams?.image_url) {
+      if (!metadata) metadata = {};
+      metadata.images = [extraParams.image_url];
+      // keep it in root payload just in case the proxy needs it
+      payload.image_url = extraParams.image_url; 
+    }
+    
+    // Add extra params (like image_url, aspect_ratio) to payload or metadata depending on API spec
+    // For standard compatible APIs, they usually go in the root payload
+    if (extraParams) {
+        Object.assign(payload, extraParams);
+    }
+    
+    if (metadata) {
+      payload.metadata = metadata;
+    }
 
     const response = await fetchWithTimeout(
       `${config.baseUrl}/video/generations`,
@@ -281,11 +310,12 @@ export const downloadAIVideo = async (videoId: string, variant: string) => {
         headers: {
           Authorization: `Bearer ${config.apiKey}`,
         },
+        redirect: 'manual', // Don't follow redirects, return the 302/307 to the client
       },
       config.timeoutMs
     );
 
-    if (!response.ok) {
+    if (!response.ok && response.status >= 400) {
       const detail = await response.text().catch(() => '');
       throw new AIAPIError('下载视频失败', response.status, detail);
     }
@@ -328,8 +358,13 @@ export const extractImageUrls = (result: unknown) => {
       if (typeof parsed?.url === 'string') urls.push(parsed.url);
       if (typeof parsed?.image?.url === 'string') urls.push(parsed.image.url);
     } catch {
-      const matches = content.match(/https?:\/\/[^\s"'<>]+/g);
-      if (matches) urls.push(...matches);
+      const dataUriMatch = content.match(/data:image\/[^;]+;base64,[a-zA-Z0-9+/=]+/);
+      if (dataUriMatch) {
+        urls.push(dataUriMatch[0]);
+      } else {
+        const matches = content.match(/https?:\/\/[^\s"'<>]+/g);
+        if (matches) urls.push(...matches);
+      }
     }
   }
 

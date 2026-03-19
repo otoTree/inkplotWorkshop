@@ -9,11 +9,13 @@ const db = new Dexie('InkplotDB') as Dexie & {
 };
 
 // Schema declaration:
-db.version(1).stores({
+db.version(2).stores({
   projects: 'id, title, createdAt, updatedAt', // Primary key and indexed props
   episodes: 'id, projectId, episodeNumber',
   assets: 'id, projectId, type, name',
   shots: 'id, episodeId, sequence'
+}).upgrade(tx => {
+  // Migration to v2: Add new industrial-grade fields to shots, handled automatically by Dexie.
 });
 
 export { db };

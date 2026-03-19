@@ -1,13 +1,14 @@
 /* eslint-disable @next/next/no-img-element */
-import { useState, useRef, useCallback } from 'react';
+import { useState, useRef, useCallback, useEffect } from 'react';
 import { Shot, Asset } from '@/types';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
+import { Input } from '@/components/ui/input';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { Save, Trash2, Plus, Box, Maximize2, Download, Copy, Shield } from 'lucide-react';
+import { Save, Trash2, Plus, Box, Maximize2, Download, Copy, Shield, Video, Loader2 } from 'lucide-react';
 import { toPng } from 'html-to-image';
 import { ShotDetailDialog } from './ShotDetailDialog';
 
@@ -28,8 +29,8 @@ export function ShotCard({ shot, assets, projectId, sensitivityPrompt, onUpdate,
   const [isReducing, setIsReducing] = useState(false);
   const [compareOpen, setCompareOpen] = useState(false);
   const [compareData, setCompareData] = useState<{
-    before: { narrativeGoal: string; visualEvidence: string; description: string; dialogue: string };
-    after: { narrativeGoal: string; visualEvidence: string; description: string; dialogue: string };
+    before: { description: string; dialogue: string };
+    after: { description: string; dialogue: string };
   } | null>(null);
   const cardRef = useRef<HTMLDivElement>(null);
   
@@ -39,6 +40,133 @@ export function ShotCard({ shot, assets, projectId, sensitivityPrompt, onUpdate,
     if (value === 2) return '中度';
     if (value === 1) return '轻度';
     return '无';
+  };
+
+  const [isGeneratingVideo, setIsGeneratingVideo] = useState(false);
+  
+  const currentRef = useRef(current);
+  const onUpdateRef = useRef(onUpdate);
+  
+  useEffect(() => {
+    currentRef.current = current;
+    onUpdateRef.current = onUpdate;
+  }, [current, onUpdate]);
+
+  useEffect(() => {
+    let interval: NodeJS.Timeout;
+    
+    const checkStatus = async () => {
+      const latestCurrent = currentRef.current;
+      if (!latestCurrent.videoGenerationId || latestCurrent.videoStatus === 'completed' || latestCurrent.videoStatus === 'failed') return;
+      
+      try {
+        const res = await fetch('/api/ai/video-status', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ videoId: latestCurrent.videoGenerationId })
+        });
+        
+        if (!res.ok) return;
+        const data = await res.json();
+        const statusInfo = data.data || data;
+        const status = (statusInfo.status || '').toLowerCase();
+        
+        if (['completed', 'succeeded', 'success'].includes(status)) {
+          // extract url from nested data structure if needed
+          const directUrl = statusInfo.url || statusInfo.video_url || (statusInfo.data && (statusInfo.data.url || statusInfo.data.video_url));
+          onUpdateRef.current({
+            ...latestCurrent,
+            videoStatus: 'completed',
+            videoUrl: directUrl || `/api/ai/download-video?videoId=${latestCurrent.videoGenerationId}`
+          });
+        } else if (['failed', 'error'].includes(status)) {
+          onUpdateRef.current({
+            ...latestCurrent,
+            videoStatus: 'failed',
+          });
+        }
+      } catch (e) {
+        console.error('Check video status failed', e);
+      }
+    };
+
+    if (current.videoGenerationId && current.videoStatus === 'processing') {
+      interval = setInterval(checkStatus, 5000);
+      checkStatus(); // Check immediately
+    }
+
+    return () => {
+      if (interval) clearInterval(interval);
+    };
+  }, [current.videoGenerationId, current.videoStatus]);
+
+  const handleGenerateVideo = async () => {
+    const fullPrompt = [
+      current.videoPrompt ? `[Video Prompt] ${current.videoPrompt}` : '',
+      current.description ? `[Visual Description] ${current.description}` : '',
+      current.characterAction ? `[Action] ${current.characterAction}` : '',
+      current.lightingAtmosphere ? `[Lighting/Atmosphere] ${current.lightingAtmosphere}` : '',
+      current.sceneLabel ? `[Scene] ${current.sceneLabel}` : '',
+      current.emotion ? `[Emotion] ${current.emotion}` : '',
+      (current.camera || current.size) ? `[Camera/Size] ${current.camera || ''} ${current.size || ''}`.trim() : '',
+      current.soundEffect ? `[Sound Effect] ${current.soundEffect}` : '',
+    ].filter(Boolean).join('\n');
+
+    if (!fullPrompt.trim()) {
+      alert('请先输入或生成视频提示词相关内容');
+      return;
+    }
+
+    const relatedImages = assets
+      .filter(a => current.relatedAssetIds.includes(a.id) && a.imageUrl)
+      .map(a => a.imageUrl);
+      
+    // Collect all available images for the video generation
+    const allImages = [];
+    if (current.referenceImage) allImages.push(current.referenceImage);
+    if (relatedImages.length > 0) allImages.push(...relatedImages);
+    
+    setIsGeneratingVideo(true);
+    try {
+      const response = await fetch('/api/ai/generate-video', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ 
+          prompt: fullPrompt,
+          duration: current.duration || 5,
+          metadata: {
+            multi_shot: false,
+            aspect_ratio: "9:16",
+            sound: "on",
+            images: allImages.length > 0 ? allImages : undefined
+          },
+        }),
+      });
+
+      if (!response.ok) {
+        const errData = await response.json().catch(() => ({}));
+        throw new Error(errData.error || '生成请求失败');
+      }
+
+      const data = await response.json();
+      const taskId = data.task_id || data.id || data.data?.task_id || data.data?.id;
+      if (!taskId) throw new Error('未能获取任务ID');
+
+      // extract url if API is synchronous and returns it immediately
+      const directUrl = data.url || data.video_url || data.data?.url || data.data?.video_url;
+      const status = (data.status || data.data?.status || 'processing').toLowerCase();
+
+      onUpdate({
+        ...current,
+        videoGenerationId: taskId,
+        videoStatus: ['completed', 'succeeded', 'success'].includes(status) ? 'completed' : 'processing',
+        ...(directUrl ? { videoUrl: directUrl } : {})
+      });
+    } catch (error: any) {
+      alert(`视频生成失败: ${error.message}`);
+    } finally {
+      setIsGeneratingVideo(false);
+    }
   };
 
   const save = async () => {
@@ -94,18 +222,18 @@ export function ShotCard({ shot, assets, projectId, sensitivityPrompt, onUpdate,
 Shot #${current.sequence}
 Duration: ${current.duration}s | Camera: ${current.camera} | Size: ${current.size}
 Sensitivity Reduction: ${sensitivityLabel(current.sensitivityReduction)}
+Scene: ${current.sceneLabel || 'N/A'} | Emotion: ${current.emotion || 'N/A'}
+Atmosphere: ${current.lightingAtmosphere || 'N/A'} | Sound: ${current.soundEffect || 'N/A'}
+Action: ${current.characterAction || 'N/A'}
 
-[P0 Narrative]
-${current.narrativeGoal}
-
-[P1 Visual Evidence]
-${current.visualEvidence}
-
-[P2 Description]
+[Description]
 ${current.description}
 
 [Dialogue / Voiceover / Soliloquy / Internal Monologue / Voiceover (Narration/Inner Voice) / Subtext / Stage Direction / Opening Poem / Interrupting / Aside / Buffoonery / Soliloquy (Talking to Oneself) / Echo / Pun]
 ${current.dialogue || 'None'}
+
+[Video Generation Prompt]
+${current.videoPrompt || 'None'}
     `.trim();
     navigator.clipboard.writeText(text);
     alert('已复制镜头文本');
@@ -119,11 +247,9 @@ ${current.dialogue || 'None'}
     setIsReducing(true);
     try {
       const before = {
-        narrativeGoal: current.narrativeGoal,
-        visualEvidence: current.visualEvidence,
-        description: current.description,
-        dialogue: current.dialogue || '',
-      };
+      description: current.description,
+      dialogue: current.dialogue || '',
+    };
       const response = await fetch('/api/ai/reduce-shot-sensitivity', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -142,8 +268,6 @@ ${current.dialogue || 'None'}
       const result = await response.json();
       const updatedShot: Shot = {
         ...current,
-        narrativeGoal: result.narrativeGoal ?? current.narrativeGoal,
-        visualEvidence: result.visualEvidence ?? current.visualEvidence,
         description: result.description ?? current.description,
         dialogue: result.dialogue ?? current.dialogue,
         sensitivityReduction: Math.min((current.sensitivityReduction || 0) + 1, 3),
@@ -153,8 +277,6 @@ ${current.dialogue || 'None'}
       setCompareData({
         before,
         after: {
-          narrativeGoal: updatedShot.narrativeGoal,
-          visualEvidence: updatedShot.visualEvidence,
           description: updatedShot.description,
           dialogue: updatedShot.dialogue || '',
         },
@@ -185,6 +307,16 @@ ${current.dialogue || 'None'}
               <Badge variant="secondary" className="text-xs font-mono bg-white border text-gray-600">
                 {current.size || 'SIZE?'}
               </Badge>
+              {current.sceneLabel && (
+                <Badge variant="secondary" className="text-xs font-mono bg-purple-50 text-purple-600 border-purple-200">
+                  {current.sceneLabel}
+                </Badge>
+              )}
+              {current.emotion && (
+                <Badge variant="secondary" className="text-xs font-mono bg-orange-50 text-orange-600 border-orange-200">
+                  {current.emotion}
+                </Badge>
+              )}
               {current.sensitivityReduction > 0 && (
                 <Badge variant="secondary" className="text-xs font-mono bg-white border text-gray-600">
                   敏感度↓ {sensitivityLabel(current.sensitivityReduction)}
@@ -228,51 +360,81 @@ ${current.dialogue || 'None'}
         <div className="grid grid-cols-1 md:grid-cols-12 divide-y md:divide-y-0 md:divide-x divide-gray-100">
           {/* P0/P1/P2 Content */}
           <div className="col-span-8 p-6 space-y-6">
-            {/* P0 */}
-            <div className="space-y-2 relative pl-4 border-l-2 border-red-200">
-              <label className="text-[10px] uppercase tracking-widest text-red-400 font-bold flex items-center gap-2">
-                P0 · 叙事因果
-              </label>
-              {isEditing ? (
-                <Textarea 
-                  value={current.narrativeGoal} 
-                  onChange={e => setDraft({ ...current, narrativeGoal: e.target.value })}
-                  className="text-sm min-h-[60px]"
-                />
-              ) : (
-                <p className="text-sm text-gray-800 leading-relaxed font-serif">
-                  {current.narrativeGoal || <span className="text-gray-300 italic">未定义叙事目标</span>}
-                </p>
-              )}
+            
+            {/* 工业化分镜信息速览区 (Industrial Info) */}
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4 pb-4 border-b border-gray-100">
+              <div className="space-y-1">
+                <div className="text-[10px] text-gray-400 font-bold uppercase tracking-widest">角色动作</div>
+                {isEditing ? (
+                  <Textarea 
+                    value={current.characterAction || ''} 
+                    onChange={(e: any) => setDraft({ ...current, characterAction: e.target.value })}
+                    className="text-xs min-h-[40px] p-1.5"
+                  />
+                ) : (
+                  <div className="text-xs text-gray-700 truncate" title={current.characterAction}>{current.characterAction || '-'}</div>
+                )}
+              </div>
+              <div className="space-y-1">
+                <div className="text-[10px] text-gray-400 font-bold uppercase tracking-widest">光影氛围</div>
+                {isEditing ? (
+                  <Textarea 
+                    value={current.lightingAtmosphere || ''} 
+                    onChange={(e: any) => setDraft({ ...current, lightingAtmosphere: e.target.value })}
+                    className="text-xs min-h-[40px] p-1.5"
+                  />
+                ) : (
+                  <div className="text-xs text-gray-700 truncate" title={current.lightingAtmosphere}>{current.lightingAtmosphere || '-'}</div>
+                )}
+              </div>
+              <div className="space-y-1">
+                <div className="text-[10px] text-gray-400 font-bold uppercase tracking-widest">音效</div>
+                {isEditing ? (
+                  <Textarea 
+                    value={current.soundEffect || ''} 
+                    onChange={(e: any) => setDraft({ ...current, soundEffect: e.target.value })}
+                    className="text-xs min-h-[40px] p-1.5"
+                  />
+                ) : (
+                  <div className="text-xs text-gray-700 truncate" title={current.soundEffect}>{current.soundEffect || '-'}</div>
+                )}
+              </div>
+              <div className="space-y-1">
+                <div className="text-[10px] text-gray-400 font-bold uppercase tracking-widest">场景与情绪</div>
+                {isEditing ? (
+                  <div className="space-y-1">
+                    <Input 
+                      value={current.sceneLabel || ''} 
+                      onChange={(e: any) => setDraft({ ...current, sceneLabel: e.target.value })}
+                      className="text-xs h-6 p-1"
+                      placeholder="场景..."
+                    />
+                    <Input 
+                      value={current.emotion || ''} 
+                      onChange={(e: any) => setDraft({ ...current, emotion: e.target.value })}
+                      className="text-xs h-6 p-1"
+                      placeholder="情绪..."
+                    />
+                  </div>
+                ) : (
+                  <div className="flex flex-wrap gap-1 pt-1">
+                    {current.sceneLabel && <Badge variant="secondary" className="text-[9px] px-1 py-0 bg-purple-50 text-purple-600 border-purple-200">{current.sceneLabel}</Badge>}
+                    {current.emotion && <Badge variant="secondary" className="text-[9px] px-1 py-0 bg-orange-50 text-orange-600 border-orange-200">{current.emotion}</Badge>}
+                    {!current.sceneLabel && !current.emotion && <span className="text-xs text-gray-400">-</span>}
+                  </div>
+                )}
+              </div>
             </div>
 
-            {/* P1 */}
-            <div className="space-y-2 relative pl-4 border-l-2 border-orange-200">
-              <label className="text-[10px] uppercase tracking-widest text-orange-400 font-bold flex items-center gap-2">
-                P1 · 视觉证据
-              </label>
-              {isEditing ? (
-                <Textarea 
-                  value={current.visualEvidence} 
-                  onChange={e => setDraft({ ...current, visualEvidence: e.target.value })}
-                  className="text-sm min-h-[60px]"
-                />
-              ) : (
-                <p className="text-sm text-gray-800 leading-relaxed">
-                  {current.visualEvidence || <span className="text-gray-300 italic">未定义视觉证据</span>}
-                </p>
-              )}
-            </div>
-
-            {/* P2 */}
+            {/* 画面描述 (Description) */}
             <div className="space-y-2 relative pl-4 border-l-2 border-yellow-200">
               <label className="text-[10px] uppercase tracking-widest text-yellow-500 font-bold flex items-center gap-2">
-                P2 · 画面描述
+                画面描述 (Visual Description)
               </label>
               {isEditing ? (
                 <Textarea 
                   value={current.description} 
-                  onChange={e => setDraft({ ...current, description: e.target.value })}
+                  onChange={(e: any) => setDraft({ ...current, description: e.target.value })}
                   className="text-sm min-h-[80px]"
                 />
               ) : (
@@ -280,6 +442,68 @@ ${current.dialogue || 'None'}
                   {current.description || <span className="text-gray-300 italic">暂无描述</span>}
                 </p>
               )}
+            </div>
+
+            {/* AI Prompts Section */}
+            <div className="grid grid-cols-1 gap-4">
+              <div className="space-y-2 relative pl-4 border-l-2 border-indigo-200">
+                <div className="flex items-center justify-between">
+                  <label className="text-[10px] uppercase tracking-widest text-indigo-500 font-bold flex items-center gap-2">
+                    视频运镜提示词 (Video Generation Prompt)
+                  </label>
+                  <Button 
+                    size="sm" 
+                    variant="outline" 
+                    className="h-6 text-[10px] gap-1 px-2" 
+                    onClick={handleGenerateVideo}
+                    disabled={isGeneratingVideo || current.videoStatus === 'processing'}
+                  >
+                    {(isGeneratingVideo || current.videoStatus === 'processing') ? (
+                      <Loader2 className="w-3 h-3 animate-spin" />
+                    ) : (
+                      <Video className="w-3 h-3" />
+                    )}
+                    {(isGeneratingVideo || current.videoStatus === 'processing') ? '生成中...' : '生成视频'}
+                  </Button>
+                </div>
+                {isEditing ? (
+                  <Textarea 
+                    value={current.videoPrompt || ''} 
+                    onChange={(e: any) => setDraft({ ...current, videoPrompt: e.target.value })}
+                    className="text-[11px] font-mono min-h-[80px]"
+                    placeholder="Describe camera movement, character actions, and physical dynamics for video generation..."
+                  />
+                ) : (
+                  <p className="text-[11px] text-gray-500 font-mono leading-relaxed bg-gray-50 p-2 rounded line-clamp-3 hover:line-clamp-none transition-all">
+                    {current.videoPrompt || <span className="text-gray-300 italic">No video prompt generated</span>}
+                  </p>
+                )}
+                
+                {/* Video Display Area */}
+                {(current.videoStatus || current.videoUrl) && (
+                  <div className="mt-2 p-2 bg-gray-50/50 rounded-lg border border-gray-100 flex flex-col items-center justify-center min-h-[120px] relative overflow-hidden group/video">
+                    {current.videoStatus === 'processing' && (
+                      <div className="flex flex-col items-center gap-2 text-indigo-500/80">
+                        <Loader2 className="w-6 h-6 animate-spin" />
+                        <span className="text-xs">视频生成中，请耐心等待...</span>
+                      </div>
+                    )}
+                    {current.videoStatus === 'failed' && (
+                      <div className="flex flex-col items-center gap-2 text-red-400">
+                        <span className="text-xs">视频生成失败</span>
+                        <Button variant="outline" size="sm" className="h-6 text-[10px]" onClick={handleGenerateVideo}>重试</Button>
+                      </div>
+                    )}
+                    {current.videoStatus === 'completed' && current.videoUrl && (
+                      <video 
+                        src={current.videoUrl} 
+                        controls 
+                        className="w-full max-h-[240px] object-contain rounded bg-black/5"
+                      />
+                    )}
+                  </div>
+                )}
+              </div>
             </div>
 
             {/* Dialogue */}
@@ -290,7 +514,7 @@ ${current.dialogue || 'None'}
               {isEditing ? (
                 <Textarea 
                   value={current.dialogue || ''} 
-                  onChange={e => setDraft({ ...current, dialogue: e.target.value })}
+                  onChange={(e: any) => setDraft({ ...current, dialogue: e.target.value })}
                   className="text-sm min-h-[60px]"
                   placeholder="角色名: 对白内容..."
                 />
@@ -302,19 +526,19 @@ ${current.dialogue || 'None'}
             </div>
             
             {/* Inline Edit Trigger (Excluded from Export) */}
-            <div className="exclude-from-export pt-2">
+            <div className="exclude-from-export pt-2 flex justify-end">
                 {!isEditing && (
-                    <Button variant="link" size="sm" className="h-auto p-0 text-gray-400 text-xs" onClick={() => {
+                    <Button variant="outline" size="sm" className="h-8 text-xs text-gray-500" onClick={() => {
                         setDraft(shot);
                         setIsEditing(true);
                     }}>
-                        快速编辑文本
+                        编辑分镜内容
                     </Button>
                 )}
                 {isEditing && (
                     <div className="flex gap-2">
-                         <Button size="sm" onClick={save}>保存文本</Button>
-                         <Button size="sm" variant="ghost" onClick={() => { setIsEditing(false); setDraft(null); }}>取消</Button>
+                         <Button size="sm" variant="outline" onClick={() => { setIsEditing(false); setDraft(null); }}>取消</Button>
+                         <Button size="sm" className="bg-black text-white hover:bg-gray-800" onClick={save}>保存更改</Button>
                     </div>
                 )}
             </div>
@@ -359,7 +583,7 @@ ${current.dialogue || 'None'}
                             <div className="overflow-hidden">
                               <div className="font-medium text-sm truncate">{asset.name}</div>
                               <div className="text-[10px] text-gray-500 uppercase">
-                                {asset.type === 'character' ? '角色' : asset.type === 'location' ? '场景' : asset.type === 'prop' ? '道具' : asset.type}
+                                {asset.type === 'character' ? '角色' : asset.type === 'location' ? '场景' : asset.type}
                               </div>
                             </div>
                           </div>
@@ -387,7 +611,7 @@ ${current.dialogue || 'None'}
                     <div className="flex-1 min-w-0">
                       <div className="text-xs font-medium truncate">{asset.name}</div>
                       <div className="text-[10px] text-gray-400 uppercase">
-                        {asset.type === 'character' ? '角色' : asset.type === 'location' ? '场景' : asset.type === 'prop' ? '道具' : asset.type}
+                        {asset.type === 'character' ? '角色' : asset.type === 'location' ? '场景' : asset.type}
                       </div>
                     </div>
                     <button onClick={() => toggleAsset(id)} className="exclude-from-export text-gray-300 hover:text-red-400">
@@ -425,8 +649,6 @@ ${current.dialogue || 'None'}
               <div className="space-y-4">
                 <div className="text-xs uppercase tracking-widest text-black/50 font-bold">原始</div>
                 <div className="space-y-3">
-                  <Textarea value={compareData.before.narrativeGoal} readOnly className="min-h-[90px] text-sm bg-white border-black/[0.08]" />
-                  <Textarea value={compareData.before.visualEvidence} readOnly className="min-h-[90px] text-sm bg-white border-black/[0.08]" />
                   <Textarea value={compareData.before.description} readOnly className="min-h-[120px] text-sm bg-white border-black/[0.08]" />
                   <Textarea value={compareData.before.dialogue} readOnly className="min-h-[90px] text-sm bg-white border-black/[0.08]" />
                 </div>
@@ -434,8 +656,6 @@ ${current.dialogue || 'None'}
               <div className="space-y-4">
                 <div className="text-xs uppercase tracking-widest text-black/50 font-bold">降低后</div>
                 <div className="space-y-3">
-                  <Textarea value={compareData.after.narrativeGoal} readOnly className="min-h-[90px] text-sm bg-white border-black/[0.08]" />
-                  <Textarea value={compareData.after.visualEvidence} readOnly className="min-h-[90px] text-sm bg-white border-black/[0.08]" />
                   <Textarea value={compareData.after.description} readOnly className="min-h-[120px] text-sm bg-white border-black/[0.08]" />
                   <Textarea value={compareData.after.dialogue} readOnly className="min-h-[90px] text-sm bg-white border-black/[0.08]" />
                 </div>

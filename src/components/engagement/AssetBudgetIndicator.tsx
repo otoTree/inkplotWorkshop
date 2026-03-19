@@ -26,17 +26,10 @@ export function AssetBudgetIndicator({ episode, assets, onAssetClick }: AssetBud
   }, [assets, usedAssetIds]);
 
   // 按类型分组
-  const assetsByType = useMemo(() => {
-    const groups: Record<string, Asset[]> = {
-      character: [],
-      location: [],
-      prop: []
-    };
-    usedAssets.forEach(asset => {
-      groups[asset.type].push(asset);
-    });
-    return groups;
-  }, [usedAssets]);
+  const assetsByType = {
+    character: usedAssets.filter(a => a.type === 'character'),
+    location: usedAssets.filter(a => a.type === 'location')
+  };
 
   const remaining = maxAssets - usedAssetIds.length;
   const usagePercent = (usedAssetIds.length / maxAssets) * 100;
@@ -131,25 +124,6 @@ export function AssetBudgetIndicator({ episode, assets, onAssetClick }: AssetBud
                 <div className="text-xs text-muted-foreground mb-1">场景</div>
                 <div className="flex flex-wrap gap-2">
                   {assetsByType.location.map(asset => (
-                    <Badge
-                      key={asset.id}
-                      variant="secondary"
-                      className="cursor-pointer hover:bg-secondary/80"
-                      onClick={() => onAssetClick?.(asset.id)}
-                    >
-                      {asset.name}
-                    </Badge>
-                  ))}
-                </div>
-              </div>
-            )}
-
-            {/* 道具 */}
-            {assetsByType.prop.length > 0 && (
-              <div>
-                <div className="text-xs text-muted-foreground mb-1">道具</div>
-                <div className="flex flex-wrap gap-2">
-                  {assetsByType.prop.map(asset => (
                     <Badge
                       key={asset.id}
                       variant="secondary"

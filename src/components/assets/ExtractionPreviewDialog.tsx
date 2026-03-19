@@ -57,7 +57,7 @@ export function ExtractionPreviewDialog({
     setGeneratingIndices(prev => new Set(prev).add(index));
     try {
       const fullPrompt = getImageGenerationPrompt(asset.visualPrompt, asset.type as AssetType, artStyle);
-      const aspectRatio = asset.type === 'character' ? '16:9' : asset.type === 'prop' ? '1:1' : '16:9';
+      const aspectRatio = asset.type === 'character' ? '16:9' : '16:9';
 
       const response = await fetch('/api/ai/generate-image', {
         method: 'POST',
@@ -67,6 +67,19 @@ export function ExtractionPreviewDialog({
             aspectRatio
         }),
       });
+      
+      if (!response.ok) {
+        let errorMsg = `请求失败 (状态码: ${response.status})`;
+        try {
+            const errData = await response.json();
+            if (errData.error) errorMsg = errData.error;
+            if (errData.details) errorMsg += ` - ${errData.details}`;
+        } catch (e) {
+            // ignore
+        }
+        throw new Error(errorMsg);
+      }
+
       const data = await response.json();
 
       if (data.data && data.data[0]?.url) {
@@ -75,9 +88,12 @@ export function ExtractionPreviewDialog({
           next[index] = { ...next[index], imageUrl: data.data[0].url };
           return next;
         });
+      } else {
+        throw new Error(data.error || '生成失败，未返回图片链接');
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error(`Failed to generate image for asset ${index}:`, error);
+      // alert(`生成图片失败: ${error.message || '未知错误'}`); // Optional: mute alert in batch dialog
     } finally {
       setGeneratingIndices(prev => {
         const next = new Set(prev);
@@ -106,15 +122,13 @@ export function ExtractionPreviewDialog({
   const typeMap: Record<string, string> = {
     character: '角色',
     location: '场景',
-    prop: '道具',
   };
 
   const getIcon = (type: string) => {
     switch (type) {
         case 'character': return <User className="w-4 h-4" />;
         case 'location': return <MapPin className="w-4 h-4" />;
-        case 'prop': return <Box className="w-4 h-4" />;
-        default: return <Box className="w-4 h-4" />;
+        default: return <MapPin className="w-4 h-4" />;
     }
   };
 
@@ -156,8 +170,8 @@ export function ExtractionPreviewDialog({
                             <div className="flex justify-between items-start">
                                 <label htmlFor={`asset-${index}`} className="flex items-center gap-2 font-medium cursor-pointer">
                                     <span className="flex items-center gap-1 text-xs bg-muted px-2 py-0.5 rounded text-muted-foreground uppercase">
-                                        {getIcon(asset.type || 'prop')}
-                                        {typeMap[asset.type || 'prop']}
+                                        {getIcon(asset.type || 'location')}
+                                        {typeMap[asset.type || 'location']}
                                     </span>
                                     {asset.name}
                                 </label>
