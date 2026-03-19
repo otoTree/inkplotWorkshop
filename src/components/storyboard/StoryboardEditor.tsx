@@ -6,7 +6,7 @@ import { ArtStyleConfig, Episode, Asset, Shot, Project } from '@/types';
 import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Badge } from '@/components/ui/badge';
-import { Loader2, Plus, Wand2, FileText, Sparkles } from 'lucide-react';
+import { Loader2, Plus, Wand2, FileText, Sparkles, Video } from 'lucide-react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { Progress } from '@/components/ui/progress';
 import { ShotCard } from './ShotCard';
@@ -46,6 +46,10 @@ export function StoryboardEditor({ projectId }: StoryboardEditorProps) {
   const [isGeneratingAll, setIsGeneratingAll] = useState(false);
   const [generationCurrent, setGenerationCurrent] = useState(0);
   const [generationTotal, setGenerationTotal] = useState(0);
+  
+  const [isGeneratingVideos, setIsGeneratingVideos] = useState(false);
+  const [videoGenerationCurrent, setVideoGenerationCurrent] = useState(0);
+  const [videoGenerationTotal, setVideoGenerationTotal] = useState(0);
 
   const selectedEpisodeIdRef = useRef<string | null>(null);
   useEffect(() => {
@@ -271,6 +275,113 @@ export function StoryboardEditor({ projectId }: StoryboardEditorProps) {
     }
   };
 
+  const handleGenerateEpisodeVideos = async () => {
+    if (!shots || shots.length === 0) return;
+
+    const shotsToGenerate = shots.filter(
+      s => s.videoStatus !== 'completed' && s.videoStatus !== 'processing'
+    );
+
+    if (shotsToGenerate.length === 0) {
+      alert('当前剧集的所有镜头都已经生成了视频，或正在生成中。');
+      return;
+    }
+
+    if (!confirm(`准备为 ${shotsToGenerate.length} 个镜头生成视频。这可能需要一些时间，确定继续吗？`)) {
+      return;
+    }
+
+    setIsGeneratingVideos(true);
+    setVideoGenerationTotal(shotsToGenerate.length);
+    setVideoGenerationCurrent(0);
+    let successCount = 0;
+    let failedCount = 0;
+
+    try {
+      for (let i = 0; i < shotsToGenerate.length; i++) {
+        const currentShot = shotsToGenerate[i];
+        setVideoGenerationCurrent(i + 1);
+
+        const fullPrompt = [
+          currentShot.videoPrompt ? `[Video Prompt] ${currentShot.videoPrompt}` : '',
+          currentShot.description ? `[Visual Description] ${currentShot.description}` : '',
+          currentShot.characterAction ? `[Action] ${currentShot.characterAction}` : '',
+          currentShot.lightingAtmosphere ? `[Lighting/Atmosphere] ${currentShot.lightingAtmosphere}` : '',
+          currentShot.sceneLabel ? `[Scene] ${currentShot.sceneLabel}` : '',
+          currentShot.emotion ? `[Emotion] ${currentShot.emotion}` : '',
+          (currentShot.camera || currentShot.size) ? `[Camera/Size] ${currentShot.camera || ''} ${currentShot.size || ''}`.trim() : '',
+          currentShot.soundEffect ? `[Sound Effect] ${currentShot.soundEffect}` : '',
+        ].filter(Boolean).join('\n');
+
+        if (!fullPrompt.trim()) {
+          console.warn(`镜头 ${currentShot.sequence} 缺乏生成视频的提示词，跳过。`);
+          failedCount++;
+          continue;
+        }
+
+        const relatedImages = assets
+          .filter(a => currentShot.relatedAssetIds?.includes(a.id) && a.imageUrl)
+          .map(a => a.imageUrl);
+          
+        const allImages = [];
+        if (currentShot.referenceImage) allImages.push(currentShot.referenceImage);
+        if (relatedImages.length > 0) allImages.push(...relatedImages);
+
+        try {
+          const response = await fetch('/api/ai/generate-video', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ 
+              prompt: fullPrompt,
+              duration: currentShot.duration || 5,
+              metadata: {
+                multi_shot: false,
+                aspect_ratio: "9:16",
+                sound: "on",
+                images: allImages.length > 0 ? allImages : undefined
+              },
+            }),
+          });
+
+          if (!response.ok) {
+            throw new Error('API Request Failed');
+          }
+
+          const data = await response.json();
+          const taskId = data.task_id || data.id || data.data?.task_id || data.data?.id;
+          if (!taskId) throw new Error('未能获取任务ID');
+
+          const directUrl = data.url || data.video_url || data.data?.url || data.data?.video_url;
+          const status = (data.status || data.data?.status || 'processing').toLowerCase();
+
+          const updatedShot: Shot = {
+            ...currentShot,
+            videoGenerationId: taskId,
+            videoStatus: ['completed', 'succeeded', 'success'].includes(status) ? 'completed' : 'processing',
+            ...(directUrl ? { videoUrl: directUrl } : {})
+          };
+          
+          await api.shots.update(updatedShot.id, updatedShot);
+          setShots(prev => prev.map(s => s.id === updatedShot.id ? updatedShot : s));
+          successCount++;
+          
+        } catch (error) {
+          console.error(`镜头 ${currentShot.sequence} 视频生成失败:`, error);
+          failedCount++;
+        }
+      }
+      
+      alert(`一键生成当前剧集视频发起完成。\n成功发起: ${successCount}\n失败/跳过: ${failedCount}`);
+    } catch (error) {
+      console.error('Failed to generate videos for episode:', error);
+      alert('批量生成视频过程中发生错误。');
+    } finally {
+      setIsGeneratingVideos(false);
+      setVideoGenerationTotal(0);
+      setVideoGenerationCurrent(0);
+    }
+  };
+
   const handleAddShot = async () => {
     if (!selectedEpisodeId) return;
     const maxSeq = shots && shots.length > 0 ? Math.max(...shots.map(s => s.sequence)) : 0;
@@ -378,7 +489,7 @@ export function StoryboardEditor({ projectId }: StoryboardEditorProps) {
               className="gap-2 bg-black hover:bg-black/80 text-white"
             >
               {isGenerating ? <Loader2 className="w-4 h-4 animate-spin" /> : <Wand2 className="w-4 h-4" />}
-              AI 智能生成 (P0-P2)
+              AI 智能生成分镜脚本 (P0-P2)
             </Button>
             <Button 
               onClick={handleGenerateAll} 
@@ -387,7 +498,16 @@ export function StoryboardEditor({ projectId }: StoryboardEditorProps) {
               className="gap-2 border-black/10"
             >
               {isGeneratingAll ? <Loader2 className="w-4 h-4 animate-spin" /> : <Sparkles className="w-4 h-4" />}
-              {isGeneratingAll ? `批量生成中 ${generationCurrent}/${generationTotal}` : '一键生成全部'}
+              {isGeneratingAll ? `批量生成中 ${generationCurrent}/${generationTotal}` : '一键生成全部分镜脚本'}
+            </Button>
+            <Button 
+              onClick={handleGenerateEpisodeVideos} 
+              disabled={isGeneratingVideos || !shots || shots.length === 0}
+              variant="outline"
+              className="gap-2 border-black/10"
+            >
+              {isGeneratingVideos ? <Loader2 className="w-4 h-4 animate-spin" /> : <Video className="w-4 h-4" />}
+              {isGeneratingVideos ? `发起视频生成 ${videoGenerationCurrent}/${videoGenerationTotal}` : '一键生成当前剧集视频'}
             </Button>
             <Button variant="outline" size="icon" onClick={handleAddShot}>
               <Plus className="w-4 h-4" />

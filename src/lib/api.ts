@@ -106,6 +106,9 @@ const toShot = (row: Record<string, unknown>): Shot => ({
   soundEffect: row.sound_effect as string | undefined,
   referenceImage: row.reference_image as string | undefined,
   videoPrompt: row.video_prompt as string | undefined,
+  videoUrl: row.video_url as string | undefined,
+  videoGenerationId: row.video_generation_id as string | undefined,
+  videoStatus: row.video_status as Shot['videoStatus'],
   characters: row.characters as any,
 });
 
@@ -376,6 +379,9 @@ export const api = {
          sound_effect: shot.soundEffect,
          reference_image: shot.referenceImage,
          video_prompt: shot.videoPrompt,
+         video_url: shot.videoUrl,
+         video_generation_id: shot.videoGenerationId,
+         video_status: shot.videoStatus,
          characters: shot.characters
        });
        if (error) throw error;
@@ -405,6 +411,9 @@ export const api = {
             sound_effect: s.soundEffect,
             reference_image: s.referenceImage,
             video_prompt: s.videoPrompt,
+            video_url: s.videoUrl,
+            video_generation_id: s.videoGenerationId,
+            video_status: s.videoStatus,
             characters: s.characters
         }));
         
@@ -429,6 +438,9 @@ export const api = {
         if (updates.soundEffect !== undefined) dbUpdates.sound_effect = updates.soundEffect;
         if (updates.referenceImage !== undefined) dbUpdates.reference_image = updates.referenceImage;
         if (updates.videoPrompt !== undefined) dbUpdates.video_prompt = updates.videoPrompt;
+        if (updates.videoUrl !== undefined) dbUpdates.video_url = updates.videoUrl;
+        if (updates.videoGenerationId !== undefined) dbUpdates.video_generation_id = updates.videoGenerationId;
+        if (updates.videoStatus !== undefined) dbUpdates.video_status = updates.videoStatus;
         if (updates.characters !== undefined) dbUpdates.characters = updates.characters;
 
         const { error } = await supabase.from('shots').update(dbUpdates).eq('id', id);
