@@ -64,8 +64,8 @@ export function loadAiApiConfig(): AIAPIConfig {
   const videoModel = process.env.AI_API_VIDEO_MODEL?.trim() || model;
   
   const timeout = parseInt(process.env.AI_API_TIMEOUT_MS || process.env.AI_API_TIMEOUT || '300000', 10); // 默认 5分钟 (300s -> 300000ms)
-  const maxConcurrency = parseInt(process.env.AI_API_MAX_CONCURRENCY || '1', 10);
-  const minIntervalMs = parseInt(process.env.AI_API_MIN_INTERVAL_MS || '1000', 10);
+  const maxConcurrency = parseInt(process.env.AI_API_MAX_CONCURRENCY || '50', 10);
+  const minIntervalMs = parseInt(process.env.AI_API_MIN_INTERVAL_MS || '0', 10);
 
   if (!baseUrl) throw new AIAPIError('环境变量 AI_API_BASE_URL 不能为空');
   if (!apiKey) throw new AIAPIError('环境变量 AI_API_KEY 不能为空');

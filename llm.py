@@ -78,7 +78,7 @@ def load_ai_api_config(prefix: str = "ai_api", config_path: str | None = None) -
     api_key = api_config.get("api_key", "").strip()
     model = api_config.get("model", "").strip()
     timeout = api_config.get("timeout", 300)
-    max_concurrency = api_config.get("max_concurrency", 1)
+    max_concurrency = api_config.get("max_concurrency", 50)
 
     if not base_url:
         raise AIAPIError(f"配置项 '{prefix}.base_url' 不能为空")
@@ -135,10 +135,10 @@ def _get_ai_api_interval_seconds(config: AIAPIConfig | None = None, prefix: str 
     config_data = _load_config_file()
 
     if prefix not in config_data:
-        return 1.0 / 1000.0  # 默认 1 毫秒
+        return 0.0  # 默认 0 毫秒
 
     api_config = config_data[prefix]
-    interval_ms = api_config.get("min_interval_ms", 1)
+    interval_ms = api_config.get("min_interval_ms", 0)
 
     if not isinstance(interval_ms, (int, float)):
         raise AIAPIError(f"配置项 '{prefix}.min_interval_ms' 必须是数字")

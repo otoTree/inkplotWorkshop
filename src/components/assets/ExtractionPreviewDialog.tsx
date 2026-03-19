@@ -109,8 +109,8 @@ export function ExtractionPreviewDialog({
 
     const indicesToGenerate = Array.from(selectedIndices).filter(i => !localAssets[i].imageUrl);
     
-    // Process in chunks of 3 to avoid overwhelming the browser/API
-    const chunkSize = 3;
+    // Process in chunks of 50 to utilize high concurrency API
+    const chunkSize = 50;
     for (let i = 0; i < indicesToGenerate.length; i += chunkSize) {
         const chunk = indicesToGenerate.slice(i, i + chunkSize);
         await Promise.all(chunk.map(index => generateImageForAsset(index)));

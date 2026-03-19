@@ -244,11 +244,10 @@ export function StoryboardEditor({ projectId }: StoryboardEditorProps) {
     setGenerationTotal(validEpisodes.length);
     setGenerationCurrent(0);
     let failedCount = 0;
+    let completedCount = 0;
 
     try {
-      for (let i = 0; i < validEpisodes.length; i++) {
-        const ep = validEpisodes[i];
-        setGenerationCurrent(i + 1);
+      const processEpisode = async (ep: Episode) => {
         try {
           const newShots = await generateShotsForEpisode(ep);
           if (ep.id === selectedEpisodeIdRef.current) {
@@ -257,7 +256,16 @@ export function StoryboardEditor({ projectId }: StoryboardEditorProps) {
         } catch (err) {
           console.error(`Failed to generate storyboard for episode ${ep.episodeNumber}:`, err);
           failedCount++;
+        } finally {
+          completedCount++;
+          setGenerationCurrent(completedCount);
         }
+      };
+
+      const chunkSize = 50;
+      for (let i = 0; i < validEpisodes.length; i += chunkSize) {
+        const chunk = validEpisodes.slice(i, i + chunkSize);
+        await Promise.all(chunk.map(ep => processEpisode(ep)));
       }
       
       if (failedCount > 0) {
@@ -296,12 +304,10 @@ export function StoryboardEditor({ projectId }: StoryboardEditorProps) {
     setVideoGenerationCurrent(0);
     let successCount = 0;
     let failedCount = 0;
+    let completedCount = 0;
 
     try {
-      for (let i = 0; i < shotsToGenerate.length; i++) {
-        const currentShot = shotsToGenerate[i];
-        setVideoGenerationCurrent(i + 1);
-
+      const processShot = async (currentShot: Shot) => {
         const fullPrompt = [
           currentShot.videoPrompt ? `[Video Prompt] ${currentShot.videoPrompt}` : '',
           currentShot.description ? `[Visual Description] ${currentShot.description}` : '',
@@ -316,7 +322,9 @@ export function StoryboardEditor({ projectId }: StoryboardEditorProps) {
         if (!fullPrompt.trim()) {
           console.warn(`镜头 ${currentShot.sequence} 缺乏生成视频的提示词，跳过。`);
           failedCount++;
-          continue;
+          completedCount++;
+          setVideoGenerationCurrent(completedCount);
+          return;
         }
 
         const relatedImages = assets
@@ -368,7 +376,17 @@ export function StoryboardEditor({ projectId }: StoryboardEditorProps) {
         } catch (error) {
           console.error(`镜头 ${currentShot.sequence} 视频生成失败:`, error);
           failedCount++;
+        } finally {
+          completedCount++;
+          setVideoGenerationCurrent(completedCount);
         }
+      };
+
+      // Process in chunks of 50 for high concurrency
+      const chunkSize = 50;
+      for (let i = 0; i < shotsToGenerate.length; i += chunkSize) {
+        const chunk = shotsToGenerate.slice(i, i + chunkSize);
+        await Promise.all(chunk.map(shot => processShot(shot)));
       }
       
       alert(`一键生成当前剧集视频发起完成。\n成功发起: ${successCount}\n失败/跳过: ${failedCount}`);

@@ -82,9 +82,9 @@ export const getAIAPIConfig = () => {
   );
   const maxConcurrency = Math.max(
     1,
-    Math.min(50, Math.round(getNumberFromEnv(process.env.AI_API_MAX_CONCURRENCY, 1)))
+    Math.min(50, Math.round(getNumberFromEnv(process.env.AI_API_MAX_CONCURRENCY, 50)))
   );
-  const minIntervalMs = Math.max(0, getNumberFromEnv(process.env.AI_API_MIN_INTERVAL_MS, 1));
+  const minIntervalMs = Math.max(0, getNumberFromEnv(process.env.AI_API_MIN_INTERVAL_MS, 0));
 
   if (!baseUrl || !apiKey || !model) {
     throw new AIAPIError('AI API 配置不完整', 500);

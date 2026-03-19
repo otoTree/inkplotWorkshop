@@ -145,11 +145,9 @@ export function AssetGallery({ projectId }: { projectId: string }) {
 
       // Sort episodes by number to ensure logical processing order
       const sortedEpisodes = episodes.sort((a, b) => a.episodeNumber - b.episodeNumber);
+      let completedCount = 0;
 
-      for (let i = 0; i < sortedEpisodes.length; i++) {
-        const episode = sortedEpisodes[i];
-        setLoadingMessage(`正在分析第 ${episode.episodeNumber} 集 (${i + 1}/${sortedEpisodes.length})...`);
-        
+      const processEpisode = async (episode: typeof sortedEpisodes[0]) => {
         const scriptContent = `Episode ${episode.episodeNumber}: ${episode.title}\n${episode.content}`;
         
         try {
@@ -161,7 +159,7 @@ export function AssetGallery({ projectId }: { projectId: string }) {
           
           if (!response.ok) {
             console.warn(`Failed to extract from episode ${episode.episodeNumber}`);
-            continue; 
+            return; 
           }
           
           const data = await response.json() as { assets?: Partial<Asset>[] };
@@ -181,7 +179,16 @@ export function AssetGallery({ projectId }: { projectId: string }) {
           }
         } catch (err) {
           console.error(`Error processing episode ${episode.episodeNumber}:`, err);
+        } finally {
+          completedCount++;
+          setLoadingMessage(`正在分析... (${completedCount}/${sortedEpisodes.length})`);
         }
+      };
+
+      const chunkSize = 50;
+      for (let i = 0; i < sortedEpisodes.length; i += chunkSize) {
+        const chunk = sortedEpisodes.slice(i, i + chunkSize);
+        await Promise.all(chunk.map(ep => processEpisode(ep)));
       }
       
       if (allFoundAssets.length === 0) {
@@ -344,8 +351,8 @@ export function AssetGallery({ projectId }: { projectId: string }) {
         }
     };
 
-    // Chunk execution
-    const chunkSize = 3;
+    // Chunk execution with high concurrency (50)
+    const chunkSize = 50;
     for (let i = 0; i < assetsToGenerate.length; i += chunkSize) {
         const chunk = assetsToGenerate.slice(i, i + chunkSize);
         await Promise.all(chunk.map(a => generateOne(a)));

@@ -474,33 +474,35 @@ export function ScriptEditor({ projectId }: { projectId: string }) {
     let nextEpisodes = episodes;
 
     try {
-      for (let index = 0; index < episodesWithSummary.length; index += 1) {
-        const targetEpisode = episodesWithSummary[index];
+      let completedCount = 0;
+      const processEpisode = async (targetEpisode: Episode) => {
         try {
           const content = await generateEpisodeScriptContent(targetEpisode);
           const lastEdited = Date.now();
           await api.episodes.update(targetEpisode.id, { content, lastEdited });
-          nextEpisodes = nextEpisodes.map((ep) =>
-            ep.id === targetEpisode.id ? { ...ep, content, lastEdited } : ep
+          
+          setEpisodes((prev) => 
+            prev.map((ep) => ep.id === targetEpisode.id ? { ...ep, content, lastEdited } : ep)
           );
+          
           if (currentEpisode?.id === targetEpisode.id) {
             editor?.commands.setContent(content);
+            setCurrentEpisode(prev => prev ? { ...prev, content, lastEdited } : null);
           }
         } catch (error) {
           failedCount += 1;
           console.error(`Failed to generate episode ${targetEpisode.episodeNumber}`, error);
         } finally {
-          setScriptGenerationCurrent(index + 1);
+          completedCount += 1;
+          setScriptGenerationCurrent(completedCount);
           setScriptGenerationFailed(failedCount);
         }
-      }
+      };
 
-      setEpisodes(nextEpisodes);
-      if (currentEpisode) {
-        const refreshedCurrentEpisode = nextEpisodes.find((ep) => ep.id === currentEpisode.id);
-        if (refreshedCurrentEpisode) {
-          setCurrentEpisode(refreshedCurrentEpisode);
-        }
+      const chunkSize = 50;
+      for (let i = 0; i < episodesWithSummary.length; i += chunkSize) {
+        const chunk = episodesWithSummary.slice(i, i + chunkSize);
+        await Promise.all(chunk.map(ep => processEpisode(ep)));
       }
 
       if (failedCount > 0) {
