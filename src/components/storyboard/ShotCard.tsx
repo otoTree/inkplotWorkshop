@@ -495,31 +495,6 @@ ${current.videoPrompt || 'None'}
                     {current.videoPrompt || <span className="text-gray-300 italic">No video prompt generated</span>}
                   </p>
                 )}
-                
-                {/* Video Display Area */}
-                {(current.videoStatus || current.videoUrl) && (
-                  <div className="mt-2 p-2 bg-gray-50/50 rounded-lg border border-gray-100 flex flex-col items-center justify-center min-h-[120px] relative overflow-hidden group/video">
-                    {current.videoStatus === 'processing' && (
-                      <div className="flex flex-col items-center gap-2 text-indigo-500/80">
-                        <Loader2 className="w-6 h-6 animate-spin" />
-                        <span className="text-xs">视频生成中，请耐心等待...</span>
-                      </div>
-                    )}
-                    {current.videoStatus === 'failed' && (
-                      <div className="flex flex-col items-center gap-2 text-red-400">
-                        <span className="text-xs">视频生成失败</span>
-                        <Button variant="outline" size="sm" className="h-6 text-[10px]" onClick={handleGenerateVideo}>重试</Button>
-                      </div>
-                    )}
-                    {current.videoStatus === 'completed' && current.videoUrl && (
-                      <video 
-                        src={current.videoUrl} 
-                        controls 
-                        className="w-full max-h-[240px] object-contain rounded bg-black/5"
-                      />
-                    )}
-                  </div>
-                )}
               </div>
             </div>
 
@@ -562,13 +537,53 @@ ${current.videoPrompt || 'None'}
 
           </div>
 
-          {/* Asset Panel */}
-          <div className="col-span-4 bg-gray-50/50 p-4 flex flex-col gap-4">
-            <div className="flex items-center justify-between">
-              <label className="text-[10px] uppercase tracking-widest text-gray-400 font-bold">关联资产</label>
+          {/* Right Panel: Video & Assets */}
+          <div className="col-span-4 bg-gray-50/50 flex flex-col border-l border-gray-100">
+            {/* Video Preview Area */}
+            {(current.videoStatus || current.videoUrl) && (
+              <div className="p-4 border-b border-gray-100 bg-white">
+                <div className="flex items-center justify-between mb-3">
+                  <label className="text-[10px] uppercase tracking-widest text-gray-400 font-bold">视频预览</label>
+                  {current.videoStatus === 'completed' && (
+                    <Badge variant="secondary" className="text-[9px] bg-green-50 text-green-600 border-green-200">已生成</Badge>
+                  )}
+                </div>
+                <div className="w-full bg-gray-100/50 rounded-lg border border-gray-200 flex flex-col items-center justify-center min-h-[240px] relative overflow-hidden group/video shadow-inner">
+                  {current.videoStatus === 'processing' && (
+                    <div className="flex flex-col items-center gap-3 text-indigo-500/80 py-8">
+                      <Loader2 className="w-8 h-8 animate-spin" />
+                      <span className="text-xs font-medium">视频生成中...</span>
+                    </div>
+                  )}
+                  {current.videoStatus === 'failed' && (
+                    <div className="flex flex-col items-center gap-3 text-red-400 p-8 text-center">
+                      <div className="w-10 h-10 rounded-full bg-red-50 flex items-center justify-center mb-1">
+                        <span className="text-xl">⚠️</span>
+                      </div>
+                      <span className="text-xs font-medium">视频生成失败</span>
+                      <Button variant="outline" size="sm" className="h-7 text-xs bg-white" onClick={handleGenerateVideo}>
+                        重新生成
+                      </Button>
+                    </div>
+                  )}
+                  {current.videoStatus === 'completed' && current.videoUrl && (
+                    <video 
+                      src={current.videoUrl} 
+                      controls 
+                      className="w-full max-h-[360px] object-contain bg-black/5"
+                    />
+                  )}
+                </div>
+              </div>
+            )}
+
+            {/* Asset Panel */}
+            <div className="p-4 flex flex-col gap-4 flex-1">
+              <div className="flex items-center justify-between">
+                <label className="text-[10px] uppercase tracking-widest text-gray-400 font-bold">关联资产</label>
               
-              <Dialog>
-                <DialogTrigger asChild>
+                <Dialog>
+                  <DialogTrigger asChild>
                   <Button variant="ghost" size="sm" className="exclude-from-export h-6 w-6 p-0 rounded-full hover:bg-gray-200">
                     <Plus className="w-3 h-3" />
                   </Button>
@@ -610,9 +625,9 @@ ${current.videoPrompt || 'None'}
                   </ScrollArea>
                 </DialogContent>
               </Dialog>
-            </div>
+              </div>
 
-            <div className="space-y-2">
+              <div className="space-y-2">
               {current.relatedAssetIds.map(id => {
                 const asset = assets.find(a => a.id === id);
                 if (!asset) return null;
@@ -645,7 +660,8 @@ ${current.videoPrompt || 'None'}
             </div>
           </div>
         </div>
-      </Card>
+      </div>
+    </Card>
 
       {isDetailOpen && (
         <ShotDetailDialog 

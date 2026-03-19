@@ -477,9 +477,14 @@ export function StoryboardEditor({ projectId }: StoryboardEditorProps) {
         <div className="h-16 border-b flex items-center justify-between px-6 bg-white shrink-0">
           <div className="flex items-center gap-4">
             <h1 className="font-serif text-lg">分镜脚本</h1>
-            <Badge variant="outline" className="font-mono text-xs text-gray-500">
-              {shots?.length || 0} 个镜头
-            </Badge>
+            <div className="flex gap-2">
+              <Badge variant="outline" className="font-mono text-xs text-gray-500">
+                {shots?.length || 0} 个镜头
+              </Badge>
+              <Badge variant="outline" className="font-mono text-xs text-gray-500">
+                共 {shots?.reduce((sum, shot) => sum + (shot.duration || 0), 0) || 0} 秒
+              </Badge>
+            </div>
           </div>
           
           <div className="flex items-center gap-2">

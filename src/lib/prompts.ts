@@ -329,7 +329,7 @@ export const getStoryboardGenerationPrompt = (scriptContent: string, existingAss
 1. **State Change is the Minimal Unit**: Not "what happened", but "what the character became after it happened".
 2. **Verbs > Nouns**: Action > Scene > Style.
 3. **Language Requirement**: All content in the JSON output MUST be in ${isEnglish ? 'English' : 'the target language (' + language + ')'}.
-4. **Flexible Duration (3s-5s)**: Each shot should typically last between 3s to 5s. It must capture a specific action, reaction, or dialogue beat.
+4. **Flexible Duration (4s-8s)**: Each shot should typically last between 4s to 8s. It must capture a specific action, reaction, or dialogue beat.
 5. **Mandatory Visual Continuity**: Shot transitions MUST have clear visual logic (e.g., eyeline match, action continuity, reaction shot). No illogical hard cuts.
 6. **Asset Coverage & Matching**: Each shot MUST list all involved **characters and locations**. If an asset exists in the provided list, use its exact name (case-insensitive match). **CRITICAL: EVERY single shot MUST have at least one explicit scene/location assigned to it in \`sceneLabel\` and \`suggestedAssets.locations\`. Even for close-ups or continuous action, you MUST explicitly state the scene/location. Never leave the scene empty.**
 
@@ -354,7 +354,7 @@ When generating the \`videoPrompt\`, assume the AI video model has zero context.
 Analyze the provided script and generate a storyboard sequence.
 **IMPORTANT**: 
 1. **Detail Level**: You MUST generate extremely detailed descriptions and Video Prompts as specified above. Do not summarize or be concise. The more granular detail about lighting, physics, and camera movement, the better.
-2. **Shot Breakdown Strategy**: There is NO limit on the maximum number of shots. Break down actions and dialogue into as many short shots (3-5s each) as necessary to perfectly capture the pacing. Do not over-compress. Ensure the total episode duration (across all chunks) exceeds 70 seconds.
+2. **Shot Breakdown Strategy**: There is NO limit on the maximum number of shots. Break down actions and dialogue into as many short shots (4-8s each) as necessary to perfectly capture the pacing. Do not over-compress. Ensure the total episode duration (across all chunks) exceeds 70 seconds.
 3. **Mandatory Scene Requirement**: EVERY shot MUST have a non-empty \`sceneLabel\` and at least one item in \`suggestedAssets.locations\`. Do not leave the scene blank under any circumstances, even if it is a continuation of the previous shot.
 
 **Script Content**:
@@ -379,7 +379,7 @@ ${JSON.stringify(existingAssets.map(a => ({ id: a.id, name: a.name, type: a.type
       "dialogue": "Character Name: Content (or Voiceover: Content)",
       "camera": "Close-up / Pan Right / ...",
       "size": "Medium Shot / Close-up / Long Shot",
-      "duration": 4, // Estimated duration in seconds (3-5s flexible)
+      "duration": 5, // Estimated duration in seconds (4-8s flexible)
       "videoPrompt": "Detailed English prompt for video generation. MUST emphasize cinematic realism, photorealistic textures, and professional cinematography. Strictly avoid 3D, game CG, or anime styles. MUST include camera movement (e.g. 'Explosive fast push-in'), physical dynamics (muscle contraction, fluid/particle physics), action impact, and environmental reactions. Be extremely specific.",
       "suggestedAssetNames": ["Char Name", "Location Name"],
       "characters": [
