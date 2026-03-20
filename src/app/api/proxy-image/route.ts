@@ -25,9 +25,9 @@ export async function GET(req: NextRequest) {
     }
 
     const contentType = response.headers.get('content-type') || 'application/octet-stream';
-    const arrayBuffer = await response.arrayBuffer();
 
-    return new NextResponse(arrayBuffer, {
+    // 核心优化：直接返回流 (ReadableStream) 而不是读取到内存中 (arrayBuffer)
+    return new NextResponse(response.body, {
       headers: {
         'Content-Type': contentType,
         'Cache-Control': 'public, max-age=3600',

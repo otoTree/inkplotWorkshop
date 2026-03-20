@@ -8,6 +8,12 @@ import { Progress } from '@/components/ui/progress';
 import { Download, Loader2 } from 'lucide-react';
 import { useState } from 'react';
 
+interface VirtualFileSystem {
+  saveFile: (path: string[], filename: string, data: Blob | string) => Promise<void>;
+  streamFile: (path: string[], filenameWithoutExt: string, url: string, defaultExt: string) => Promise<string>;
+  generateZipAndDownload: (folderName: string) => Promise<void>;
+}
+
 export function ExportPanel({ projectId }: { projectId: string }) {
   const [isExporting, setIsExporting] = useState(false);
   const [exportProgress, setExportProgress] = useState(0);
@@ -32,24 +38,17 @@ export function ExportPanel({ projectId }: { projectId: string }) {
       const assets = await api.assets.list(projectId);
       
       setExportStatus('正在获取分镜数据...');
-      // Fetch shots for all episodes
       const shotsArrays = await Promise.all(episodes.map(ep => api.shots.list(ep.id)));
       const shots = shotsArrays.flat();
 
       const characterStyle = project.characterArtStyle || project.artStyle || 'N/A';
       const sceneStyle = project.sceneArtStyle || project.artStyle || 'N/A';
 
-      const zip = new JSZip();
-      // Allow Chinese characters and other safe characters, replace only truly unsafe ones
       const folderName = project.title.replace(/[<>:"/\\|?*]/g, '_');
-      const root = zip.folder(folderName);
 
-      if (!root) throw new Error('创建 ZIP 文件夹失败');
-
-      // Helper to fetch blob from URL
+      // Helper to fetch blob from URL (for things we need in memory, like cover generation)
       const fetchBlob = async (url: string) => {
         try {
-            // Use proxy for remote URLs to avoid CORS issues
             const fetchUrl = url.startsWith('http') 
               ? `/api/proxy-image?url=${encodeURIComponent(url)}`
               : url;
@@ -62,6 +61,123 @@ export function ExportPanel({ projectId }: { projectId: string }) {
         }
       };
 
+      // Set up Virtual File System (Native FS API or JSZip fallback)
+      let vfs: VirtualFileSystem | null = null;
+      let isNativeFs = false;
+
+      if ('showDirectoryPicker' in window) {
+        try {
+          setExportStatus('请选择保存导出的文件夹...');
+          // @ts-ignore
+          const baseDirHandle = await window.showDirectoryPicker({ mode: 'readwrite' });
+          const rootDirHandle = await baseDirHandle.getDirectoryHandle(folderName, { create: true });
+          
+          const getDir = async (path: string[]) => {
+            let current = rootDirHandle;
+            for (const p of path) {
+              current = await current.getDirectoryHandle(p, { create: true });
+            }
+            return current;
+          };
+
+          vfs = {
+            saveFile: async (path, filename, data) => {
+              const dir = await getDir(path);
+              const fileHandle = await dir.getFileHandle(filename, { create: true });
+              const writable = await fileHandle.createWritable();
+              await writable.write(data);
+              await writable.close();
+            },
+            streamFile: async (path, filenameWithoutExt, url, defaultExt) => {
+              const dir = await getDir(path);
+              const fetchUrl = url.startsWith('http') 
+                ? `/api/proxy-image?url=${encodeURIComponent(url)}`
+                : url;
+              const res = await fetch(fetchUrl);
+              if (!res.ok) throw new Error(`Fetch failed: ${res.statusText}`);
+              
+              const contentType = res.headers.get('content-type');
+              let ext = defaultExt;
+              if (contentType) {
+                  const typeStr = contentType.split('/')[1];
+                  if (typeStr && typeStr !== 'octet-stream') {
+                      ext = typeStr === 'jpeg' ? 'jpg' : typeStr;
+                  }
+              }
+              const finalFilename = `${filenameWithoutExt}.${ext}`;
+
+              const fileHandle = await dir.getFileHandle(finalFilename, { create: true });
+              const writable = await fileHandle.createWritable();
+              if (res.body) {
+                await res.body.pipeTo(writable);
+              } else {
+                const blob = await res.blob();
+                await writable.write(blob);
+                await writable.close();
+              }
+              return finalFilename;
+            },
+            generateZipAndDownload: async () => {
+              // No zip generation needed for native FS
+            }
+          };
+          isNativeFs = true;
+        } catch (err: any) {
+          if (err.name === 'AbortError') {
+             throw err; // Stop completely if user clicked cancel
+          }
+          console.log('FS API failed, fallback to ZIP', err);
+        }
+      }
+
+      // Fallback to JSZip if Native FS wasn't setup
+      if (!vfs) {
+        const zip = new JSZip();
+        const root = zip.folder(folderName)!;
+        
+        const getFolder = (path: string[]) => {
+          let current = root;
+          for (const p of path) {
+            current = current.folder(p)!;
+          }
+          return current;
+        };
+
+        vfs = {
+          saveFile: async (path, filename, data) => {
+            getFolder(path).file(filename, data);
+          },
+          streamFile: async (path, filenameWithoutExt, url, defaultExt) => {
+            const fetchUrl = url.startsWith('http') 
+              ? `/api/proxy-image?url=${encodeURIComponent(url)}`
+              : url;
+            const res = await fetch(fetchUrl);
+            if (!res.ok) throw new Error(`Fetch failed: ${res.statusText}`);
+            const contentType = res.headers.get('content-type');
+            let ext = defaultExt;
+            if (contentType) {
+                const typeStr = contentType.split('/')[1];
+                if (typeStr && typeStr !== 'octet-stream') {
+                    ext = typeStr === 'jpeg' ? 'jpg' : typeStr;
+                }
+            }
+            const blob = await res.blob();
+            const finalFilename = `${filenameWithoutExt}.${ext}`;
+            getFolder(path).file(finalFilename, blob);
+            return finalFilename;
+          },
+          generateZipAndDownload: async (name) => {
+            const content = await zip.generateAsync({ type: 'blob' });
+            const url = URL.createObjectURL(content);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `${name}.zip`;
+            a.click();
+            URL.revokeObjectURL(url);
+          }
+        };
+      }
+
       // 0. Project Cover
       setExportStatus('正在打包封面图片...');
       let coverFilename = '';
@@ -73,14 +189,12 @@ export function ExportPanel({ projectId }: { projectId: string }) {
             const ext = blob.type.split('/')[1] || 'jpg';
             const safeExt = ext === 'jpeg' ? 'jpg' : ext;
             coverFilename = `cover.${safeExt}`;
-            root.file(coverFilename, blob);
+            await vfs.saveFile([], coverFilename, blob);
         }
       }
 
       if (baseCoverBlob && episodes.length > 0) {
         setExportStatus('正在生成分集封面...');
-        const coversFolder = root.folder('covers');
-        
         const generateEpisodeCover = async (baseBlob: Blob, episodeNumber: number | string): Promise<Blob | null> => {
             return new Promise((resolve) => {
               const img = new Image();
@@ -104,17 +218,13 @@ export function ExportPanel({ projectId }: { projectId: string }) {
                 const padding = fontSize;
                 const textWidth = ctx.measureText(text).width;
                 
-                // bottom right corner
                 const x = img.width - textWidth - padding;
                 const y = img.height - padding;
                 
-                // text
                 ctx.fillStyle = '#FFFFFF';
                 ctx.fillText(text, x, y);
                 
-                canvas.toBlob((blob) => {
-                  resolve(blob);
-                }, baseBlob.type || 'image/jpeg', 0.9);
+                canvas.toBlob((blob) => resolve(blob), baseBlob.type || 'image/jpeg', 0.9);
               };
               img.onerror = () => resolve(null);
               img.src = URL.createObjectURL(baseBlob);
@@ -127,7 +237,7 @@ export function ExportPanel({ projectId }: { projectId: string }) {
             if (epBlob) {
                 const ext = baseCoverBlob.type.split('/')[1] || 'jpg';
                 const safeExt = ext === 'jpeg' ? 'jpg' : ext;
-                coversFolder?.file(`episode_${ep.episodeNumber}_cover.${safeExt}`, epBlob);
+                await vfs.saveFile(['covers'], `episode_${ep.episodeNumber}_cover.${safeExt}`, epBlob);
             }
         }
       }
@@ -135,51 +245,32 @@ export function ExportPanel({ projectId }: { projectId: string }) {
 
       // 1. Scripts
       setExportStatus('正在生成剧本文档...');
-      const scriptsFolder = root.folder('scripts');
-      episodes.forEach(episode => {
-        scriptsFolder?.file(`episode_${episode.episodeNumber}.md`, episode.content);
-      });
+      for (const episode of episodes) {
+        await vfs.saveFile(['scripts'], `episode_${episode.episodeNumber}.md`, episode.content);
+      }
       setExportProgress(15);
 
       // 2. Assets
-      const assetsFolder = root.folder('assets');
-      const charFolder = assetsFolder?.folder('characters');
-      const locFolder = assetsFolder?.folder('locations');
-
-      // Map to store asset filenames for linking in markdown
       const assetFilenames: Record<string, string> = {};
-
       const totalAssets = assets.filter(a => a.imageUrl).length;
       let completedAssets = 0;
 
       for (const asset of assets) {
         if (asset.imageUrl) {
             setExportStatus(`正在打包设定图 (${completedAssets + 1}/${totalAssets})...`);
-            const blob = await fetchBlob(asset.imageUrl);
-            if (blob) {
-                const ext = blob.type.split('/')[1] || 'png';
-                const safeExt = ext === 'jpeg' ? 'jpg' : ext;
-                const safeName = asset.name.replace(/[<>:"/\\|?*]/g, '_');
-                const filename = `${safeName}.${safeExt}`;
-                
-                if (asset.type === 'character') {
-                    charFolder?.file(filename, blob);
-                    assetFilenames[asset.id] = `../assets/characters/${filename}`;
-                } else if (asset.type === 'location') {
-                    locFolder?.file(filename, blob);
-                    assetFilenames[asset.id] = `../assets/locations/${filename}`;
-                }
-            }
+            
+            const safeName = asset.name.replace(/[<>:"/\\|?*]/g, '_');
+            const folderPath = asset.type === 'character' ? ['assets', 'characters'] : ['assets', 'locations'];
+            
+            const finalName = await vfs.streamFile(folderPath, safeName, asset.imageUrl, 'png');
+            assetFilenames[asset.id] = `../assets/${asset.type === 'character' ? 'characters' : 'locations'}/${finalName}`;
+            
             completedAssets++;
-            setExportProgress(15 + Math.floor((completedAssets / totalAssets) * 20)); // 15% to 35%
+            setExportProgress(15 + Math.floor((completedAssets / totalAssets) * 20));
         }
       }
       
       // 3. Videos & Reference Images
-      const videosFolder = root.folder('videos');
-      const storyboardsFolder = root.folder('storyboards');
-      const refImagesFolder = storyboardsFolder?.folder('images');
-      
       const videoFilenames: Record<string, string> = {};
       const refImageFilenames: Record<string, string> = {};
 
@@ -192,36 +283,25 @@ export function ExportPanel({ projectId }: { projectId: string }) {
         const epNum = ep ? ep.episodeNumber : 'X';
         const shotSeq = shot.sequence.toString().padStart(3, '0');
 
-        // Fetch Reference Image
         if (shot.referenceImage) {
-            const blob = await fetchBlob(shot.referenceImage);
-            if (blob) {
-                const ext = blob.type.split('/')[1] || 'jpg';
-                const safeExt = ext === 'jpeg' ? 'jpg' : ext;
-                const filename = `ep${epNum}_shot${shotSeq}_ref.${safeExt}`;
-                refImagesFolder?.file(filename, blob);
-                refImageFilenames[shot.id] = `./images/${filename}`;
-            }
+            const nameBase = `ep${epNum}_shot${shotSeq}_ref`;
+            const finalName = await vfs.streamFile(['storyboards', 'images'], nameBase, shot.referenceImage, 'jpg');
+            refImageFilenames[shot.id] = `./images/${finalName}`;
         }
 
-        // Fetch Video
         if (shot.videoUrl && shot.videoStatus === 'completed') {
-            const blob = await fetchBlob(shot.videoUrl);
-            if (blob) {
-                // assume mp4 for videos
-                const filename = `ep${epNum}_shot${shotSeq}.mp4`;
-                videosFolder?.file(filename, blob);
-                videoFilenames[shot.id] = `../videos/${filename}`;
-            }
+            const nameBase = `ep${epNum}_shot${shotSeq}`;
+            const finalName = await vfs.streamFile(['videos', `episode_${epNum}`], nameBase, shot.videoUrl, 'mp4');
+            videoFilenames[shot.id] = `../videos/episode_${epNum}/${finalName}`;
         }
         
         completedShots++;
-        setExportProgress(35 + Math.floor((completedShots / totalShots) * 50)); // 35% to 85%
+        setExportProgress(35 + Math.floor((completedShots / totalShots) * 50));
       }
 
       // 4. Storyboards Markdown
       setExportStatus('正在生成分镜脚本...');
-      episodes.forEach(episode => {
+      for (const episode of episodes) {
         const episodeShots = shots.filter(s => s.episodeId === episode.id).sort((a, b) => a.sequence - b.sequence);
         if (episodeShots.length > 0) {
             let content = `# Episode ${episode.episodeNumber}: ${episode.title}\n\n`;
@@ -248,10 +328,7 @@ export function ExportPanel({ projectId }: { projectId: string }) {
                    content += `\n### Related Assets\n`;
                    const relatedAssets = assets.filter(a => shot.relatedAssetIds.includes(a.id));
                    
-                   // List names
                    content += `- **Assets List**: ${relatedAssets.map(a => a.name).join(', ')}\n\n`;
-                   
-                   // Show images
                    content += `| Asset | Image |\n| --- | --- |\n`;
                    relatedAssets.forEach(a => {
                         const imagePath = assetFilenames[a.id];
@@ -278,9 +355,9 @@ export function ExportPanel({ projectId }: { projectId: string }) {
                 
                 content += `\n---\n\n`;
             });
-            storyboardsFolder?.file(`episode_${episode.episodeNumber}_storyboard.md`, content);
+            await vfs.saveFile(['storyboards'], `episode_${episode.episodeNumber}_storyboard.md`, content);
         }
-      });
+      }
 
       // 5. Meta JSON
       const meta = {
@@ -292,7 +369,7 @@ export function ExportPanel({ projectId }: { projectId: string }) {
         })),
         generatedAt: new Date().toISOString()
       };
-      root.file('meta.json', JSON.stringify(meta, null, 2));
+      await vfs.saveFile([], 'meta.json', JSON.stringify(meta, null, 2));
 
       // 6. README
       let readme = `# ${project.title}\n\n`;
@@ -308,33 +385,36 @@ export function ExportPanel({ projectId }: { projectId: string }) {
       readme += `- scripts/: 剧本文件 (Markdown 格式)\n`;
       readme += `- storyboards/: 分镜脚本 (Markdown 格式) 及其参考图\n`;
       readme += `- assets/: 角色和场景设定图\n`;
-      readme += `- videos/: AI 生成的分镜视频文件\n`;
+      readme += `- videos/: AI 生成的分镜视频文件 (按集数分类)\n`;
       readme += `- meta.json: 完整项目数据（包含分镜）\n\n`;
       readme += `Generated by Inkplot Workshop\n`;
       
-      root.file('README.md', readme);
+      await vfs.saveFile([], 'README.md', readme);
 
-      // Generate ZIP
-      setExportStatus('正在生成 ZIP 压缩包...');
-      setExportProgress(90);
-      const content = await zip.generateAsync({ type: 'blob' });
-      setExportProgress(100);
-      setExportStatus('准备下载...');
+      // Generate ZIP if needed
+      if (!isNativeFs) {
+        setExportStatus('正在生成 ZIP 压缩包...');
+        setExportProgress(90);
+      }
       
-      const url = URL.createObjectURL(content);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = `${folderName}.zip`;
-      a.click();
-      URL.revokeObjectURL(url);
+      await vfs.generateZipAndDownload(folderName);
+      
+      setExportProgress(100);
+      setExportStatus('导出完成！');
 
-    } catch (error) {
-      console.error('Export failed:', error);
-      alert('导出失败，请检查控制台详情。');
+    } catch (error: any) {
+      if (error.name === 'AbortError') {
+        console.log('User aborted directory picker');
+      } else {
+        console.error('Export failed:', error);
+        alert('导出失败，请检查控制台详情。');
+      }
     } finally {
-      setIsExporting(false);
-      setExportStatus('');
-      setExportProgress(0);
+      setTimeout(() => {
+        setIsExporting(false);
+        setExportStatus('');
+        setExportProgress(0);
+      }, 2000);
     }
   };
 
@@ -344,7 +424,7 @@ export function ExportPanel({ projectId }: { projectId: string }) {
         <CardHeader>
           <CardTitle>导出项目</CardTitle>
           <CardDescription>
-            将整个项目导出为 ZIP 压缩包，包含剧本、设定图、视频和元数据。
+            将整个项目导出为本地文件夹或 ZIP 压缩包，包含剧本、设定图、视频和元数据。
           </CardDescription>
         </CardHeader>
         <CardContent className="flex flex-col gap-6 py-8">
@@ -366,10 +446,13 @@ export function ExportPanel({ projectId }: { projectId: string }) {
                 ) : (
                     <>
                         <Download className="mr-2 h-4 w-4" />
-                        下载 ZIP
+                        导出项目
                     </>
                 )}
             </Button>
+            <p className="text-xs text-center text-black/40">
+              提示：推荐使用 Chrome 或 Edge，可直接流式保存到本地文件夹。不支持的浏览器将退退回 ZIP 导出。
+            </p>
         </CardContent>
       </Card>
     </div>
