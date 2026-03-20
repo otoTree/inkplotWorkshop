@@ -354,7 +354,7 @@ When generating the \`videoPrompt\`, assume the AI video model has zero context.
 Analyze the provided script and generate a storyboard sequence.
 **IMPORTANT**: 
 1. **Detail Level**: You MUST generate extremely detailed descriptions and Video Prompts as specified above. Do not summarize or be concise. The more granular detail about lighting, physics, and camera movement, the better.
-2. **Shot Breakdown Strategy**: There is NO limit on the maximum number of shots. Break down actions and dialogue into as many short shots (4-6s each) as necessary to perfectly capture the pacing. Do not over-compress. Ensure the total episode duration (across all chunks) exceeds 70 seconds.
+2. **Shot Breakdown Strategy**: You MUST generate AT LEAST 15 shots. There is NO limit on the maximum number of shots. Break down actions and dialogue into as many short shots (4-6s each) as necessary to perfectly capture the pacing. Do not over-compress. Ensure the total episode duration (across all chunks) exceeds 70 seconds.
 3. **Mandatory Scene Requirement**: EVERY shot MUST have a non-empty \`sceneLabel\` and at least one item in \`suggestedAssets.locations\`. Do not leave the scene blank under any circumstances, even if it is a continuation of the previous shot.
 
 **Script Content**:
