@@ -96,7 +96,8 @@ export function ExportPanel({ projectId }: { projectId: string }) {
                 
                 ctx.drawImage(img, 0, 0);
                 
-                const text = `${episodeNumber}`;
+                const paddedNumber = String(episodeNumber).padStart(2, '0');
+                const text = `${paddedNumber}`;
                 const fontSize = Math.max(32, Math.floor(img.height / 15));
                 ctx.font = `bold ${fontSize}px sans-serif`;
                 
@@ -106,17 +107,6 @@ export function ExportPanel({ projectId }: { projectId: string }) {
                 // bottom right corner
                 const x = img.width - textWidth - padding;
                 const y = img.height - padding;
-                
-                // background
-                ctx.fillStyle = 'rgba(0, 0, 0, 0.6)';
-                const bgPadding = fontSize * 0.4;
-                ctx.beginPath();
-                if (ctx.roundRect) {
-                  ctx.roundRect(x - bgPadding, y - fontSize + bgPadding/2, textWidth + bgPadding * 2, fontSize + bgPadding, fontSize * 0.3);
-                } else {
-                  ctx.rect(x - bgPadding, y - fontSize + bgPadding/2, textWidth + bgPadding * 2, fontSize + bgPadding);
-                }
-                ctx.fill();
                 
                 // text
                 ctx.fillStyle = '#FFFFFF';
