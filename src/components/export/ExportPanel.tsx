@@ -210,7 +210,7 @@ export function ExportPanel({ projectId }: { projectId: string }) {
                 
                 ctx.drawImage(img, 0, 0);
                 
-                const paddedNumber = String(episodeNumber).padStart(2, '0');
+                const paddedNumber = `EP ${String(episodeNumber).padStart(2, '0')}`;
                 const text = `${paddedNumber}`;
                 const fontSize = Math.max(32, Math.floor(img.height / 15));
                 ctx.font = `bold ${fontSize}px sans-serif`;
