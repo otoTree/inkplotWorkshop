@@ -13,7 +13,7 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    const { prompt, duration = 15, metadata } = await req.json();
+    const { prompt, duration = 15, metadata, jobId } = await req.json();
     if (!prompt || typeof prompt !== 'string') {
       return NextResponse.json({ error: 'Missing prompt' }, { status: 400 });
     }
@@ -23,6 +23,8 @@ export async function POST(req: Request) {
       prompt,
       Number(duration) || 15,
       metadata || undefined,
+      undefined,
+      jobId
     );
     return NextResponse.json(result);
   } catch (error) {

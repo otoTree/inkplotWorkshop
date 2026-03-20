@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
-import { AIAPIError, getAIVideoStatus } from '@/lib/ai-server';
+import { AIAPIError, getAIVideoStatus, completeVideoTask } from '@/lib/ai-server';
 
 export const maxDuration = 120;
 
@@ -20,6 +20,14 @@ export async function POST(req: Request) {
     }
 
     const result = await getAIVideoStatus(videoId);
+    const statusInfo = result.data || result;
+    const status = (statusInfo.status || '').toLowerCase();
+    
+    // If the task has finished (success or failure), remove it from the global active tasks set
+    if (['completed', 'succeeded', 'success', 'failed', 'error'].includes(status)) {
+      await completeVideoTask(videoId);
+    }
+
     return NextResponse.json(result);
   } catch (error) {
     if (error instanceof AIAPIError) {

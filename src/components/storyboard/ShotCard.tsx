@@ -59,6 +59,7 @@ export function ShotCard({ shot, assets, projectId, sensitivityPrompt, onUpdate,
   };
 
   const [isGeneratingVideo, setIsGeneratingVideo] = useState(false);
+  const [queuePosition, setQueuePosition] = useState<number | null>(null);
   
   const currentRef = useRef(current);
   const onUpdateRef = useRef(onUpdate);
@@ -67,6 +68,34 @@ export function ShotCard({ shot, assets, projectId, sensitivityPrompt, onUpdate,
     currentRef.current = current;
     onUpdateRef.current = onUpdate;
   }, [current, onUpdate]);
+
+  useEffect(() => {
+    let interval: NodeJS.Timeout;
+    if (isGeneratingVideo) {
+      const checkQueue = async () => {
+        try {
+          const res = await fetch(`/api/ai/queue-status?jobId=${current.id}`);
+          if (res.ok) {
+            const data = await res.json();
+            if (data.position !== undefined) {
+              setQueuePosition(data.position);
+            }
+          }
+        } catch (e) {
+          // ignore error
+        }
+      };
+      
+      interval = setInterval(checkQueue, 2000);
+      checkQueue();
+    } else {
+      setQueuePosition(null);
+    }
+    
+    return () => {
+      if (interval) clearInterval(interval);
+    };
+  }, [isGeneratingVideo, current.id]);
 
   useEffect(() => {
     let interval: NodeJS.Timeout;
@@ -117,6 +146,10 @@ export function ShotCard({ shot, assets, projectId, sensitivityPrompt, onUpdate,
   }, [current.videoGenerationId, current.videoStatus]);
 
   const handleGenerateVideo = async () => {
+    if (isGeneratingVideo || current.videoStatus === 'processing') {
+      return; // Prevent duplicate clicks
+    }
+
     const fullPrompt = [
       current.videoPrompt ? `[Video Prompt] ${current.videoPrompt}` : '',
       current.description ? `[Visual Description] ${current.description}` : '',
@@ -157,6 +190,7 @@ export function ShotCard({ shot, assets, projectId, sensitivityPrompt, onUpdate,
             sound: "on",
             images: allImages.length > 0 ? allImages : undefined
           },
+          jobId: current.id
         }),
       });
 
@@ -343,8 +377,32 @@ ${current.videoPrompt || 'None'}
           </div>
           
           {/* Action Buttons (Excluded from Export) */}
-          <div className="exclude-from-export flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity bg-white/80 backdrop-blur-sm rounded-lg p-1 border shadow-sm absolute right-4 top-3">
-            <Button size="icon" variant="ghost" className="h-7 w-7" onClick={handleReduceSensitivity} title="降低敏感度" disabled={isReducing}>
+            <div className="exclude-from-export flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity bg-white/80 backdrop-blur-sm rounded-lg p-1 border shadow-sm absolute right-4 top-3">
+              {(isGeneratingVideo && queuePosition !== null && queuePosition > 0) && (
+                <Button 
+                  variant="outline" 
+                  size="sm" 
+                  className="h-7 text-xs text-orange-500 border-orange-200 hover:bg-orange-50 hover:text-orange-600 px-2 mr-1"
+                  onClick={async () => {
+                    if (confirm('确定要取消排队吗？')) {
+                      setIsGeneratingVideo(false);
+                      setQueuePosition(null);
+                      try {
+                        await fetch('/api/ai/cancel-video', {
+                          method: 'POST',
+                          headers: { 'Content-Type': 'application/json' },
+                          body: JSON.stringify({ jobId: current.id })
+                        });
+                      } catch (e) {
+                        console.error('Failed to cancel queue', e);
+                      }
+                    }
+                  }}
+                >
+                  取消排队
+                </Button>
+              )}
+              <Button size="icon" variant="ghost" className="h-7 w-7" onClick={handleReduceSensitivity} title="降低敏感度" disabled={isReducing}>
                 <Shield className="w-3.5 h-3.5" />
             </Button>
             <Button size="icon" variant="ghost" className="h-7 w-7" onClick={handleCopyText} title="复制文本">
@@ -468,20 +526,50 @@ ${current.videoPrompt || 'None'}
                   <label className="text-[10px] uppercase tracking-widest text-indigo-500 font-bold flex items-center gap-2">
                     视频运镜提示词 (Video Generation Prompt)
                   </label>
-                  <Button 
-                    size="sm" 
-                    variant="outline" 
-                    className="h-6 text-[10px] gap-1 px-2" 
-                    onClick={handleGenerateVideo}
-                    disabled={isGeneratingVideo || current.videoStatus === 'processing'}
-                  >
-                    {(isGeneratingVideo || current.videoStatus === 'processing') ? (
-                      <Loader2 className="w-3 h-3 animate-spin" />
-                    ) : (
-                      <Video className="w-3 h-3" />
+                  <div className="flex items-center gap-2">
+                    {(isGeneratingVideo && queuePosition !== null && queuePosition > 0) && (
+                      <Button 
+                        variant="outline" 
+                        size="sm" 
+                        className="h-6 text-[10px] text-orange-500 border-orange-200 hover:bg-orange-50 hover:text-orange-600 px-2"
+                        onClick={async () => {
+                          if (confirm('确定要取消排队吗？')) {
+                            setIsGeneratingVideo(false);
+                            setQueuePosition(null);
+                            try {
+                              await fetch('/api/ai/cancel-video', {
+                                method: 'POST',
+                                headers: { 'Content-Type': 'application/json' },
+                                body: JSON.stringify({ jobId: current.id })
+                              });
+                            } catch (e) {
+                              console.error('Failed to cancel queue', e);
+                            }
+                          }
+                        }}
+                      >
+                        取消排队
+                      </Button>
                     )}
-                    {(isGeneratingVideo || current.videoStatus === 'processing') ? '生成中...' : '生成视频'}
-                  </Button>
+                    <Button 
+                      size="sm" 
+                      variant="outline" 
+                      className={`h-6 text-[10px] gap-1 px-2 transition-colors ${
+                        isGeneratingVideo || current.videoStatus === 'processing' 
+                          ? 'bg-indigo-50 text-indigo-400 border-indigo-200 cursor-not-allowed opacity-80' 
+                          : 'text-indigo-600 border-indigo-200 hover:bg-indigo-50'
+                      }`}
+                      onClick={handleGenerateVideo}
+                      disabled={isGeneratingVideo || current.videoStatus === 'processing'}
+                    >
+                      {(isGeneratingVideo || current.videoStatus === 'processing') ? (
+                        <Loader2 className="w-3 h-3 animate-spin" />
+                      ) : (
+                        <Video className="w-3 h-3" />
+                      )}
+                      {(isGeneratingVideo || current.videoStatus === 'processing') ? '生成中...' : '生成视频'}
+                    </Button>
+                  </div>
                 </div>
                 {isEditing ? (
                   <Textarea 
@@ -540,7 +628,7 @@ ${current.videoPrompt || 'None'}
           {/* Right Panel: Video & Assets */}
           <div className="col-span-4 bg-gray-50/50 flex flex-col border-l border-gray-100">
             {/* Video Preview Area */}
-            {(current.videoStatus || current.videoUrl) && (
+            {(current.videoStatus || current.videoUrl || isGeneratingVideo) && (
               <div className="p-4 border-b border-gray-100 bg-white">
                 <div className="flex items-center justify-between mb-3">
                   <label className="text-[10px] uppercase tracking-widest text-gray-400 font-bold">视频预览</label>
@@ -549,7 +637,17 @@ ${current.videoPrompt || 'None'}
                   )}
                 </div>
                 <div className="w-full bg-gray-100/50 rounded-lg border border-gray-200 flex flex-col items-center justify-center min-h-[240px] relative overflow-hidden group/video shadow-inner">
-                  {current.videoStatus === 'processing' && (
+                  {isGeneratingVideo && (
+                    <div className="flex flex-col items-center gap-3 text-indigo-500/80 py-8">
+                      <Loader2 className="w-8 h-8 animate-spin" />
+                      <span className="text-xs font-medium">
+                        {queuePosition !== null && queuePosition > 0 
+                          ? `排队中... 前面还有 ${queuePosition} 个任务` 
+                          : '提交视频生成中...'}
+                      </span>
+                    </div>
+                  )}
+                  {current.videoStatus === 'processing' && !isGeneratingVideo && (
                     <div className="flex flex-col items-center gap-3 text-indigo-500/80 py-8">
                       <Loader2 className="w-8 h-8 animate-spin" />
                       <span className="text-xs font-medium">视频生成中...</span>

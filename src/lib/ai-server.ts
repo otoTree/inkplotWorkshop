@@ -1,3 +1,5 @@
+import { Redis } from '@upstash/redis';
+
 type AIAPIConfig = {
   baseUrl: string;
   apiKey: string;
@@ -96,7 +98,7 @@ export const getAIAPIConfig = () => {
 };
 
 const getKey = (config: AIAPIConfig) =>
-  `${config.baseUrl}|${config.apiKey}|${config.model}|${config.maxConcurrency}`;
+  `${config.baseUrl}|${config.apiKey}|${config.maxConcurrency}`;
 
 const getSemaphore = (config: AIAPIConfig) => {
   const key = getKey(config);
@@ -108,6 +110,144 @@ const getSemaphore = (config: AIAPIConfig) => {
 };
 
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+
+const acquireGlobalSemaphore = async (config: AIAPIConfig): Promise<() => void | Promise<void>> => {
+  const isKVConfigured = !!(process.env.KV_REST_API_URL && process.env.KV_REST_API_TOKEN);
+  if (!isKVConfigured) {
+    const semaphore = getSemaphore(config);
+    return await semaphore.acquire();
+  }
+
+  const redis = Redis.fromEnv();
+  const key = `global_concurrency:${getKey(config)}`;
+  const maxConcurrency = config.maxConcurrency;
+  const jobTimeout = Math.max(config.timeoutMs, 600000); // Max 10 mins
+  const jobId = `${Date.now().toString(36)}-${Math.random().toString(36).substring(2)}`;
+
+  while (true) {
+    try {
+      const now = Date.now();
+      // 1. Remove expired jobs
+      await redis.zremrangebyscore(key, 0, now);
+      
+      // 2. Count current active jobs
+      const count = await redis.zcard(key);
+      
+      if (count < maxConcurrency) {
+        // 3. Try to add our job
+        await redis.zadd(key, { score: now + jobTimeout, member: jobId });
+        
+        // 4. Verify we are within the limit (prevent race conditions)
+        const rank = await redis.zrank(key, jobId);
+        if (rank !== null && rank < maxConcurrency) {
+          // Success
+          return async () => {
+            try {
+              await redis.zrem(key, jobId);
+            } catch (err) {
+              console.error('Failed to release KV semaphore:', err);
+            }
+          };
+        } else {
+          // We got added but exceeded the limit, rollback
+          await redis.zrem(key, jobId);
+        }
+      }
+    } catch (err) {
+      console.error('KV Semaphore error, waiting before retry:', err);
+    }
+    
+    // Wait 2~3s with jitter before retrying
+    await sleep(2000 + Math.random() * 1000);
+  }
+};
+
+export const enqueueVideoTaskAndWait = async (config: AIAPIConfig, jobId: string): Promise<((taskId?: string) => Promise<void>)> => {
+  const isKVConfigured = !!(process.env.KV_REST_API_URL && process.env.KV_REST_API_TOKEN);
+  if (!isKVConfigured) {
+    const semaphore = getSemaphore(config);
+    const release = await semaphore.acquire();
+    return async () => release();
+  }
+
+  const redis = Redis.fromEnv();
+  const baseKey = `video_concurrency:${getKey(config)}`;
+  const queueKey = `${baseKey}:queue`;
+  const activeKey = `${baseKey}:active`;
+  const maxConcurrency = config.maxConcurrency;
+
+  // 1. Add to queue
+  await redis.zadd(queueKey, { nx: true }, { score: Date.now(), member: jobId });
+
+  while (true) {
+    try {
+      const now = Date.now();
+      // Remove tasks that have been active for > 15 mins (timeout safety)
+      await redis.zremrangebyscore(activeKey, 0, now - 15 * 60 * 1000);
+
+      const rank = await redis.zrank(queueKey, jobId);
+      if (rank === null) {
+        await redis.zadd(queueKey, { nx: true }, { score: Date.now(), member: jobId });
+        continue;
+      }
+
+      const activeCount = await redis.zcard(activeKey);
+      const availableSlots = Math.max(0, maxConcurrency - activeCount);
+
+      if (rank < availableSlots) {
+        // My turn!
+        const placeholderId = `pending:${jobId}`;
+        await redis.zadd(activeKey, { score: now + 2 * 60 * 1000, member: placeholderId }); // 2 min placeholder
+        await redis.zrem(queueKey, jobId);
+
+        return async (realTaskId?: string) => {
+          try {
+            if (realTaskId) {
+              await redis.zadd(activeKey, { score: Date.now() + 15 * 60 * 1000, member: realTaskId });
+            }
+            await redis.zrem(activeKey, placeholderId);
+          } catch (err) {
+            console.error('Failed to commit real taskId:', err);
+          }
+        };
+      }
+    } catch (err) {
+      console.error('KV Queue error, waiting before retry:', err);
+    }
+
+    await sleep(2000 + Math.random() * 1000);
+  }
+};
+
+export const cancelVideoTask = async (jobId: string) => {
+  const isKVConfigured = !!(process.env.KV_REST_API_URL && process.env.KV_REST_API_TOKEN);
+  if (!isKVConfigured) return;
+
+  try {
+    const config = getAIAPIConfig();
+    const redis = Redis.fromEnv();
+    const queueKey = `video_concurrency:${getKey(config)}:queue`;
+    // Only remove from queue. Active tasks cannot be cancelled here
+    // because they are already submitted to the upstream API.
+    await redis.zrem(queueKey, jobId);
+  } catch (err) {
+    console.error('Failed to cancel video task:', err);
+  }
+};
+
+export const completeVideoTask = async (taskId: string) => {
+  const isKVConfigured = !!(process.env.KV_REST_API_URL && process.env.KV_REST_API_TOKEN);
+  if (!isKVConfigured) return;
+
+  try {
+    const config = getAIAPIConfig();
+    const redis = Redis.fromEnv();
+    const activeKey = `video_concurrency:${getKey(config)}:active`;
+    await redis.zrem(activeKey, taskId);
+  } catch (err) {
+    console.error('Failed to complete video task:', err);
+  }
+};
 
 const waitForInterval = async (key: string, minIntervalMs: number) => {
   if (minIntervalMs <= 0) return;
@@ -131,13 +271,12 @@ const fetchWithTimeout = async (input: RequestInfo, init: RequestInit, timeoutMs
 };
 
 const withThrottle = async <T>(config: AIAPIConfig, fn: () => Promise<T>) => {
-  const semaphore = getSemaphore(config);
-  const release = await semaphore.acquire();
+  const release = await acquireGlobalSemaphore(config);
   try {
     await waitForInterval(getKey(config), config.minIntervalMs);
     return await fn();
   } finally {
-    release();
+    await release();
   }
 };
 
@@ -235,31 +374,29 @@ export const callAIVideoGeneration = async (
   prompt: string,
   duration: number,
   metadata?: Record<string, unknown>,
-  extraParams?: Record<string, unknown>
+  extraParams?: Record<string, unknown>,
+  jobId?: string
 ) => {
   const config = getAIAPIConfig();
   const videoModel = process.env.AI_API_VIDEO_MODEL || process.env.OPENAI_VIDEO_MODEL || config.model;
 
-  return await withThrottle(config, async () => {
+  const resolvedJobId = jobId || `job_${Date.now()}_${Math.random().toString(36).substring(2)}`;
+  const commitTask = await enqueueVideoTaskAndWait(config, resolvedJobId);
+
+  try {
     const payload: Record<string, unknown> = {
       model: videoModel,
       prompt,
     };
     
-    // Some models/providers might reject 'duration' or expect it in metadata, but standard API uses it
     if (duration) payload.duration = duration;
     
-    // For specific APIs like Kling, images should be an array in metadata or payload depending on spec.
-    // The previous frontend passes `image_url` but some APIs expect `metadata.images` or `image`
     if (extraParams?.image_url) {
       if (!metadata) metadata = {};
       metadata.images = [extraParams.image_url];
-      // keep it in root payload just in case the proxy needs it
       payload.image_url = extraParams.image_url; 
     }
     
-    // Add extra params (like image_url, aspect_ratio) to payload or metadata depending on API spec
-    // For standard compatible APIs, they usually go in the root payload
     if (extraParams) {
         Object.assign(payload, extraParams);
     }
@@ -286,8 +423,15 @@ export const callAIVideoGeneration = async (
       throw new AIAPIError('AI 视频生成请求失败', response.status, detail);
     }
 
-    return await response.json();
-  });
+    const data = await response.json();
+    const taskId = data.task_id || data.id || data.data?.task_id || data.data?.id;
+    await commitTask(taskId);
+    
+    return data;
+  } catch (err) {
+    await commitTask(); // Remove placeholder on failure
+    throw err;
+  }
 };
 
 export const getAIVideoStatus = async (videoId: string) => {
