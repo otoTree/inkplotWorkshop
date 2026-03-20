@@ -217,6 +217,7 @@ export function ShotCard({ shot, assets, projectId, sensitivityPrompt, onUpdate,
       alert(`视频生成失败: ${error.message}`);
     } finally {
       setIsGeneratingVideo(false);
+      setQueuePosition(null);
     }
   };
 
