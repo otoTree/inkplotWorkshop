@@ -27,6 +27,21 @@ export function ExportPanel({ projectId }: { projectId: string }) {
   };
 
   const handleExport = async () => {
+    let baseDirHandle: any = null;
+
+    // 1. 立即请求文件夹权限，以满足浏览器对“用户手势(User Gesture)”的严格要求
+    if ('showDirectoryPicker' in window) {
+      try {
+        // @ts-ignore
+        baseDirHandle = await window.showDirectoryPicker({ mode: 'readwrite' });
+      } catch (err: any) {
+        if (err.name === 'AbortError') {
+           return; // 用户取消了选择，直接退出
+        }
+        console.log('FS API failed, fallback to ZIP', err);
+      }
+    }
+
     setIsExporting(true);
     setExportProgress(0);
     setExportStatus('正在获取项目数据...');
@@ -65,12 +80,11 @@ export function ExportPanel({ projectId }: { projectId: string }) {
       let vfs: VirtualFileSystem | null = null;
       let isNativeFs = false;
 
-      if ('showDirectoryPicker' in window) {
+      if (baseDirHandle) {
         try {
-          setExportStatus('请选择保存导出的文件夹...');
-          // @ts-ignore
-          const baseDirHandle = await window.showDirectoryPicker({ mode: 'readwrite' });
+          setExportStatus('正在创建项目文件夹...');
           const rootDirHandle = await baseDirHandle.getDirectoryHandle(folderName, { create: true });
+
           
           const getDir = async (path: string[]) => {
             let current = rootDirHandle;
@@ -277,27 +291,54 @@ export function ExportPanel({ projectId }: { projectId: string }) {
       const totalShots = shots.length;
       let completedShots = 0;
 
-      for (const shot of shots) {
-        setExportStatus(`正在处理分镜媒体 (${completedShots + 1}/${totalShots})...`);
+      setExportStatus(`正在处理分镜媒体 (0/${totalShots})...`);
+      
+      // Concurrency limit helper
+      const CONCURRENCY_LIMIT = 5;
+      const processWithConcurrency = async <T,>(items: T[], fn: (item: T) => Promise<void>) => {
+        let index = 0;
+        const workers = Array(CONCURRENCY_LIMIT).fill(null).map(async () => {
+          while (index < items.length) {
+            const item = items[index++];
+            await fn(item);
+          }
+        });
+        await Promise.all(workers);
+      };
+
+      await processWithConcurrency(shots, async (shot) => {
         const ep = episodes.find(e => e.id === shot.episodeId);
         const epNum = ep ? ep.episodeNumber : 'X';
         const shotSeq = shot.sequence.toString().padStart(3, '0');
 
-        if (shot.referenceImage) {
-            const nameBase = `ep${epNum}_shot${shotSeq}_ref`;
-            const finalName = await vfs.streamFile(['storyboards', 'images'], nameBase, shot.referenceImage, 'jpg');
-            refImageFilenames[shot.id] = `./images/${finalName}`;
-        }
+        try {
+          const tasks: Promise<void>[] = [];
 
-        if (shot.videoUrl && shot.videoStatus === 'completed') {
-            const nameBase = `ep${epNum}_shot${shotSeq}`;
-            const finalName = await vfs.streamFile(['videos', `episode_${epNum}`], nameBase, shot.videoUrl, 'mp4');
-            videoFilenames[shot.id] = `../videos/episode_${epNum}/${finalName}`;
+          if (shot.referenceImage) {
+              const nameBase = `ep${epNum}_shot${shotSeq}_ref`;
+              tasks.push(
+                vfs!.streamFile(['storyboards', 'images'], nameBase, shot.referenceImage, 'jpg')
+                  .then(finalName => { refImageFilenames[shot.id] = `./images/${finalName}`; })
+              );
+          }
+
+          if (shot.videoUrl && shot.videoStatus === 'completed') {
+              const nameBase = `ep${epNum}_shot${shotSeq}`;
+              tasks.push(
+                vfs!.streamFile(['videos', `episode_${epNum}`], nameBase, shot.videoUrl, 'mp4')
+                  .then(finalName => { videoFilenames[shot.id] = `../videos/episode_${epNum}/${finalName}`; })
+              );
+          }
+
+          await Promise.all(tasks);
+        } catch (err) {
+          console.error(`Failed to process media for shot ${shot.id}`, err);
         }
         
         completedShots++;
         setExportProgress(35 + Math.floor((completedShots / totalShots) * 50));
-      }
+        setExportStatus(`正在处理分镜媒体 (${completedShots}/${totalShots})...`);
+      });
 
       // 4. Storyboards Markdown
       setExportStatus('正在生成分镜脚本...');
