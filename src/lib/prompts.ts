@@ -350,6 +350,14 @@ When generating the \`videoPrompt\`, assume the AI video model has zero context.
 4. **Action Impact**: Describe the force and weight of the action.
 5. **Environmental Reaction**: How does the environment react to the action? (e.g., flickering firelight, shaking camera).
 
+## 2. Continuity & Cohesion Layer (CRITICAL for Video Gen)
+**Definition**: Metadata fields that force the AI to maintain spatial and temporal logic between shots.
+- **Transition**: Define \`transition\` object to specify how this shot connects to the previous one (incoming action, spatial relationship, time gap).
+- **Eyeline**: Define \`eyeline\` to establish the character's gaze vector, anchoring the 3D space.
+- **Action Arcs**: \`characterAction\` must be highly detailed, explicitly stating the **Start State** and **End State** of the movement.
+- **Environmental State**: Define \`environmentalState\` to track physical changes in the scene (e.g., broken glass, smoke).
+- **Time & Motivation**: Use \`timeline\` for time anchors and \`cameraMotivation\` to explain *why* the camera moves.
+
 ## Task
 Analyze the provided script and generate a storyboard sequence.
 **IMPORTANT**: 
@@ -372,7 +380,21 @@ ${JSON.stringify(existingAssets.map(a => ({ id: a.id, name: a.name, type: a.type
       "sequence": 1,
       "description": "EXTREMELY DETAILED visual description. Include composition (e.g. Extreme Close-Up, Dutch angle), character details [Name: traits, clothing, micro-expressions], spatial relations, lighting geometry, and cinematic texture (e.g. Kodak 500T).",
       "sceneLabel": "Scene location tag (e.g. City Ruins, Supermarket)",
-      "characterAction": "Main character actions in this shot",
+      
+      "transition": {
+        "incomingAction": "Action state from the end of the previous shot",
+        "continuityMatch": "Visual connection point with previous shot",
+        "spatialRelationship": "Spatial position relative to previous shot",
+        "timeGap": "Continuous / 2s later / Simultaneous"
+      },
+      "eyeline": "Looking direction, target, and changes within shot",
+      "lightingEvolution": "How light changes and continuity from previous shot",
+      "cameraMotivation": "Why the camera moves (e.g., following character, revealing environment)",
+      "timeline": "Shot start, action start/end time anchors",
+      "environmentalState": "Physical state of the environment to maintain continuity",
+      "generationConstraints": ["Rule 1 to prevent AI errors", "Rule 2"],
+
+      "characterAction": "Detailed action including Start State, End State, Muscle Tension, and Speed",
       "emotion": "Dominant emotion (e.g. Panic, Despair)",
       "lightingAtmosphere": "Lighting and atmosphere (e.g. High contrast hard light, Dim orange firelight)",
       "soundEffect": "Key sound effects (e.g. Heavy footsteps, Distant sirens)",
