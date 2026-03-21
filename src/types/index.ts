@@ -85,6 +85,18 @@ export interface Asset {
   isMain?: boolean;       // ★NEW: 是否为核心主角 (最多2个)
 }
 
+export interface Task {
+  id: string;
+  type: string;
+  status: string;
+  payload?: unknown;
+  result?: unknown;
+  error?: string;
+  created_at: string;
+  updated_at: string;
+  user_id?: string;
+}
+
 export interface Shot {
   id: string;             // UUID
   episodeId: string;      // FK -> Episode.id
