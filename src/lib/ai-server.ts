@@ -433,7 +433,14 @@ export const callAIVideoGeneration = async (
 
     const data = await response.json();
     const taskId = data.task_id || data.id || data.data?.task_id || data.data?.id;
-    await commitTask(taskId);
+    
+    if (taskId) {
+      // 🚀 The Bug Was Here: tryAcquireVideoSlot returns async (realTaskId?: string) => void
+      // But we must pass it explicitly to commitTask
+      await commitTask(taskId);
+    } else {
+      await commitTask(); // clean up if no task id
+    }
     
     return data;
   } catch (err) {
