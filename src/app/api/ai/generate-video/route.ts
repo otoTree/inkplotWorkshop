@@ -25,7 +25,8 @@ export async function POST(req: Request) {
         Number(duration) || 15,
         metadata || undefined,
         undefined,
-        jobId
+        jobId,
+        true // allow queueing
       );
     } catch (apiError) {
       if (shotId) {
@@ -37,17 +38,23 @@ export async function POST(req: Request) {
     }
 
     if (shotId) {
-      const taskId = result.task_id || result.id || result.data?.task_id || result.data?.id;
-      if (taskId) {
-        const directUrl = result.url || result.video_url || result.data?.url || result.data?.video_url;
-        const status = (result.status || result.data?.status || 'processing').toLowerCase();
-        const videoStatus = ['completed', 'succeeded', 'success'].includes(status) ? 'completed' : 'processing';
-
+      if (result.status === 'queued') {
         await supabase.from('shots').update({
-          video_generation_id: taskId,
-          video_status: videoStatus,
-          ...(directUrl ? { video_url: directUrl } : {})
+          video_status: 'queued'
         }).eq('id', shotId);
+      } else {
+        const taskId = result.task_id || result.id || result.data?.task_id || result.data?.id;
+        if (taskId) {
+          const directUrl = result.url || result.video_url || result.data?.url || result.data?.video_url;
+          const status = (result.status || result.data?.status || 'processing').toLowerCase();
+          const videoStatus = ['completed', 'succeeded', 'success'].includes(status) ? 'completed' : 'processing';
+
+          await supabase.from('shots').update({
+            video_generation_id: taskId,
+            video_status: videoStatus,
+            ...(directUrl ? { video_url: directUrl } : {})
+          }).eq('id', shotId);
+        }
       }
     }
 

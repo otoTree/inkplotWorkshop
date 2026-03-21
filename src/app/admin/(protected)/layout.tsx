@@ -13,8 +13,7 @@ export default async function ProtectedAdminLayout({
       <header className="bg-white border-b border-gray-200 px-6 py-4 flex items-center justify-between">
         <h1 className="text-xl font-serif">管理后台</h1>
         <nav className="space-x-4">
-          <Link href="/admin/tasks" className="text-sm text-gray-600 hover:text-black">任务队列</Link>
-          <Link href="/admin/redis" className="text-sm text-gray-600 hover:text-black">Redis管理</Link>
+          <Link href="/admin/redis" className="text-sm text-gray-600 hover:text-black">并发队列管理</Link>
           <Link href="/admin/projects" className="text-sm text-gray-600 hover:text-black">全站项目</Link>
           <Link href="/" className="text-sm text-gray-600 hover:text-black">返回前台</Link>
         </nav>

@@ -363,22 +363,28 @@ export function StoryboardEditor({ projectId }: StoryboardEditorProps) {
           }
 
           const data = await response.json();
-          const taskId = data.task_id || data.id || data.data?.task_id || data.data?.id;
-          if (!taskId) throw new Error('未能获取任务ID');
-
-          const directUrl = data.url || data.video_url || data.data?.url || data.data?.video_url;
-          const status = (data.status || data.data?.status || 'processing').toLowerCase();
-
-          const updatedShot: Shot = {
-            ...currentShot,
-            videoGenerationId: taskId,
-            videoStatus: ['completed', 'succeeded', 'success'].includes(status) ? 'completed' : 'processing',
-            ...(directUrl ? { videoUrl: directUrl } : {})
-          };
           
-          await api.shots.update(updatedShot.id, updatedShot);
-          setShots(prev => prev.map(s => s.id === updatedShot.id ? updatedShot : s));
-          successCount++;
+          if (data.status === 'queued') {
+            // Already updated to queued before fetch, just return
+            successCount++;
+          } else {
+            const taskId = data.task_id || data.id || data.data?.task_id || data.data?.id;
+            if (!taskId) throw new Error('未能获取任务ID');
+
+            const directUrl = data.url || data.video_url || data.data?.url || data.data?.video_url;
+            const status = (data.status || data.data?.status || 'processing').toLowerCase();
+
+            const updatedShot: Shot = {
+              ...currentShot,
+              videoGenerationId: taskId,
+              videoStatus: ['completed', 'succeeded', 'success'].includes(status) ? 'completed' : 'processing',
+              ...(directUrl ? { videoUrl: directUrl } : {})
+            };
+            
+            await api.shots.update(updatedShot.id, updatedShot);
+            setShots(prev => prev.map(s => s.id === updatedShot.id ? updatedShot : s));
+            successCount++;
+          }
           
         } catch (error) {
           console.error(`镜头 ${currentShot.sequence} 视频生成失败:`, error);
@@ -389,8 +395,8 @@ export function StoryboardEditor({ projectId }: StoryboardEditorProps) {
         }
       };
 
-      // Process in chunks of 50 for high concurrency
-      const chunkSize = 50;
+      // Process in chunks of 2000 for high concurrency queueing, but the backend AI server will rate limit to active tasks (e.g. 50)
+      const chunkSize = 2000;
       for (let i = 0; i < shotsToGenerate.length; i += chunkSize) {
         const chunk = shotsToGenerate.slice(i, i + chunkSize);
         await Promise.all(chunk.map(shot => processShot(shot)));

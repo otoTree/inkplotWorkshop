@@ -162,61 +162,59 @@ const acquireGlobalSemaphore = async (config: AIAPIConfig): Promise<() => void |
   }
 };
 
-export const enqueueVideoTaskAndWait = async (config: AIAPIConfig, jobId: string): Promise<((taskId?: string) => Promise<void>)> => {
+export const tryAcquireVideoSlot = async (config: AIAPIConfig, jobId: string): Promise<((taskId?: string) => Promise<void>) | null> => {
   const isKVConfigured = !!(process.env.KV_REST_API_URL && process.env.KV_REST_API_TOKEN);
   if (!isKVConfigured) {
+    // Fallback for local testing without Redis
     const semaphore = getSemaphore(config);
+    // Non-blocking acquire is not implemented for AsyncSemaphore, just return a dummy if we can't do it right,
+    // but actually let's just let it proceed for local
     const release = await semaphore.acquire();
     return async () => release();
   }
 
   const redis = Redis.fromEnv();
   const baseKey = `video_concurrency:${getKey(config)}`;
-  const queueKey = `${baseKey}:queue`;
   const activeKey = `${baseKey}:active`;
   const maxConcurrency = config.maxConcurrency;
 
-  // 1. Add to queue
-  await redis.zadd(queueKey, { nx: true }, { score: Date.now(), member: jobId });
+  try {
+    const now = Date.now();
+    // Remove tasks that have been active for > 15 mins (timeout safety)
+    await redis.zremrangebyscore(activeKey, 0, now - 15 * 60 * 1000);
 
-  while (true) {
-    try {
-      const now = Date.now();
-      // Remove tasks that have been active for > 15 mins (timeout safety)
-      await redis.zremrangebyscore(activeKey, 0, now - 15 * 60 * 1000);
+    const activeCount = await redis.zcard(activeKey);
+    
+    if (activeCount < maxConcurrency) {
+      // My turn!
+      const placeholderId = `pending:${jobId}`;
+      await redis.zadd(activeKey, { score: now + 2 * 60 * 1000, member: placeholderId }); // 2 min placeholder
 
-      const rank = await redis.zrank(queueKey, jobId);
-      if (rank === null) {
-        await redis.zadd(queueKey, { nx: true }, { score: Date.now(), member: jobId });
-        continue;
-      }
-
-      const activeCount = await redis.zcard(activeKey);
-      const availableSlots = Math.max(0, maxConcurrency - activeCount);
-
-      if (rank < availableSlots) {
-        // My turn!
-        const placeholderId = `pending:${jobId}`;
-        await redis.zadd(activeKey, { score: now + 2 * 60 * 1000, member: placeholderId }); // 2 min placeholder
-        await redis.zrem(queueKey, jobId);
-
-        return async (realTaskId?: string) => {
-          try {
-            if (realTaskId) {
-              await redis.zadd(activeKey, { score: Date.now() + 15 * 60 * 1000, member: realTaskId });
-            }
-            await redis.zrem(activeKey, placeholderId);
-          } catch (err) {
-            console.error('Failed to commit real taskId:', err);
+      return async (realTaskId?: string) => {
+        try {
+          if (realTaskId) {
+            await redis.zadd(activeKey, { score: Date.now() + 15 * 60 * 1000, member: realTaskId });
           }
-        };
-      }
-    } catch (err) {
-      console.error('KV Queue error, waiting before retry:', err);
+          await redis.zrem(activeKey, placeholderId);
+        } catch (err) {
+          console.error('Failed to commit real taskId:', err);
+        }
+      };
     }
-
-    await sleep(2000 + Math.random() * 1000);
+  } catch (err) {
+    console.error('KV Queue error:', err);
   }
+
+  return null; // Cannot acquire slot immediately
+};
+
+export const enqueueVideoTaskAndWait = async (config: AIAPIConfig, jobId: string): Promise<((taskId?: string) => Promise<void>)> => {
+  // Keeping this for backwards compatibility if needed, but we shouldn't use it in serverless
+  const slot = await tryAcquireVideoSlot(config, jobId);
+  if (slot) return slot;
+  
+  // If we must wait (not recommended in Vercel), just fallback to old logic or throw
+  throw new Error("Queue is full. Please use async queueing.");
 };
 
 export const cancelVideoTask = async (jobId: string) => {
@@ -375,13 +373,23 @@ export const callAIVideoGeneration = async (
   duration: number,
   metadata?: Record<string, unknown>,
   extraParams?: Record<string, unknown>,
-  jobId?: string
+  jobId?: string,
+  allowQueueing: boolean = true // if true, it returns early if slot is not available
 ) => {
   const config = getAIAPIConfig();
   const videoModel = process.env.AI_API_VIDEO_MODEL || process.env.OPENAI_VIDEO_MODEL || config.model;
 
   const resolvedJobId = jobId || `job_${Date.now()}_${Math.random().toString(36).substring(2)}`;
-  const commitTask = await enqueueVideoTaskAndWait(config, resolvedJobId);
+  
+  const commitTask = await tryAcquireVideoSlot(config, resolvedJobId);
+
+  if (!commitTask) {
+    if (allowQueueing) {
+      return { status: 'queued', message: 'Added to background queue', task_id: null };
+    } else {
+      throw new AIAPIError('Server is currently at maximum capacity, please try again later.', 429);
+    }
+  }
 
   try {
     const payload: Record<string, unknown> = {

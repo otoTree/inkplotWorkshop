@@ -434,19 +434,25 @@ export function OneClickWorkflowDialog({ projectId, open, onOpenChange }: OneCli
 
               if (response.ok) {
                 const data = await response.json();
-                const taskId = data.task_id || data.id || data.data?.task_id || data.data?.id;
-                if (taskId) {
-                  const directUrl = data.url || data.video_url || data.data?.url || data.data?.video_url;
-                  const status = (data.status || data.data?.status || 'processing').toLowerCase();
-
-                  const updatedShot: Partial<Shot> = {
-                    videoGenerationId: taskId,
-                    videoStatus: ['completed', 'succeeded', 'success'].includes(status) ? 'completed' : 'processing',
-                    ...(directUrl ? { videoUrl: directUrl } : {})
-                  };
-                  
-                  await api.shots.update(currentShot.id, updatedShot);
+                
+                if (data.status === 'queued') {
+                  // DB is already updated to queued by the API (or by us before calling), just count it as success
                   successVideos++;
+                } else {
+                  const taskId = data.task_id || data.id || data.data?.task_id || data.data?.id;
+                  if (taskId) {
+                    const directUrl = data.url || data.video_url || data.data?.url || data.data?.video_url;
+                    const status = (data.status || data.data?.status || 'processing').toLowerCase();
+
+                    const updatedShot: Partial<Shot> = {
+                      videoGenerationId: taskId,
+                      videoStatus: ['completed', 'succeeded', 'success'].includes(status) ? 'completed' : 'processing',
+                      ...(directUrl ? { videoUrl: directUrl } : {})
+                    };
+                    
+                    await api.shots.update(currentShot.id, updatedShot);
+                    successVideos++;
+                  }
                 }
               }
             } catch (error) {
@@ -457,7 +463,7 @@ export function OneClickWorkflowDialog({ projectId, open, onOpenChange }: OneCli
             }
           };
 
-          const videoChunkSize = 50;
+          const videoChunkSize = 2000;
           for (let i = 0; i < shotsToGenerate.length; i += videoChunkSize) {
             const chunk = shotsToGenerate.slice(i, i + videoChunkSize);
             await Promise.allSettled(chunk.map(shot => processVideo(shot)));

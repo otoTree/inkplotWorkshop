@@ -201,6 +201,13 @@ export function ShotCard({ shot, assets, projectId, sensitivityPrompt, onUpdate,
       }
 
       const data = await response.json();
+      
+      if (data.status === 'queued') {
+        // DB and current state are already queued
+        setQueuePosition(data.position || null);
+        return;
+      }
+
       const taskId = data.task_id || data.id || data.data?.task_id || data.data?.id;
       if (!taskId) throw new Error('未能获取任务ID');
 

@@ -1,7 +1,5 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
-import { Redis } from '@upstash/redis';
-import { getAIAPIConfig } from '@/lib/ai-server';
 
 export async function GET(req: Request) {
   try {
@@ -13,28 +11,38 @@ export async function GET(req: Request) {
     }
 
     const url = new URL(req.url);
-    const jobId = url.searchParams.get('jobId');
+    const jobId = url.searchParams.get('jobId'); // In our case, jobId is shot.id
     
     if (!jobId) {
       return NextResponse.json({ position: 0 });
     }
 
-    const isKVConfigured = !!(process.env.KV_REST_API_URL && process.env.KV_REST_API_TOKEN);
-    if (!isKVConfigured) {
+    // Find the shot to get its updated_at timestamp
+    const { data: shot } = await supabase
+      .from('shots')
+      .select('updated_at, video_status')
+      .eq('id', jobId)
+      .single();
+
+    if (!shot || shot.video_status !== 'queued') {
       return NextResponse.json({ position: 0 });
     }
 
-    const config = getAIAPIConfig();
-    const redis = Redis.fromEnv();
-    
-    // The key format must match getKey(config) exactly
-    const configKey = `${config.baseUrl}|${config.apiKey}|${config.maxConcurrency}`;
-    const queueKey = `video_concurrency:${configKey}:queue`;
-    
-    const rank = await redis.zrank(queueKey, jobId);
-    
+    // Count how many queued shots have an older updated_at
+    const { count, error } = await supabase
+      .from('shots')
+      .select('*', { count: 'exact', head: true })
+      .eq('video_status', 'queued')
+      .lt('updated_at', shot.updated_at);
+
+    if (error) {
+      console.error('Queue status check error:', error);
+      return NextResponse.json({ position: 0 });
+    }
+
+    // position is the count of older items + 1
     return NextResponse.json({ 
-      position: rank !== null ? rank + 1 : 0 
+      position: (count || 0) + 1 
     });
   } catch (error) {
     console.error('Queue status check error:', error);

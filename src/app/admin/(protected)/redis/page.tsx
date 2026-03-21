@@ -160,7 +160,7 @@ export default function AdminRedisPage() {
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
-        <h2 className="text-2xl font-serif">Redis 队列管理 (Upstash)</h2>
+        <h2 className="text-2xl font-serif">并发队列管理 (Upstash Redis)</h2>
         <Button onClick={fetchRedisData} variant="outline">刷新状态</Button>
       </div>
 
