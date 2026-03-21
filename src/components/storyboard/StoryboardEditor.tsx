@@ -365,25 +365,25 @@ export function StoryboardEditor({ projectId }: StoryboardEditorProps) {
           const data = await response.json();
           
           if (data.status === 'queued') {
-            // Already updated to queued before fetch, just return
+            // DB is already updated to queued by the API (or by us before calling), just count it as success
             successCount++;
           } else {
             const taskId = data.task_id || data.id || data.data?.task_id || data.data?.id;
-            if (!taskId) throw new Error('未能获取任务ID');
+            if (taskId) {
+              const directUrl = data.url || data.video_url || data.data?.url || data.data?.video_url;
+              const status = (data.status || data.data?.status || 'processing').toLowerCase();
 
-            const directUrl = data.url || data.video_url || data.data?.url || data.data?.video_url;
-            const status = (data.status || data.data?.status || 'processing').toLowerCase();
-
-            const updatedShot: Shot = {
-              ...currentShot,
-              videoGenerationId: taskId,
-              videoStatus: ['completed', 'succeeded', 'success'].includes(status) ? 'completed' : 'processing',
-              ...(directUrl ? { videoUrl: directUrl } : {})
-            };
-            
-            await api.shots.update(updatedShot.id, updatedShot);
-            setShots(prev => prev.map(s => s.id === updatedShot.id ? updatedShot : s));
-            successCount++;
+              const updatedShot: Shot = {
+                ...currentShot,
+                videoGenerationId: taskId,
+                videoStatus: ['completed', 'succeeded', 'success'].includes(status) ? 'completed' : 'processing',
+                ...(directUrl ? { videoUrl: directUrl } : {})
+              };
+              
+              await api.shots.update(updatedShot.id, updatedShot);
+              setShots(prev => prev.map(s => s.id === updatedShot.id ? updatedShot : s));
+              successCount++;
+            }
           }
           
         } catch (error) {

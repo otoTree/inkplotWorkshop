@@ -102,20 +102,65 @@ export default function AdminRedisPage() {
     }
   };
 
+  const handleRecoverAll = async (items: RedisItem[]) => {
+    const realTaskIds = items
+      .map(item => item.member)
+      .filter(id => !id.startsWith('pending:') && !id.startsWith('job_'));
+
+    if (realTaskIds.length === 0) {
+      alert('没有可恢复的真实任务（只有占位符或等待队列）。');
+      return;
+    }
+
+    if (!confirm(`将批量向 AI 厂商查询 ${realTaskIds.length} 个任务的真实状态并更新。确定吗？`)) return;
+
+    try {
+      const res = await fetch('/api/admin/redis/recover', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ videoIds: realTaskIds }),
+      });
+      const json = await res.json();
+      
+      if (res.ok) {
+        let successCount = 0;
+        let failCount = 0;
+        json.results.forEach((r: any) => {
+          if (r.success) successCount++;
+          else failCount++;
+        });
+        alert(`批量恢复完成！\n成功: ${successCount}\n失败/跳过: ${failCount}`);
+        fetchRedisData();
+      } else {
+        alert(`批量恢复失败: ${json.error}`);
+      }
+    } catch (err) {
+      console.error(err);
+      alert('网络错误');
+    }
+  };
+
   useEffect(() => {
     fetchRedisData();
   }, []);
 
-  const renderTable = (title: string, keyName: string, items: RedisItem[]) => (
+  const renderTable = (title: string, keyName: string, items: RedisItem[], showRecoverAll: boolean = false) => (
     <Card className="mb-6">
       <CardHeader className="flex flex-row items-center justify-between">
         <div>
           <CardTitle>{title}</CardTitle>
           <p className="text-sm text-gray-500 mt-1 font-mono">{keyName}</p>
         </div>
-        <Button variant="destructive" size="sm" onClick={() => handleClearKey(keyName)}>
-          清空全部
-        </Button>
+        <div className="flex gap-2">
+          {showRecoverAll && (
+            <Button variant="secondary" size="sm" onClick={() => handleRecoverAll(items)}>
+              一键恢复所有任务
+            </Button>
+          )}
+          <Button variant="destructive" size="sm" onClick={() => handleClearKey(keyName)}>
+            清空全部
+          </Button>
+        </div>
       </CardHeader>
       <CardContent>
         <Table>
@@ -177,7 +222,7 @@ export default function AdminRedisPage() {
       {data && (
         <>
           {renderTable('视频等待队列 (Queue)', data.queueKey, data.queue)}
-          {renderTable('视频处理中任务 (Active)', data.activeKey, data.active)}
+          {renderTable('视频处理中任务 (Active)', data.activeKey, data.active, true)}
           {renderTable('全局并发信号量 (Global Semaphore)', data.globalKey, data.global)}
         </>
       )}

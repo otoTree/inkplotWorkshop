@@ -9,62 +9,89 @@ export async function POST(req: Request) {
   }
 
   try {
-    const { videoId } = await req.json();
+    const body = await req.json();
+    const videoIds = Array.isArray(body.videoIds) ? body.videoIds : (body.videoId ? [body.videoId] : []);
 
-    if (!videoId) {
-      return NextResponse.json({ error: 'Missing videoId' }, { status: 400 });
+    if (videoIds.length === 0) {
+      return NextResponse.json({ error: 'Missing videoId(s)' }, { status: 400 });
     }
 
-    // 1. Query the AI provider for the actual status
-    let providerStatus: any;
-    try {
-      providerStatus = await getAIVideoStatus(videoId);
-    } catch (err: any) {
-      return NextResponse.json({ error: `Failed to fetch status from AI provider: ${err.message}` }, { status: 500 });
-    }
-
-    const statusInfo = providerStatus.data || providerStatus;
-    const status = (statusInfo.status || '').toLowerCase();
-    
-    let dbStatus = 'processing';
-    let videoUrl = null;
-
-    if (['completed', 'succeeded', 'success'].includes(status)) {
-      dbStatus = 'completed';
-      videoUrl = statusInfo.url || statusInfo.video_url || (statusInfo.data && (statusInfo.data.url || statusInfo.data.video_url));
-      // Ensure we have a download fallback if direct URL is not present
-      if (!videoUrl) {
-         videoUrl = `/api/ai/download-video?videoId=${videoId}`;
-      }
-    } else if (['failed', 'error'].includes(status)) {
-      dbStatus = 'failed';
-    }
-
-    // 2. Update the Supabase database
+    const results = [];
     const supabase = createAdminClient();
-    const { data: updatedShots, error: dbError } = await supabase
-      .from('shots')
-      .update({
-        video_status: dbStatus,
-        ...(videoUrl ? { video_url: videoUrl } : {})
-      })
-      .eq('video_generation_id', videoId)
-      .select();
 
-    if (dbError) {
-      return NextResponse.json({ error: `Failed to update database: ${dbError.message}` }, { status: 500 });
+    // Process sequentially or in small batches to avoid rate limits
+    for (const videoId of videoIds) {
+      try {
+        if (videoId.startsWith('pending:') || videoId.startsWith('job_')) {
+          results.push({ videoId, status: 'skipped', message: 'Not a real task ID' });
+          continue;
+        }
+
+        // 1. Query the AI provider for the actual status
+        const providerStatus = await getAIVideoStatus(videoId);
+        const statusInfo = providerStatus.data || providerStatus;
+        const status = (statusInfo.status || '').toLowerCase();
+        
+        let dbStatus = 'processing';
+        let videoUrl = null;
+
+        if (['completed', 'succeeded', 'success'].includes(status)) {
+          dbStatus = 'completed';
+          videoUrl = statusInfo.url || statusInfo.video_url || (statusInfo.data && (statusInfo.data.url || statusInfo.data.video_url));
+          // Ensure we have a download fallback if direct URL is not present
+          if (!videoUrl) {
+             videoUrl = `/api/ai/download-video?videoId=${videoId}`;
+          }
+        } else if (['failed', 'error'].includes(status)) {
+          dbStatus = 'failed';
+        }
+
+        // 2. Update the Supabase database
+        let updatedShotsCount = 0;
+        if (dbStatus !== 'processing') {
+          // Find shots that match this videoId (task ID)
+          const { data: updatedShots, error: dbError } = await supabase
+            .from('shots')
+            .update({
+              video_status: dbStatus,
+              ...(videoUrl ? { video_url: videoUrl } : {})
+            })
+            .eq('video_generation_id', videoId)
+            .select('id');
+
+          if (!dbError) {
+             updatedShotsCount = updatedShots?.length || 0;
+          }
+
+          // 3. Clean up Redis if it's finished
+          await completeVideoTask(videoId);
+        }
+
+        results.push({
+          videoId,
+          success: true,
+          providerStatus: status,
+          dbStatus,
+          updatedShotsCount
+        });
+
+      } catch (err: any) {
+        results.push({ videoId, success: false, error: err.message });
+      }
     }
 
-    // 3. Clean up Redis if it's finished
-    if (['completed', 'failed'].includes(dbStatus)) {
-      await completeVideoTask(videoId);
+    // For backwards compatibility with single request, return single object format if only 1 ID was sent
+    if (!Array.isArray(body.videoIds) && results.length === 1) {
+      if (!results[0].success) {
+         return NextResponse.json({ error: results[0].error }, { status: 500 });
+      }
+      return NextResponse.json(results[0]);
     }
 
     return NextResponse.json({ 
       success: true, 
-      providerStatus: status,
-      dbStatus,
-      updatedShotsCount: updatedShots?.length || 0 
+      processed: results.length,
+      results
     });
 
   } catch (err) {
