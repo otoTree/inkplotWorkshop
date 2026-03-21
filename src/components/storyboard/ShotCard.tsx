@@ -77,6 +77,14 @@ export function ShotCard({ shot, assets, projectId, sensitivityPrompt, onUpdate,
           const res = await fetch(`/api/ai/queue-status?jobId=${current.id}`);
           if (res.ok) {
             const data = await res.json();
+            if (data.videoStatus && data.videoStatus !== currentRef.current.videoStatus) {
+              onUpdateRef.current({
+                ...currentRef.current,
+                videoStatus: data.videoStatus,
+                videoGenerationId: data.videoGenerationId || currentRef.current.videoGenerationId,
+                videoUrl: data.videoUrl || currentRef.current.videoUrl,
+              });
+            }
             if (data.position !== undefined) {
               setQueuePosition(data.position);
             }

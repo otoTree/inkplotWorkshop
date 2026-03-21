@@ -14,15 +14,39 @@ export async function POST(req: Request) {
     // Check for a special "reset-all" command
     if (body.action === 'reset-stuck-shots') {
       const supabase = createAdminClient();
-      // Only reset records that never received a real upstream task ID.
+      // Only reset queued records that still do not have a real upstream task ID.
+      const { data: queuedShots, error: queryError } = await supabase
+        .from('shots')
+        .select('id, video_generation_id')
+        .eq('video_status', 'queued');
+
+      if (queryError) throw queryError;
+
+      const resettableIds = (queuedShots || [])
+        .filter((shot) => {
+          const generationId = shot.video_generation_id;
+          return !generationId || generationId.startsWith('pending:') || generationId.startsWith('job_');
+        })
+        .map((shot) => shot.id);
+
+      if (resettableIds.length === 0) {
+        return NextResponse.json({
+          success: true,
+          message: '没有可重置的 queued 镜头：当前排队中的镜头都已经拿到真实任务 ID。',
+        });
+      }
+
       const { data, error } = await supabase
         .from('shots')
         .update({ video_status: 'pending', video_generation_id: null })
-        .eq('video_status', 'queued')
+        .in('id', resettableIds)
         .select('id');
         
       if (error) throw error;
-      return NextResponse.json({ success: true, message: `已重置 ${data.length} 个仍处于 queued 的镜头状态为 pending` });
+      return NextResponse.json({
+        success: true,
+        message: `已重置 ${data.length} 个仍处于 queued 且尚未拿到真实任务 ID 的镜头为 pending`,
+      });
     }
 
     const videoIds = Array.isArray(body.videoIds) ? body.videoIds : (body.videoId ? [body.videoId] : []);

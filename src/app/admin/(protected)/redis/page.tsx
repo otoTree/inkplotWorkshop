@@ -209,7 +209,7 @@ export default function AdminRedisPage() {
         <div className="flex gap-2">
           <Button 
             onClick={async () => {
-              if(!confirm('确定要将全站所有处于“排队中”和“生成中”的镜头状态强制重置为未生成吗？')) return;
+              if(!confirm('确定要将全站所有仍处于 queued 且尚未拿到真实任务 ID 的镜头重置为 pending 吗？已经拿到真实任务 ID 的镜头不会被重置。')) return;
               try {
                 const res = await fetch('/api/admin/redis/recover', {
                   method: 'POST',
