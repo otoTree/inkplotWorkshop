@@ -4,8 +4,9 @@ import JSZip from 'jszip';
 import { api } from '@/lib/api';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Progress } from '@/components/ui/progress';
-import { Download, Loader2 } from 'lucide-react';
+import { Download, Loader2, AlertCircle, CheckCircle2 } from 'lucide-react';
 import { useState } from 'react';
 
 interface VirtualFileSystem {
@@ -14,10 +15,29 @@ interface VirtualFileSystem {
   generateZipAndDownload: (folderName: string) => Promise<void>;
 }
 
+interface ExportSummary {
+  projectTitle: string;
+  hasCover: boolean;
+  episodesCount: number;
+  assetsTotal: number;
+  assetsMissingImages: number;
+  shotsTotal: number;
+  shotsMissingVideos: number;
+  data: {
+    project: any;
+    episodes: any[];
+    assets: any[];
+    shots: any[];
+  };
+}
+
 export function ExportPanel({ projectId }: { projectId: string }) {
   const [isExporting, setIsExporting] = useState(false);
   const [exportProgress, setExportProgress] = useState(0);
   const [exportStatus, setExportStatus] = useState('');
+  
+  const [isFetchingSummary, setIsFetchingSummary] = useState(false);
+  const [summaryData, setSummaryData] = useState<ExportSummary | null>(null);
 
   const sensitivityLabel = (value: number) => {
     if (value >= 3) return '强';
@@ -26,7 +46,48 @@ export function ExportPanel({ projectId }: { projectId: string }) {
     return '无';
   };
 
-  const handleExport = async () => {
+  const prepareExport = async () => {
+    setIsFetchingSummary(true);
+    setExportStatus('正在获取项目数据...');
+    try {
+      const project = await api.projects.get(projectId);
+      if (!project) throw new Error('未找到项目');
+
+      const episodes = await api.episodes.list(projectId);
+      const assets = await api.assets.list(projectId);
+      
+      const shotsArrays = await Promise.all(episodes.map(ep => api.shots.list(ep.id)));
+      const shots = shotsArrays.flat();
+
+      const assetsTotal = assets.length;
+      const assetsMissingImages = assets.filter(a => !a.imageUrl).length;
+      
+      const shotsTotal = shots.length;
+      const shotsMissingVideos = shots.filter(s => !s.videoUrl || s.videoStatus !== 'completed').length;
+
+      setSummaryData({
+        projectTitle: project.title,
+        hasCover: !!project.coverImageUrl,
+        episodesCount: episodes.length,
+        assetsTotal,
+        assetsMissingImages,
+        shotsTotal,
+        shotsMissingVideos,
+        data: { project, episodes, assets, shots }
+      });
+    } catch (error) {
+      console.error('Failed to prepare export:', error);
+      alert('获取数据失败');
+    } finally {
+      setIsFetchingSummary(false);
+      setExportStatus('');
+    }
+  };
+
+  const startExport = async () => {
+    if (!summaryData) return;
+    const { project, episodes, assets, shots } = summaryData.data;
+
     let baseDirHandle: any = null;
 
     // 1. 立即请求文件夹权限，以满足浏览器对“用户手势(User Gesture)”的严格要求
@@ -36,26 +97,18 @@ export function ExportPanel({ projectId }: { projectId: string }) {
         baseDirHandle = await window.showDirectoryPicker({ mode: 'readwrite' });
       } catch (err: any) {
         if (err.name === 'AbortError') {
+           setSummaryData(null);
            return; // 用户取消了选择，直接退出
         }
         console.log('FS API failed, fallback to ZIP', err);
       }
     }
 
+    setSummaryData(null); // Close modal
     setIsExporting(true);
     setExportProgress(0);
-    setExportStatus('正在获取项目数据...');
+    setExportStatus('准备导出...');
     try {
-      const project = await api.projects.get(projectId);
-      if (!project) throw new Error('未找到项目');
-
-      const episodes = await api.episodes.list(projectId);
-      const assets = await api.assets.list(projectId);
-      
-      setExportStatus('正在获取分镜数据...');
-      const shotsArrays = await Promise.all(episodes.map(ep => api.shots.list(ep.id)));
-      const shots = shotsArrays.flat();
-
       const characterStyle = project.characterArtStyle || project.artStyle || 'N/A';
       const sceneStyle = project.sceneArtStyle || project.artStyle || 'N/A';
 
@@ -478,11 +531,11 @@ export function ExportPanel({ projectId }: { projectId: string }) {
                     <Progress value={exportProgress} className="h-2" />
                 </div>
             )}
-            <Button size="lg" onClick={handleExport} disabled={isExporting} className="w-full">
-                {isExporting ? (
+            <Button size="lg" onClick={prepareExport} disabled={isExporting || isFetchingSummary} className="w-full">
+                {isExporting || isFetchingSummary ? (
                     <>
                         <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                        打包中...
+                        {isFetchingSummary ? '获取数据中...' : '打包中...'}
                     </>
                 ) : (
                     <>
@@ -496,6 +549,70 @@ export function ExportPanel({ projectId }: { projectId: string }) {
             </p>
         </CardContent>
       </Card>
+
+      <Dialog open={!!summaryData} onOpenChange={(open) => { if (!open) setSummaryData(null); }}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>导出总览</DialogTitle>
+            <DialogDescription>
+              即将导出项目 <strong>{summaryData?.projectTitle}</strong>，请确认以下数据完整性：
+            </DialogDescription>
+          </DialogHeader>
+          
+          {summaryData && (
+            <div className="py-4 space-y-4">
+              <div className="flex items-center justify-between">
+                <span className="text-sm font-medium">项目封面</span>
+                {summaryData.hasCover ? (
+                  <span className="flex items-center text-sm text-emerald-600"><CheckCircle2 className="w-4 h-4 mr-1" /> 已设置</span>
+                ) : (
+                  <span className="flex items-center text-sm text-yellow-600"><AlertCircle className="w-4 h-4 mr-1" /> 未设置</span>
+                )}
+              </div>
+              
+              <div className="flex items-center justify-between">
+                <span className="text-sm font-medium">分集数量</span>
+                <span className="text-sm">{summaryData.episodesCount} 集</span>
+              </div>
+
+              <div className="flex items-center justify-between">
+                <span className="text-sm font-medium">设定图</span>
+                <span className="flex items-center text-sm">
+                  {summaryData.assetsTotal} 个
+                  {summaryData.assetsMissingImages > 0 && (
+                     <span className="text-yellow-600 ml-2 flex items-center">
+                       (<AlertCircle className="w-4 h-4 mr-1" /> {summaryData.assetsMissingImages} 个缺失图片)
+                     </span>
+                  )}
+                </span>
+              </div>
+
+              <div className="flex items-center justify-between">
+                <span className="text-sm font-medium">分镜视频</span>
+                <span className="flex items-center text-sm">
+                  {summaryData.shotsTotal} 个
+                  {summaryData.shotsMissingVideos > 0 && (
+                     <span className="text-yellow-600 ml-2 flex items-center">
+                       (<AlertCircle className="w-4 h-4 mr-1" /> {summaryData.shotsMissingVideos} 个缺失视频)
+                     </span>
+                  )}
+                </span>
+              </div>
+
+              {(summaryData.assetsMissingImages > 0 || summaryData.shotsMissingVideos > 0 || !summaryData.hasCover) && (
+                <div className="mt-4 p-3 bg-yellow-50 rounded-md border border-yellow-200 text-yellow-800 text-xs">
+                  <strong>注意：</strong> 有部分资源缺失，导出的文件中将不包含这些缺失的图片或视频，但其他数据会正常导出。是否继续？
+                </div>
+              )}
+            </div>
+          )}
+
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setSummaryData(null)}>取消</Button>
+            <Button onClick={startExport}>继续导出</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
