@@ -58,7 +58,7 @@ export function ShotCard({ shot, assets, projectId, sensitivityPrompt, onUpdate,
     return '无';
   };
 
-  const isGeneratingVideo = current.videoStatus === 'queued';
+  const isGeneratingVideo = current.videoStatus === 'queued' || (current.videoStatus === 'processing' && !current.videoGenerationId);
   const [queuePosition, setQueuePosition] = useState<number | null>(null);
   
   const currentRef = useRef(current);

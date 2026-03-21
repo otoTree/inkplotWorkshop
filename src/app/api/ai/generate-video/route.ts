@@ -39,9 +39,12 @@ export async function POST(req: Request) {
 
     if (shotId) {
       if (result.status === 'queued') {
-        await supabase.from('shots').update({
+        const { error: queueError } = await supabase.from('shots').update({
           video_status: 'queued'
-        }).eq('id', shotId);
+        }).eq('id', shotId).select('id');
+        if (queueError) {
+          console.error('Failed to set queued status in DB:', queueError);
+        }
       } else {
         const taskId = result.task_id || result.id || result.data?.task_id || result.data?.id;
         if (taskId) {
