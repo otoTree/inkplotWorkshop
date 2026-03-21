@@ -304,7 +304,13 @@ export function ExportPanel({ projectId }: { projectId: string }) {
             if (epBlob) {
                 const ext = baseCoverBlob.type.split('/')[1] || 'jpg';
                 const safeExt = ext === 'jpeg' ? 'jpg' : ext;
+                
+                // Save in the global covers directory
                 await vfs.saveFile(['covers'], `episode_${ep.episodeNumber}_cover.${safeExt}`, epBlob);
+                
+                // Save alongside the videos for this specific episode
+                const epNumStr = ep.episodeNumber.toString().padStart(2, '0');
+                await vfs.saveFile(['videos', `episode_${ep.episodeNumber}`], `ep${epNumStr}_000_cover.${safeExt}`, epBlob);
             }
         }
       }
