@@ -81,9 +81,9 @@ export async function GET(req: Request) {
     const to = from + pageSize - 1;
     const { data: shotTasks, count: shotTasksCount, error: shotTasksError } = await supabase
       .from('shots')
-      .select('id, user_id, episode_id, sequence_number, video_status, video_generation_id, video_url, updated_at', { count: 'exact' })
+      .select('id, user_id, episode_id, sequence_number, video_status, video_generation_id, video_url, created_at', { count: 'exact' })
       .in('video_status', ['queued', 'processing', 'completed', 'failed'])
-      .order('updated_at', { ascending: false })
+      .order('created_at', { ascending: false })
       .range(from, to);
 
     if (shotTasksError) {

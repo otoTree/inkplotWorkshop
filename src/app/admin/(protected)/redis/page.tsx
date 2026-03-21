@@ -30,7 +30,7 @@ interface RedisData {
     video_status?: string | null;
     video_generation_id?: string | null;
     video_url?: string | null;
-    updated_at?: string | null;
+    created_at?: string | null;
   }>;
   shotTasksCount: number;
 }
@@ -251,7 +251,7 @@ export default function AdminRedisPage() {
               <TableHead>镜头</TableHead>
               <TableHead>状态</TableHead>
               <TableHead>任务ID</TableHead>
-              <TableHead>更新时间</TableHead>
+              <TableHead>创建时间</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -280,7 +280,7 @@ export default function AdminRedisPage() {
                     </Badge>
                   </TableCell>
                   <TableCell className="font-mono text-xs">{task.video_generation_id || '-'}</TableCell>
-                  <TableCell>{task.updated_at || '-'}</TableCell>
+                  <TableCell>{task.created_at || '-'}</TableCell>
                 </TableRow>
               ))
             )}
