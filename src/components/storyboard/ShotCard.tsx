@@ -72,12 +72,20 @@ export function ShotCard({ shot, assets, projectId, sensitivityPrompt, onUpdate,
   useEffect(() => {
     let interval: NodeJS.Timeout;
     if (isGeneratingVideo) {
-      const checkQueue = async () => {
+      const progressVideo = async () => {
         try {
-          const res = await fetch(`/api/ai/queue-status?jobId=${current.id}`);
+          const res = await fetch('/api/ai/progress-video', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ shotId: current.id }),
+          });
           if (res.ok) {
             const data = await res.json();
-            if (data.videoStatus && data.videoStatus !== currentRef.current.videoStatus) {
+            if (data.videoStatus && (
+              data.videoStatus !== currentRef.current.videoStatus ||
+              data.videoGenerationId !== currentRef.current.videoGenerationId ||
+              data.videoUrl !== currentRef.current.videoUrl
+            )) {
               onUpdateRef.current({
                 ...currentRef.current,
                 videoStatus: data.videoStatus,
@@ -87,6 +95,8 @@ export function ShotCard({ shot, assets, projectId, sensitivityPrompt, onUpdate,
             }
             if (data.position !== undefined) {
               setQueuePosition(data.position);
+            } else if (data.videoStatus !== 'queued') {
+              setQueuePosition(null);
             }
           }
         } catch (e) {
@@ -94,8 +104,8 @@ export function ShotCard({ shot, assets, projectId, sensitivityPrompt, onUpdate,
         }
       };
       
-      interval = setInterval(checkQueue, 2000);
-      checkQueue();
+      interval = setInterval(progressVideo, 5000);
+      progressVideo();
     } else {
       setQueuePosition(null);
     }
