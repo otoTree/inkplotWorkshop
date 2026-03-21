@@ -412,6 +412,8 @@ export function OneClickWorkflowDialog({ projectId, open, onOpenChange }: OneCli
             if (currentShot.referenceImage) allImages.push(currentShot.referenceImage);
             if (relatedImages.length > 0) allImages.push(...relatedImages);
 
+            await api.shots.update(currentShot.id, { videoStatus: 'queued' });
+
             try {
               const response = await fetch('/api/ai/generate-video', {
                 method: 'POST',
@@ -425,6 +427,8 @@ export function OneClickWorkflowDialog({ projectId, open, onOpenChange }: OneCli
                     sound: "on",
                     images: allImages.length > 0 ? allImages : undefined
                   },
+                  jobId: currentShot.id,
+                  shotId: currentShot.id
                 }),
               });
 

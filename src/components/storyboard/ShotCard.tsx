@@ -58,7 +58,7 @@ export function ShotCard({ shot, assets, projectId, sensitivityPrompt, onUpdate,
     return '无';
   };
 
-  const [isGeneratingVideo, setIsGeneratingVideo] = useState(false);
+  const isGeneratingVideo = current.videoStatus === 'queued';
   const [queuePosition, setQueuePosition] = useState<number | null>(null);
   
   const currentRef = useRef(current);
@@ -176,7 +176,7 @@ export function ShotCard({ shot, assets, projectId, sensitivityPrompt, onUpdate,
     if (current.referenceImage) allImages.push(current.referenceImage);
     if (relatedImages.length > 0) allImages.push(...relatedImages);
     
-    setIsGeneratingVideo(true);
+    onUpdate({ ...current, videoStatus: 'queued' });
     try {
       const response = await fetch('/api/ai/generate-video', {
         method: 'POST',
@@ -190,7 +190,8 @@ export function ShotCard({ shot, assets, projectId, sensitivityPrompt, onUpdate,
             sound: "on",
             images: allImages.length > 0 ? allImages : undefined
           },
-          jobId: current.id
+          jobId: current.id,
+          shotId: current.id
         }),
       });
 
@@ -215,8 +216,8 @@ export function ShotCard({ shot, assets, projectId, sensitivityPrompt, onUpdate,
       });
     } catch (error: any) {
       alert(`视频生成失败: ${error.message}`);
+      onUpdate({ ...current, videoStatus: 'failed' });
     } finally {
-      setIsGeneratingVideo(false);
       setQueuePosition(null);
     }
   };
@@ -386,7 +387,7 @@ ${current.videoPrompt || 'None'}
                   className="h-7 text-xs text-orange-500 border-orange-200 hover:bg-orange-50 hover:text-orange-600 px-2 mr-1"
                   onClick={async () => {
                     if (confirm('确定要取消排队吗？')) {
-                      setIsGeneratingVideo(false);
+                      onUpdate({ ...current, videoStatus: 'pending' });
                       setQueuePosition(null);
                       try {
                         await fetch('/api/ai/cancel-video', {
@@ -535,7 +536,7 @@ ${current.videoPrompt || 'None'}
                         className="h-6 text-[10px] text-orange-500 border-orange-200 hover:bg-orange-50 hover:text-orange-600 px-2"
                         onClick={async () => {
                           if (confirm('确定要取消排队吗？')) {
-                            setIsGeneratingVideo(false);
+                            onUpdate({ ...current, videoStatus: 'pending' });
                             setQueuePosition(null);
                             try {
                               await fetch('/api/ai/cancel-video', {

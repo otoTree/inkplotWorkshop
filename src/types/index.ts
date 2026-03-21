@@ -110,7 +110,7 @@ export interface Shot {
   videoPrompt?: string;        // 视频提示词 (用于生成视频)
   videoUrl?: string;           // ★NEW: 生成的视频URL
   videoGenerationId?: string;  // ★NEW: 视频生成任务ID
-  videoStatus?: 'pending' | 'processing' | 'completed' | 'failed'; // ★NEW: 视频生成状态
+  videoStatus?: 'pending' | 'queued' | 'processing' | 'completed' | 'failed'; // ★NEW: 视频生成状态
   
   // 支持单镜头多角色描述 (最多3个)
   characters?: Array<{

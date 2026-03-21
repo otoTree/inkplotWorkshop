@@ -13,19 +13,44 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    const { prompt, duration = 15, metadata, jobId } = await req.json();
+    const { prompt, duration = 15, metadata, jobId, shotId } = await req.json();
     if (!prompt || typeof prompt !== 'string') {
       return NextResponse.json({ error: 'Missing prompt' }, { status: 400 });
     }
 
+    let result;
+    try {
+      result = await callAIVideoGeneration(
+        prompt,
+        Number(duration) || 15,
+        metadata || undefined,
+        undefined,
+        jobId
+      );
+    } catch (apiError) {
+      if (shotId) {
+        await supabase.from('shots').update({
+          video_status: 'failed'
+        }).eq('id', shotId);
+      }
+      throw apiError;
+    }
 
-    const result = await callAIVideoGeneration(
-      prompt,
-      Number(duration) || 15,
-      metadata || undefined,
-      undefined,
-      jobId
-    );
+    if (shotId) {
+      const taskId = result.task_id || result.id || result.data?.task_id || result.data?.id;
+      if (taskId) {
+        const directUrl = result.url || result.video_url || result.data?.url || result.data?.video_url;
+        const status = (result.status || result.data?.status || 'processing').toLowerCase();
+        const videoStatus = ['completed', 'succeeded', 'success'].includes(status) ? 'completed' : 'processing';
+
+        await supabase.from('shots').update({
+          video_generation_id: taskId,
+          video_status: videoStatus,
+          ...(directUrl ? { video_url: directUrl } : {})
+        }).eq('id', shotId);
+      }
+    }
+
     return NextResponse.json(result);
   } catch (error) {
     if (error instanceof AIAPIError) {

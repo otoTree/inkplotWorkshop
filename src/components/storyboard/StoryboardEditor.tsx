@@ -336,6 +336,10 @@ export function StoryboardEditor({ projectId }: StoryboardEditorProps) {
         if (currentShot.referenceImage) allImages.push(currentShot.referenceImage);
         if (relatedImages.length > 0) allImages.push(...relatedImages);
 
+        const queuedShot: Shot = { ...currentShot, videoStatus: 'queued' };
+        await api.shots.update(queuedShot.id, queuedShot);
+        setShots(prev => prev.map(s => s.id === queuedShot.id ? queuedShot : s));
+
         try {
           const response = await fetch('/api/ai/generate-video', {
             method: 'POST',
@@ -349,6 +353,8 @@ export function StoryboardEditor({ projectId }: StoryboardEditorProps) {
                 sound: "on",
                 images: allImages.length > 0 ? allImages : undefined
               },
+              jobId: currentShot.id,
+              shotId: currentShot.id
             }),
           });
 
