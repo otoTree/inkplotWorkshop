@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { checkAdminAuth } from '@/lib/admin/auth';
 import { Redis } from '@upstash/redis';
-import { getAIAPIConfig } from '@/lib/ai-server';
+import { completeVideoTask, getAIAPIConfig, getAIVideoStatus } from '@/lib/ai-server';
 
 export async function GET() {
   if (!(await checkAdminAuth())) {
@@ -21,6 +21,24 @@ export async function GET() {
     const queueKey = `${baseKey}:queue`;
     const activeKey = `${baseKey}:active`;
     const globalKey = `global_concurrency:${configKey}`;
+
+    // Opportunistically clean up finished active tasks so the dashboard reflects reality.
+    const rawActiveItems = await redis.zrange(activeKey, 0, -1, { withScores: true });
+    for (let i = 0; i < rawActiveItems.length; i += 2) {
+      const member = String(rawActiveItems[i]);
+      if (member.startsWith('pending:') || member.startsWith('job_')) continue;
+
+      try {
+        const providerStatus = await getAIVideoStatus(member);
+        const statusInfo = providerStatus.data || providerStatus;
+        const status = (statusInfo.status || '').toLowerCase();
+        if (['completed', 'succeeded', 'success', 'failed', 'error'].includes(status)) {
+          await completeVideoTask(member);
+        }
+      } catch (err) {
+        console.error(`Failed to auto-clean active task ${member}:`, err);
+      }
+    }
 
     // Get queue items
     const queueItems = await redis.zrange(queueKey, 0, -1, { withScores: true });
