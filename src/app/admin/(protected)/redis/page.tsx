@@ -14,24 +14,39 @@ interface RedisItem {
 }
 
 interface RedisData {
+  page: number;
+  pageSize: number;
   queueKey: string;
   activeKey: string;
   globalKey: string;
   queue: RedisItem[];
   active: RedisItem[];
   global: RedisItem[];
+  shotTasks: Array<{
+    id: string;
+    user_id?: string | null;
+    episode_id?: string | null;
+    sequence_number?: number | null;
+    video_status?: string | null;
+    video_generation_id?: string | null;
+    video_url?: string | null;
+    updated_at?: string | null;
+  }>;
+  shotTasksCount: number;
 }
 
 export default function AdminRedisPage() {
   const [data, setData] = useState<RedisData | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [page, setPage] = useState(1);
+  const pageSize = 20;
 
   const fetchRedisData = async () => {
     setIsLoading(true);
     setError(null);
     try {
-      const res = await fetch('/api/admin/redis');
+      const res = await fetch(`/api/admin/redis?page=${page}&pageSize=${pageSize}`);
       const json = await res.json();
       if (res.ok) {
         setData(json);
@@ -143,7 +158,11 @@ export default function AdminRedisPage() {
 
   useEffect(() => {
     fetchRedisData();
-  }, []);
+    const interval = setInterval(fetchRedisData, 5000);
+    return () => clearInterval(interval);
+  }, [page]);
+
+  const totalPages = data ? Math.max(1, Math.ceil(data.shotTasksCount / pageSize)) : 1;
 
   const renderTable = (title: string, keyName: string, items: RedisItem[], showRecoverAll: boolean = false) => (
     <Card className="mb-6">
@@ -208,6 +227,69 @@ export default function AdminRedisPage() {
     </Card>
   );
 
+  const renderShotTaskTable = () => (
+    <Card className="mb-6">
+      <CardHeader className="flex flex-row items-center justify-between">
+        <div>
+          <CardTitle>数据库视频任务</CardTitle>
+          <p className="text-sm text-gray-500 mt-1">显示 `shots` 表中的 queued / processing / completed / failed 任务</p>
+        </div>
+        <div className="flex gap-2 items-center">
+          <Button variant="outline" size="sm" onClick={() => setPage(prev => Math.max(1, prev - 1))} disabled={page <= 1}>
+            上一页
+          </Button>
+          <span className="text-sm text-gray-500">第 {page} / {totalPages} 页</span>
+          <Button variant="outline" size="sm" onClick={() => setPage(prev => Math.min(totalPages, prev + 1))} disabled={page >= totalPages}>
+            下一页
+          </Button>
+        </div>
+      </CardHeader>
+      <CardContent>
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <TableHead>镜头</TableHead>
+              <TableHead>状态</TableHead>
+              <TableHead>任务ID</TableHead>
+              <TableHead>更新时间</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {!data || data.shotTasks.length === 0 ? (
+              <TableRow>
+                <TableCell colSpan={4} className="text-center py-4 text-gray-500">暂无数据库任务</TableCell>
+              </TableRow>
+            ) : (
+              data.shotTasks.map((task) => (
+                <TableRow key={task.id}>
+                  <TableCell className="font-mono text-xs">
+                    <div>{task.id}</div>
+                    {task.sequence_number !== null && task.sequence_number !== undefined && (
+                      <div className="text-[10px] text-gray-500 mt-1">seq: {task.sequence_number}</div>
+                    )}
+                  </TableCell>
+                  <TableCell>
+                    <Badge variant={
+                      task.video_status === 'completed'
+                        ? 'default'
+                        : task.video_status === 'failed'
+                          ? 'destructive'
+                          : 'secondary'
+                    }>
+                      {task.video_status || 'unknown'}
+                    </Badge>
+                  </TableCell>
+                  <TableCell className="font-mono text-xs">{task.video_generation_id || '-'}</TableCell>
+                  <TableCell>{task.updated_at || '-'}</TableCell>
+                </TableRow>
+              ))
+            )}
+          </TableBody>
+        </Table>
+      </CardContent>
+    </Card>
+  );
+
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
@@ -247,6 +329,7 @@ export default function AdminRedisPage() {
 
       {data && (
         <>
+          {renderShotTaskTable()}
           {renderTable('视频等待队列 (Queue)', data.queueKey, data.queue)}
           {renderTable('视频处理中任务 (Active)', data.activeKey, data.active, true)}
           {renderTable('全局并发信号量 (Global Semaphore)', data.globalKey, data.global)}
