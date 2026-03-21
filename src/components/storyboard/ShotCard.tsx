@@ -176,6 +176,7 @@ export function ShotCard({ shot, assets, projectId, sensitivityPrompt, onUpdate,
     if (current.referenceImage) allImages.push(current.referenceImage);
     if (relatedImages.length > 0) allImages.push(...relatedImages);
     
+    // We update status to queued to trigger UI, but we must preserve videoGenerationId if we have one (though usually it's empty here)
     onUpdate({ ...current, videoStatus: 'queued' });
     try {
       const response = await fetch('/api/ai/generate-video', {
@@ -203,7 +204,7 @@ export function ShotCard({ shot, assets, projectId, sensitivityPrompt, onUpdate,
       const data = await response.json();
       
       if (data.status === 'queued') {
-        // DB and current state are already queued
+        // API confirms it is queued
         setQueuePosition(data.position || null);
         return;
       }

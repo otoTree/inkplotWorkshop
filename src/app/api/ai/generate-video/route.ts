@@ -49,11 +49,17 @@ export async function POST(req: Request) {
           const status = (result.status || result.data?.status || 'processing').toLowerCase();
           const videoStatus = ['completed', 'succeeded', 'success'].includes(status) ? 'completed' : 'processing';
 
-          await supabase.from('shots').update({
+          const { error: updateError } = await supabase.from('shots').update({
             video_generation_id: taskId,
             video_status: videoStatus,
             ...(directUrl ? { video_url: directUrl } : {})
-          }).eq('id', shotId);
+          })
+          .eq('id', shotId)
+          .select('id');
+          
+          if (updateError) {
+             console.error('Failed to update shot in /api/ai/generate-video:', updateError);
+          }
         }
       }
     }
