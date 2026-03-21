@@ -14,15 +14,15 @@ export async function POST(req: Request) {
     // Check for a special "reset-all" command
     if (body.action === 'reset-stuck-shots') {
       const supabase = createAdminClient();
-      // Reset all queued and processing shots back to pending
+      // Only reset records that never received a real upstream task ID.
       const { data, error } = await supabase
         .from('shots')
         .update({ video_status: 'pending', video_generation_id: null })
-        .in('video_status', ['queued', 'processing'])
+        .eq('video_status', 'queued')
         .select('id');
         
       if (error) throw error;
-      return NextResponse.json({ success: true, message: `已重置 ${data.length} 个卡住的镜头状态为 pending` });
+      return NextResponse.json({ success: true, message: `已重置 ${data.length} 个仍处于 queued 的镜头状态为 pending` });
     }
 
     const videoIds = Array.isArray(body.videoIds) ? body.videoIds : (body.videoId ? [body.videoId] : []);

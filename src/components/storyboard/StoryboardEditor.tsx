@@ -442,8 +442,33 @@ export function StoryboardEditor({ projectId }: StoryboardEditorProps) {
   };
   
   const handleUpdateShot = async (updatedShot: Shot) => {
-      await api.shots.update(updatedShot.id, updatedShot);
-      setShots(prev => prev.map(s => s.id === updatedShot.id ? updatedShot : s));
+      const existingShot = shots.find((shot) => shot.id === updatedShot.id);
+
+      // Preserve server-assigned video task metadata when a stale editor state saves over it.
+      const mergedShot: Shot = existingShot ? {
+        ...existingShot,
+        ...updatedShot,
+        videoGenerationId:
+          updatedShot.videoGenerationId !== undefined
+            ? updatedShot.videoGenerationId
+            : existingShot.videoGenerationId,
+        videoUrl:
+          updatedShot.videoUrl !== undefined
+            ? updatedShot.videoUrl
+            : existingShot.videoUrl,
+        videoStatus:
+          updatedShot.videoGenerationId === undefined &&
+          updatedShot.videoStatus === 'pending' &&
+          existingShot.videoStatus &&
+          existingShot.videoStatus !== 'pending'
+            ? existingShot.videoStatus
+            : (updatedShot.videoStatus !== undefined
+                ? updatedShot.videoStatus
+                : existingShot.videoStatus),
+      } : updatedShot;
+
+      await api.shots.update(mergedShot.id, mergedShot);
+      setShots(prev => prev.map(s => s.id === mergedShot.id ? mergedShot : s));
   };
   
   const handleDeleteShot = async (shotId: string) => {
