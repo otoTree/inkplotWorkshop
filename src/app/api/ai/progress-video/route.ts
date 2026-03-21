@@ -46,25 +46,59 @@ export async function POST(req: Request) {
     }
 
     if (shot.video_status === 'queued' && !shot.video_generation_id) {
+      const dispatchPlaceholder = `pending:${shot.id}`;
+      const { data: claimedShot, error: claimError } = await supabase
+        .from('shots')
+        .update({
+          video_generation_id: dispatchPlaceholder,
+        })
+        .eq('id', shot.id)
+        .eq('user_id', user.id)
+        .eq('video_status', 'queued')
+        .is('video_generation_id', null)
+        .select('*')
+        .maybeSingle();
+
+      if (claimError) {
+        throw claimError;
+      }
+
+      // Another request already claimed or progressed this shot.
+      if (!claimedShot) {
+        const { data: latestShot } = await supabase
+          .from('shots')
+          .select('id, video_status, video_generation_id, video_url')
+          .eq('id', shot.id)
+          .eq('user_id', user.id)
+          .single();
+
+        return NextResponse.json({
+          shotId: shot.id,
+          videoStatus: latestShot?.video_status || 'queued',
+          videoGenerationId: latestShot?.video_generation_id || null,
+          videoUrl: latestShot?.video_url || null,
+        });
+      }
+
       const fullPrompt = [
-        shot.video_prompt ? `[Video Prompt] ${shot.video_prompt}` : '',
-        shot.description ? `[Visual Description] ${shot.description}` : '',
-        shot.character_action ? `[Action] ${shot.character_action}` : '',
-        shot.lighting_atmosphere ? `[Lighting/Atmosphere] ${shot.lighting_atmosphere}` : '',
-        shot.scene_label ? `[Scene] ${shot.scene_label}` : '',
-        shot.emotion ? `[Emotion] ${shot.emotion}` : '',
-        (shot.camera || shot.size) ? `[Camera/Size] ${shot.camera || ''} ${shot.size || ''}`.trim() : '',
-        shot.dialogue ? `[Dialogue] ${shot.dialogue}` : '',
-        shot.sound_effect ? `[Sound Effect] ${shot.sound_effect}` : '',
+        claimedShot.video_prompt ? `[Video Prompt] ${claimedShot.video_prompt}` : '',
+        claimedShot.description ? `[Visual Description] ${claimedShot.description}` : '',
+        claimedShot.character_action ? `[Action] ${claimedShot.character_action}` : '',
+        claimedShot.lighting_atmosphere ? `[Lighting/Atmosphere] ${claimedShot.lighting_atmosphere}` : '',
+        claimedShot.scene_label ? `[Scene] ${claimedShot.scene_label}` : '',
+        claimedShot.emotion ? `[Emotion] ${claimedShot.emotion}` : '',
+        (claimedShot.camera || claimedShot.size) ? `[Camera/Size] ${claimedShot.camera || ''} ${claimedShot.size || ''}`.trim() : '',
+        claimedShot.dialogue ? `[Dialogue] ${claimedShot.dialogue}` : '',
+        claimedShot.sound_effect ? `[Sound Effect] ${claimedShot.sound_effect}` : '',
       ].filter(Boolean).join('\n');
 
       const allImages = [];
-      if (shot.reference_image) allImages.push(shot.reference_image);
-      if (shot.related_asset_ids && shot.related_asset_ids.length > 0) {
+      if (claimedShot.reference_image) allImages.push(claimedShot.reference_image);
+      if (claimedShot.related_asset_ids && claimedShot.related_asset_ids.length > 0) {
         const { data: assets } = await supabase
           .from('assets')
           .select('image_url')
-          .in('id', shot.related_asset_ids);
+          .in('id', claimedShot.related_asset_ids);
         if (assets) {
           assets.forEach((asset) => {
             if (asset.image_url) allImages.push(asset.image_url);
@@ -75,7 +109,7 @@ export async function POST(req: Request) {
       try {
         const result = await callAIVideoGeneration(
           fullPrompt,
-          shot.duration || 5,
+          claimedShot.duration || 5,
           {
             multi_shot: false,
             aspect_ratio: '9:16',
@@ -83,7 +117,7 @@ export async function POST(req: Request) {
             images: allImages.length > 0 ? allImages : undefined,
           },
           undefined,
-          shot.id,
+          claimedShot.id,
           false
         );
 
@@ -100,7 +134,7 @@ export async function POST(req: Request) {
               video_status: videoStatus,
               ...(directUrl ? { video_url: directUrl } : {}),
             })
-            .eq('id', shot.id)
+            .eq('id', claimedShot.id)
             .eq('user_id', user.id);
         }
 
@@ -109,7 +143,7 @@ export async function POST(req: Request) {
         }
 
         return NextResponse.json({
-          shotId: shot.id,
+          shotId: claimedShot.id,
           videoStatus,
           videoGenerationId: taskId || null,
           videoUrl: directUrl || null,
@@ -117,18 +151,47 @@ export async function POST(req: Request) {
         });
       } catch (error) {
         if (error instanceof AIAPIError && error.status === 429) {
+          await supabase
+            .from('shots')
+            .update({
+              video_generation_id: null,
+              video_status: 'queued',
+            })
+            .eq('id', claimedShot.id)
+            .eq('user_id', user.id)
+            .eq('video_generation_id', dispatchPlaceholder);
+
           return NextResponse.json({
-            shotId: shot.id,
+            shotId: claimedShot.id,
             videoStatus: 'queued',
-            videoGenerationId: shot.video_generation_id,
-            videoUrl: shot.video_url,
+            videoGenerationId: null,
+            videoUrl: claimedShot.video_url,
           });
         }
+
+        await supabase
+          .from('shots')
+          .update({
+            video_generation_id: null,
+            video_status: 'queued',
+          })
+          .eq('id', claimedShot.id)
+          .eq('user_id', user.id)
+          .eq('video_generation_id', dispatchPlaceholder);
+
         throw error;
       }
     }
 
     const videoId = shot.video_generation_id;
+    if (videoId && videoId.startsWith('pending:')) {
+      return NextResponse.json({
+        shotId: shot.id,
+        videoStatus: 'queued',
+        videoGenerationId: null,
+        videoUrl: shot.video_url,
+      });
+    }
     if (!videoId) {
       return NextResponse.json({
         shotId: shot.id,
