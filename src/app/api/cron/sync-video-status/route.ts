@@ -137,6 +137,22 @@ export async function GET(req: Request) {
               ...(directUrl ? { video_url: directUrl } : {})
             }).eq('id', shot.id);
 
+            // Also replace the placeholder in active queue with the real taskId
+            try {
+              const { tryAcquireVideoSlot } = await import('@/lib/ai-server');
+              const { getAIAPIConfig } = await import('@/lib/ai-server');
+              const config = getAIAPIConfig();
+              const redis = (await import('@upstash/redis')).Redis.fromEnv();
+              const baseKey = `video_concurrency:${config.baseUrl}|${config.apiKey}|${config.maxConcurrency}`;
+              const activeKey = `${baseKey}:active`;
+              
+              // We replace the pending:shot.id with the real taskId so `recover` can find it next time if it gets stuck
+              await redis.zrem(activeKey, `pending:${shot.id}`);
+              await redis.zadd(activeKey, { score: Date.now() + 15 * 60 * 1000, member: taskId });
+            } catch (redisErr) {
+              console.error('Failed to commit real taskId to Redis in cron:', redisErr);
+            }
+
             queueResults.push({ id: shot.id, taskId, status: videoStatus });
           }
 
