@@ -29,13 +29,13 @@ export async function GET() {
     // Get global items
     const globalItems = await redis.zrange(globalKey, 0, -1, { withScores: true });
 
-    const formatItems = (items: (string | number)[]) => {
+    const formatItems = (items: unknown[]) => {
       const formatted = [];
       for (let i = 0; i < items.length; i += 2) {
         formatted.push({
-          member: items[i] as string,
-          score: items[i + 1] as number,
-          date: new Date(items[i + 1] as number).toISOString(),
+          member: String(items[i]),
+          score: Number(items[i + 1]),
+          date: new Date(Number(items[i + 1])).toISOString(),
         });
       }
       return formatted;

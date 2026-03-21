@@ -69,6 +69,39 @@ export default function AdminRedisPage() {
     }
   };
 
+  const handleRecover = async (videoId: string) => {
+    // Only recover if it looks like a task ID (usually not starting with "job_" or "pending:")
+    if (videoId.startsWith('pending:')) {
+      alert('这是一个等待调度的占位符，请直接移除或等待其超时。');
+      return;
+    }
+    if (videoId.startsWith('job_')) {
+      alert('这是一个排队中的 Job ID，尚未发送给 AI 提供商，无法恢复。如果卡住了请直接移除。');
+      return;
+    }
+
+    if (!confirm(`将向 AI 厂商查询 ${videoId} 的真实状态，并尝试更新数据库和清理队列。确定吗？`)) return;
+    
+    try {
+      const res = await fetch('/api/admin/redis/recover', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ videoId }),
+      });
+      const json = await res.json();
+      
+      if (res.ok) {
+        alert(`恢复成功！\n厂商状态: ${json.providerStatus}\n数据库更新状态: ${json.dbStatus}\n更新了 ${json.updatedShotsCount} 个镜头`);
+        fetchRedisData();
+      } else {
+        alert(`恢复失败: ${json.error}`);
+      }
+    } catch (err) {
+      console.error(err);
+      alert('网络错误');
+    }
+  };
+
   useEffect(() => {
     fetchRedisData();
   }, []);
@@ -106,9 +139,14 @@ export default function AdminRedisPage() {
                   <TableCell className="font-mono text-xs">{item.score}</TableCell>
                   <TableCell>{item.date}</TableCell>
                   <TableCell>
-                    <Button size="sm" variant="outline" onClick={() => handleDeleteMember(keyName, item.member)}>
-                      移除
-                    </Button>
+                    <div className="flex items-center space-x-2">
+                      <Button size="sm" variant="outline" onClick={() => handleRecover(item.member)} disabled={item.member.startsWith('job_') || item.member.startsWith('pending:')}>
+                        恢复
+                      </Button>
+                      <Button size="sm" variant="destructive" onClick={() => handleDeleteMember(keyName, item.member)}>
+                        移除
+                      </Button>
+                    </div>
                   </TableCell>
                 </TableRow>
               ))
