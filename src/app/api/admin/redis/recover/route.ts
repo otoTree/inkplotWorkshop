@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { checkAdminAuth } from '@/lib/admin/auth';
 import { createAdminClient } from '@/lib/supabase/admin';
-import { getAIVideoStatus, completeVideoTask } from '@/lib/ai-server';
+import { getAIVideoStatus, completeVideoTask, getShotIdByVideoTaskId } from '@/lib/ai-server';
 
 export async function POST(req: Request) {
   if (!(await checkAdminAuth())) {
@@ -73,6 +73,7 @@ export async function POST(req: Request) {
         
         let dbStatus = 'processing';
         let videoUrl = null;
+        const mappedShotId = await getShotIdByVideoTaskId(videoId);
 
         if (['completed', 'succeeded', 'success'].includes(status)) {
           dbStatus = 'completed';
@@ -88,18 +89,36 @@ export async function POST(req: Request) {
         // 2. Update the Supabase database
         let updatedShotsCount = 0;
         if (dbStatus !== 'processing') {
-          // Find shots that match this videoId (task ID)
-          const { data: updatedShots, error: dbError } = await supabase
-            .from('shots')
-            .update({
-              video_status: dbStatus,
-              ...(videoUrl ? { video_url: videoUrl } : {})
-            })
-            .eq('video_generation_id', videoId)
-            .select('id');
+          if (mappedShotId) {
+            const { data: updatedShots, error: dbError } = await supabase
+              .from('shots')
+              .update({
+                video_generation_id: videoId,
+                video_status: dbStatus,
+                ...(videoUrl ? { video_url: videoUrl } : {})
+              })
+              .eq('id', mappedShotId)
+              .select('id');
 
-          if (!dbError) {
-             updatedShotsCount = updatedShots?.length || 0;
+            if (!dbError) {
+              updatedShotsCount = updatedShots?.length || 0;
+            }
+          }
+
+          if (updatedShotsCount === 0) {
+            // Fallback for legacy records where we only stored video_generation_id in shots.
+            const { data: updatedShots, error: dbError } = await supabase
+              .from('shots')
+              .update({
+                video_status: dbStatus,
+                ...(videoUrl ? { video_url: videoUrl } : {})
+              })
+              .eq('video_generation_id', videoId)
+              .select('id');
+
+            if (!dbError) {
+               updatedShotsCount = updatedShots?.length || 0;
+            }
           }
 
           // 3. Clean up Redis if it's finished
@@ -111,7 +130,8 @@ export async function POST(req: Request) {
           success: true,
           providerStatus: status,
           dbStatus,
-          updatedShotsCount
+          updatedShotsCount,
+          mappedShotId
         });
 
       } catch (err: any) {

@@ -10,6 +10,7 @@ interface RedisItem {
   member: string;
   score: number;
   date: string;
+  mappedShotId?: string | null;
 }
 
 interface RedisData {
@@ -91,7 +92,7 @@ export default function AdminRedisPage() {
       const json = await res.json();
       
       if (res.ok) {
-        alert(`恢复成功！\n厂商状态: ${json.providerStatus}\n数据库更新状态: ${json.dbStatus}\n更新了 ${json.updatedShotsCount} 个镜头`);
+        alert(`恢复成功！\n厂商状态: ${json.providerStatus}\n数据库更新状态: ${json.dbStatus}\n关联镜头: ${json.mappedShotId || '未命中映射'}\n更新了 ${json.updatedShotsCount} 个镜头`);
         fetchRedisData();
       } else {
         alert(`恢复失败: ${json.error}`);
@@ -180,7 +181,12 @@ export default function AdminRedisPage() {
             ) : (
               items.map((item) => (
                 <TableRow key={item.member}>
-                  <TableCell className="font-mono text-xs">{item.member}</TableCell>
+                  <TableCell className="font-mono text-xs">
+                    <div>{item.member}</div>
+                    {item.mappedShotId && (
+                      <div className="text-[10px] text-gray-500 mt-1">shot: {item.mappedShotId}</div>
+                    )}
+                  </TableCell>
                   <TableCell className="font-mono text-xs">{item.score}</TableCell>
                   <TableCell>{item.date}</TableCell>
                   <TableCell>

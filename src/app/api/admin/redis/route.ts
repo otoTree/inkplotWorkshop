@@ -29,13 +29,19 @@ export async function GET() {
     // Get global items
     const globalItems = await redis.zrange(globalKey, 0, -1, { withScores: true });
 
-    const formatItems = (items: unknown[]) => {
+    const formatItems = async (items: unknown[]) => {
       const formatted = [];
       for (let i = 0; i < items.length; i += 2) {
+        const member = String(items[i]);
+        let mappedShotId: string | null = null;
+        if (!member.startsWith('pending:') && !member.startsWith('job_')) {
+          mappedShotId = await redis.get<string>(`video_task_map:${configKey}:${member}`) || null;
+        }
         formatted.push({
-          member: String(items[i]),
+          member,
           score: Number(items[i + 1]),
           date: new Date(Number(items[i + 1])).toISOString(),
+          mappedShotId,
         });
       }
       return formatted;
@@ -45,9 +51,9 @@ export async function GET() {
       queueKey,
       activeKey,
       globalKey,
-      queue: formatItems(queueItems),
-      active: formatItems(activeItems),
-      global: formatItems(globalItems),
+      queue: await formatItems(queueItems),
+      active: await formatItems(activeItems),
+      global: await formatItems(globalItems),
     });
   } catch (err) {
     const error = err as Error;
