@@ -652,7 +652,7 @@ ${current.videoPrompt || 'None'}
                       <span className="text-xs font-medium">
                         {queuePosition !== null && queuePosition > 0 
                           ? `排队中... 前面还有 ${queuePosition} 个任务` 
-                          : '提交视频生成中...'}
+                          : '排队中，即将开始生成...'}
                       </span>
                     </div>
                   )}

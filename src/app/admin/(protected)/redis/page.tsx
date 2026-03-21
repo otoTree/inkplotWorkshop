@@ -206,7 +206,27 @@ export default function AdminRedisPage() {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <h2 className="text-2xl font-serif">并发队列管理 (Upstash Redis)</h2>
-        <Button onClick={fetchRedisData} variant="outline">刷新状态</Button>
+        <div className="flex gap-2">
+          <Button 
+            onClick={async () => {
+              if(!confirm('确定要将全站所有处于“排队中”和“生成中”的镜头状态强制重置为未生成吗？')) return;
+              try {
+                const res = await fetch('/api/admin/redis/recover', {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ action: 'reset-stuck-shots' })
+                });
+                const data = await res.json();
+                alert(data.message || '重置完成');
+                fetchRedisData();
+              } catch(e) { alert('请求失败'); }
+            }} 
+            variant="destructive"
+          >
+            强制重置所有卡住的镜头
+          </Button>
+          <Button onClick={fetchRedisData} variant="outline">刷新状态</Button>
+        </div>
       </div>
 
       {error && (
