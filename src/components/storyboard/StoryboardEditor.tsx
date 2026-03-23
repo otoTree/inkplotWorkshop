@@ -283,23 +283,16 @@ export function StoryboardEditor({ projectId }: StoryboardEditorProps) {
     }
   };
 
-  const hasEpisodeVideoInFlight = shots.some(
-    (shot) => shot.videoStatus === 'queued' || shot.videoStatus === 'processing'
+  const shotsToGenerate = shots.filter(
+    s => s.videoStatus !== 'completed' && s.videoStatus !== 'processing' && s.videoStatus !== 'queued'
   );
+
+  const hasNoShotsToGenerate = shotsToGenerate.length === 0;
 
   const handleGenerateEpisodeVideos = async () => {
     if (!shots || shots.length === 0) return;
 
-    if (hasEpisodeVideoInFlight) {
-      alert('当前剧集已有视频任务正在排队或生成中，请等待完成后再发起。');
-      return;
-    }
-
-    const shotsToGenerate = shots.filter(
-      s => s.videoStatus !== 'completed' && s.videoStatus !== 'processing'
-    );
-
-    if (shotsToGenerate.length === 0) {
+    if (hasNoShotsToGenerate) {
       alert('当前剧集的所有镜头都已经生成了视频，或正在生成中。');
       return;
     }
@@ -572,15 +565,15 @@ export function StoryboardEditor({ projectId }: StoryboardEditorProps) {
             </Button>
             <Button 
               onClick={handleGenerateEpisodeVideos} 
-              disabled={isGeneratingVideos || !shots || shots.length === 0 || hasEpisodeVideoInFlight}
+              disabled={isGeneratingVideos || !shots || shots.length === 0 || hasNoShotsToGenerate}
               variant="outline"
               className="gap-2 border-black/10"
             >
               {isGeneratingVideos ? <Loader2 className="w-4 h-4 animate-spin" /> : <Video className="w-4 h-4" />}
               {isGeneratingVideos
                 ? `发起视频生成 ${videoGenerationCurrent}/${videoGenerationTotal}`
-                : hasEpisodeVideoInFlight
-                  ? '当前剧集视频生成中'
+                : hasNoShotsToGenerate
+                  ? '当前剧集视频已全生成或排队中'
                   : '一键生成当前剧集视频'}
             </Button>
             <Button variant="outline" size="icon" onClick={handleAddShot}>

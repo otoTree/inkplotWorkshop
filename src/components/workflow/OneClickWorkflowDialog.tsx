@@ -377,7 +377,7 @@ export function OneClickWorkflowDialog({ projectId, open, onOpenChange }: OneCli
         }
 
         const shotsToGenerate = allShots.filter(
-          s => s.videoStatus !== 'completed' && s.videoStatus !== 'processing'
+          s => s.videoStatus !== 'completed' && s.videoStatus !== 'processing' && s.videoStatus !== 'queued'
         );
 
         if (shotsToGenerate.length > 0) {
