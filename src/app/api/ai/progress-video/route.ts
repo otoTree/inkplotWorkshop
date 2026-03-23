@@ -173,7 +173,7 @@ export async function POST(req: Request) {
           .from('shots')
           .update({
             video_generation_id: null,
-            video_status: 'queued',
+            video_status: 'failed',
           })
           .eq('id', claimedShot.id)
           .eq('user_id', user.id)

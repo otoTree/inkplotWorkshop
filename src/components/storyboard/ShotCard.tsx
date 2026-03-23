@@ -437,7 +437,7 @@ ${current.videoPrompt || 'None'}
                   className="h-7 text-xs text-orange-500 border-orange-200 hover:bg-orange-50 hover:text-orange-600 px-2 mr-1"
                   onClick={async () => {
                     if (confirm('确定要取消排队吗？')) {
-                      onUpdate({ ...current, videoStatus: 'pending' });
+                      onUpdate({ ...current, videoStatus: 'pending', videoGenerationId: null as any });
                       setQueuePosition(null);
                       try {
                         await fetch('/api/ai/cancel-video', {
@@ -586,7 +586,7 @@ ${current.videoPrompt || 'None'}
                         className="h-6 text-[10px] text-orange-500 border-orange-200 hover:bg-orange-50 hover:text-orange-600 px-2"
                         onClick={async () => {
                           if (confirm('确定要取消排队吗？')) {
-                            onUpdate({ ...current, videoStatus: 'pending' });
+                            onUpdate({ ...current, videoStatus: 'pending', videoGenerationId: null as any });
                             setQueuePosition(null);
                             try {
                               await fetch('/api/ai/cancel-video', {
