@@ -116,9 +116,12 @@ export function ShotCard({ shot, assets, projectId, sensitivityPrompt, onUpdate,
   }, [isGeneratingVideo, current.id]);
 
   useEffect(() => {
-    let interval: NodeJS.Timeout;
+    let timeoutId: NodeJS.Timeout;
+    let isCancelled = false;
+    let attempt = 0;
     
     const checkStatus = async () => {
+      if (isCancelled) return;
       const latestCurrent = currentRef.current;
       if (!latestCurrent.videoGenerationId || latestCurrent.videoStatus === 'completed' || latestCurrent.videoStatus === 'failed') return;
       
@@ -129,7 +132,11 @@ export function ShotCard({ shot, assets, projectId, sensitivityPrompt, onUpdate,
           body: JSON.stringify({ videoId: latestCurrent.videoGenerationId })
         });
         
-        if (!res.ok) return;
+        if (!res.ok) {
+          scheduleNextCheck();
+          return;
+        }
+
         const data = await res.json();
         const statusInfo = data.data || data;
         const status = (statusInfo.status || '').toLowerCase();
@@ -142,24 +149,41 @@ export function ShotCard({ shot, assets, projectId, sensitivityPrompt, onUpdate,
             videoStatus: 'completed',
             videoUrl: directUrl || `/api/ai/download-video?videoId=${latestCurrent.videoGenerationId}`
           });
+          return; // Stop polling
         } else if (['failed', 'error'].includes(status)) {
           onUpdateRef.current({
             ...latestCurrent,
             videoStatus: 'failed',
           });
+          return; // Stop polling
         }
       } catch (e) {
         console.error('Check video status failed', e);
       }
+      
+      scheduleNextCheck();
+    };
+
+    const scheduleNextCheck = () => {
+      if (isCancelled) return;
+      attempt++;
+      // 指数退避策略：视频平均生成40s
+      // 初始间隔 10s，每次乘以 1.5，最大 30s
+      // 加入随机 jitter 避开后端定时器同步
+      const baseDelay = Math.min(30000, 10000 * Math.pow(1.5, attempt - 1));
+      const jitter = Math.random() * 2000;
+      const nextDelay = baseDelay + jitter;
+      
+      timeoutId = setTimeout(checkStatus, nextDelay);
     };
 
     if (current.videoGenerationId && current.videoStatus === 'processing') {
-      interval = setInterval(checkStatus, 5000);
-      checkStatus(); // Check immediately
+      checkStatus(); // Check immediately on mount/status change
     }
 
     return () => {
-      if (interval) clearInterval(interval);
+      isCancelled = true;
+      if (timeoutId) clearTimeout(timeoutId);
     };
   }, [current.videoGenerationId, current.videoStatus]);
 

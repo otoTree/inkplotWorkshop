@@ -409,20 +409,32 @@ export async function getAiVideoStatus(
 export async function waitForVideoCompletion(
   videoId: string,
   config?: AIAPIConfig,
-  pollIntervalMs: number = 5000,
+  initialPollIntervalMs: number = 10000, // 从 10 秒开始
   maxWaitTimeMs: number = 600000
 ): Promise<any> {
   const startTime = Date.now();
+  let attempt = 0;
 
   while (true) {
-    const statusInfo = await getAiVideoStatus(videoId, config);
-    const payload = statusInfo.data || statusInfo;
-    const status = (payload.status || '').toLowerCase();
+    try {
+      const statusInfo = await getAiVideoStatus(videoId, config);
+      const payload = statusInfo.data || statusInfo;
+      const status = (payload.status || '').toLowerCase();
 
-    if (['completed', 'succeeded', 'success'].includes(status)) {
-      return statusInfo;
-    } else if (['failed', 'error'].includes(status)) {
-      throw new AIAPIError(`视频生成失败: ${JSON.stringify(statusInfo)}`);
+      if (['completed', 'succeeded', 'success'].includes(status)) {
+        return statusInfo;
+      } else if (['failed', 'error'].includes(status)) {
+        throw new AIAPIError(`视频生成失败: ${JSON.stringify(statusInfo)}`);
+      }
+    } catch (e: any) {
+      if (e instanceof AIAPIError && e.message.includes('失败')) {
+        // 遇到状态失败抛出，但如果是网络或者其它偶发错误可以继续重试
+        if (!e.message.includes('查询视频状态失败')) {
+           throw e;
+        }
+      } else {
+        throw e;
+      }
     }
 
     const elapsed = Date.now() - startTime;
@@ -430,6 +442,13 @@ export async function waitForVideoCompletion(
       throw new AIAPIError(`视频生成超时（${maxWaitTimeMs / 1000}秒）`);
     }
 
-    await new Promise((resolve) => setTimeout(resolve, pollIntervalMs));
+    attempt++;
+    // 指数退避：平均40s，起始 10s，每次1.5倍，最大 30s
+    // 增加 0~2000ms 随机抖动(jitter)，避免与后端同步
+    const baseDelay = Math.min(30000, initialPollIntervalMs * Math.pow(1.5, attempt - 1));
+    const jitter = Math.random() * 2000;
+    const currentPollIntervalMs = baseDelay + jitter;
+
+    await new Promise((resolve) => setTimeout(resolve, currentPollIntervalMs));
   }
 }
