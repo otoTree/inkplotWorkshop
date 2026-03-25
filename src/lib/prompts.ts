@@ -332,6 +332,7 @@ export const getStoryboardGenerationPrompt = (scriptContent: string, existingAss
 4. **Flexible Duration (4s-6s)**: Each shot should typically last between 4s to 6s. It must capture a specific action, reaction, or dialogue beat.
 5. **Mandatory Visual Continuity**: Shot transitions MUST have clear visual logic (e.g., eyeline match, action continuity, reaction shot). No illogical hard cuts.
 6. **Asset Coverage & Matching**: Each shot MUST list all involved **characters and locations**. If an asset exists in the provided list, use its exact name (case-insensitive match). **CRITICAL: EVERY single shot MUST have at least one explicit scene/location assigned to it in \`sceneLabel\` and \`suggestedAssets.locations\`. Even for close-ups or continuous action, you MUST explicitly state the scene/location. Never leave the scene empty.**
+7. **Opening Highlight Shot**: Shot \`sequence: 1\` MUST be the current episode's highlight moment: the single most emotionally explosive, visually striking, or plot-defining shot from this episode. It must function as a cold open teaser, not a generic establishing shot.
 
 ## 1. Visual & Aesthetic Layer
 **Definition**: The expression layer used to **enhance emotional and thematic impact**.
@@ -364,6 +365,8 @@ Analyze the provided script and generate a storyboard sequence.
 1. **Detail Level**: You MUST generate extremely detailed descriptions and Video Prompts as specified above. Do not summarize or be concise. The more granular detail about lighting, physics, and camera movement, the better.
 2. **Shot Breakdown Strategy**: You MUST generate AT LEAST 15 shots. There is NO limit on the maximum number of shots. Break down actions and dialogue into as many short shots (4-6s each) as necessary to perfectly capture the pacing. Do not over-compress. Ensure the total episode duration (across all chunks) exceeds 70 seconds.
 3. **Mandatory Scene Requirement**: EVERY shot MUST have a non-empty \`sceneLabel\` and at least one item in \`suggestedAssets.locations\`. Do not leave the scene blank under any circumstances, even if it is a continuation of the previous shot.
+4. **First Shot Priority**: The very first shot must be the episode highlight shot with the highest dramatic value, strongest emotion, or biggest suspense payoff in the current script. Start with impact. Only after that may you unfold the rest of the episode beats.
+5. **Temporal Clarity After Teaser**: If shot 1 is a cold open from a later peak moment, shot 2 or the following shots MUST clearly signal the rewind or time shift in \`transition.timeGap\` and \`timeline\` so the sequence still reads coherently.
 
 **Script Content**:
 ${scriptContent.slice(0, 15000)}...
