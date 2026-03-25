@@ -84,7 +84,7 @@ export function ProjectCoverCard({ project, assets = [], onUpdate }: ProjectCove
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           prompt: project.coverPrompt,
-          aspectRatio: '9:16',
+          aspectRatio: '3:4',
           n: 4, // 请求生成4张图片
           referenceImageUrl
         }),
@@ -254,7 +254,7 @@ export function ProjectCoverCard({ project, assets = [], onUpdate }: ProjectCove
               <p className="text-sm italic">{project.coverSlogan || '暂无'}</p>
             </div>
             <div>
-              <h4 className="text-xs font-semibold text-black/40 uppercase tracking-wider mb-1">图片 Prompt (9:16)</h4>
+              <h4 className="text-xs font-semibold text-black/40 uppercase tracking-wider mb-1">图片 Prompt (3:4)</h4>
               <p className="text-xs bg-slate-50 p-2 rounded text-black/70 max-h-32 overflow-y-auto">
                 {project.coverPrompt || '生成设计后将在这里显示用于 AI 绘画的工业级提示词'}
               </p>
@@ -262,13 +262,13 @@ export function ProjectCoverCard({ project, assets = [], onUpdate }: ProjectCove
             {project.coverPrompt && (
               <Button className="w-full" onClick={handleGenerateImage} disabled={isGeneratingImage}>
                 {isGeneratingImage ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <ImageIcon className="w-4 h-4 mr-2" />}
-                {isGeneratingImage ? '正在绘制...' : '生成/更新 封面图 (9:16)'}
+                {isGeneratingImage ? '正在绘制...' : '生成/更新 封面图 (3:4)'}
               </Button>
             )}
           </div>
 
           <div className="flex flex-col gap-4">
-            <div className="aspect-[9/16] w-full max-w-[400px] mx-auto bg-slate-100 rounded-md border border-black/5 overflow-hidden flex items-center justify-center relative group">
+            <div className="aspect-[3/4] w-full max-w-[400px] mx-auto bg-slate-100 rounded-md border border-black/5 overflow-hidden flex items-center justify-center relative group">
               {project.coverImageUrl ? (
                 <>
                   <Image 
@@ -322,7 +322,7 @@ export function ProjectCoverCard({ project, assets = [], onUpdate }: ProjectCove
                 {project.coverImageCandidates.map((url, idx) => (
                   <div 
                     key={idx} 
-                    className={`aspect-[9/16] relative rounded border cursor-pointer overflow-hidden transition-all ${
+                    className={`aspect-[3/4] relative rounded border cursor-pointer overflow-hidden transition-all ${
                       project.coverImageUrl === url 
                         ? 'border-black ring-2 ring-black/20' 
                         : 'border-black/10 hover:border-black/30 opacity-70 hover:opacity-100'

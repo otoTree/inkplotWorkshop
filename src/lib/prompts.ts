@@ -475,7 +475,7 @@ export const getCoverDesignPrompt = (title: string, logline: string, characters:
 | 科幻 | hero_portrait | Geometric Sans | Metal | Blue+Silver | Cold Rim Light | futuristic |
 
 ### 5. Prompt 结构模板
-[画幅比例] [版式布局] [景别选择] [主角描述 (必须包含这里提供的主角名称)] [角色站位+姿态] [视线结构] [光影模式] [场景背景] [排版设计(必须明确包含生成的 Title 和 Slogan 的英文文本并要求渲染在画面上)] [整体氛围词]
+[固定竖版 3:4 画幅比例] [版式布局] [景别选择] [主角描述 (必须包含这里提供的主角名称)] [角色站位+姿态] [视线结构] [光影模式] [场景背景] [排版设计(必须明确包含生成的 Title 和 Slogan 的英文文本并要求渲染在画面上)] [整体氛围词]
 
 通用质量词：cinematic poster, ultra-detailed, 8K, professional photography, volumetric lighting, depth of field, photorealistic, real human actors
 
@@ -489,13 +489,14 @@ export const getCoverDesignPrompt = (title: string, logline: string, characters:
 7. **画面必须是真人摄影风格**：禁止漫画风、动漫风、游戏仿真人风
 8. **景别选择（重要）**：禁止使用近景全身。只能使用：远景全身(wide shot)、近景半身(medium close-up)、面部特写(close-up)。必须包含明确的情绪和表情描述。
 9. **角色一致性（极度重要）**：图片 Prompt 中的角色描述**必须且只能**基于提供的主角名称进行设定。绝对禁止引入或描述未在主角列表中出现的人物！如果是单人剧，画面只能有主角一人。
+10. **封面比例固定**：封面统一为竖版 3:4。image_prompt 和 episode_prompt 都必须明确写出 portrait 3:4 / aspect ratio 3:4，禁止生成 9:16、1:1、16:9 或其他比例。
 
 请以 JSON 格式返回，包含以下字段：
 {
   "genre": "识别的题材类型（如 romance_ceo）",
   "title": "封面标题（英文或目标语言）",
   "slogan": "副标题（英文或目标语言）",
-  "image_prompt": "9:16 总封面的图片生成 Prompt（纯英文，极其详细）",
+  "image_prompt": "3:4 总封面的图片生成 Prompt（纯英文，极其详细）",
   "episode_prompt": "3:4 分集封面的图片生成 Prompt（纯英文，极其详细）"
 }
 `;

@@ -20,7 +20,7 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: 'Missing imageUrl or prompt' }, { status: 400 });
     }
 
-    const finalPrompt = `${prompt}, aspect ratio 9:16`;
+    const finalPrompt = `${prompt}, aspect ratio 3:4`;
 
     // Construct messages for Gemini image editing
     const messages = [
