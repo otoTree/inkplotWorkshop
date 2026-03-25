@@ -510,6 +510,7 @@ export function AssetGallery({ projectId }: { projectId: string }) {
         initialData={selectedAsset}
         mode={dialogMode}
         assetType={activeTab}
+        projectId={projectId}
         onSave={handleSaveAsset}
         onDelete={(id) => api.assets.delete(id).then(() => setAssets(prev => prev.filter(a => a.id !== id)))}
         artStyle={artStyleConfig}

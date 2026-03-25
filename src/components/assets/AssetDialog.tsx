@@ -1,11 +1,11 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { ArtStyleConfig, Asset, AssetType } from '@/types';
-import { Trash2, Wand2, Loader2, ImageIcon, ZoomIn } from 'lucide-react';
+import { Trash2, Wand2, Loader2, ImageIcon, ZoomIn, Upload } from 'lucide-react';
 import { getImageGenerationPrompt } from '@/lib/prompts';
 
 interface AssetDialogProps {
@@ -14,6 +14,7 @@ interface AssetDialogProps {
   initialData: Partial<Asset> | null;
   mode: 'create' | 'edit';
   assetType: AssetType;
+  projectId: string;
   onSave: (data: Partial<Asset>) => Promise<void>;
   onDelete?: (id: string) => Promise<void>;
   artStyle?: ArtStyleConfig;
@@ -25,6 +26,7 @@ export function AssetDialog({
   initialData, 
   mode, 
   assetType,
+  projectId,
   onSave,
   onDelete,
   artStyle
@@ -37,15 +39,23 @@ export function AssetDialog({
   });
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isGenerating, setIsGenerating] = useState(false);
+  const [isUploading, setIsUploading] = useState(false);
   const [isPreviewOpen, setIsPreviewOpen] = useState(false);
+  const [uploadError, setUploadError] = useState('');
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const typeMap: Record<string, string> = {
     character: '角色',
     location: '场景',
   };
 
+  const getErrorMessage = (error: unknown) => {
+    return error instanceof Error ? error.message : '未知错误';
+  };
+
   useEffect(() => {
     if (open) {
+      setUploadError('');
       if (mode === 'edit' && initialData) {
         setFormData({
             name: initialData.name || '',
@@ -65,6 +75,67 @@ export function AssetDialog({
       }
     }
   }, [open, mode, initialData, assetType]);
+
+  const openFilePicker = () => {
+    if (isUploading) return;
+    fileInputRef.current?.click();
+  };
+
+  const uploadFile = async (file: File) => {
+    if (!file.type.startsWith('image/')) {
+      setUploadError('仅支持上传图片文件');
+      return;
+    }
+
+    if (file.size > 10 * 1024 * 1024) {
+      setUploadError('图片大小不能超过 10MB');
+      return;
+    }
+
+    setIsUploading(true);
+    setUploadError('');
+
+    try {
+      const extension = file.name.includes('.') ? file.name.split('.').pop() : '';
+      const safeName = `${crypto.randomUUID()}${extension ? `.${extension}` : ''}`;
+      const response = await fetch(
+        `/api/upload?filename=${encodeURIComponent(safeName)}&folder=${encodeURIComponent(`assets/${projectId}/${assetType}`)}`,
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': file.type,
+          },
+          body: file,
+        }
+      );
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => null);
+        throw new Error(errorData?.error || '上传失败');
+      }
+
+      const data = await response.json();
+      if (!data?.url) {
+        throw new Error('上传成功但未返回图片地址');
+      }
+
+      setFormData(prev => ({ ...prev, imageUrl: data.url }));
+    } catch (error) {
+      console.error('Failed to upload asset image:', error);
+      setUploadError(getErrorMessage(error) || '上传失败，请稍后重试');
+    } finally {
+      setIsUploading(false);
+      if (fileInputRef.current) {
+        fileInputRef.current.value = '';
+      }
+    }
+  };
+
+  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    await uploadFile(file);
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -121,8 +192,7 @@ export function AssetDialog({
             const errData = await response.json();
             if (errData.error) errorMsg = errData.error;
             if (errData.details) errorMsg += ` - ${errData.details}`;
-        } catch (e) {
-            // ignore
+        } catch {
         }
         throw new Error(errorMsg);
       }
@@ -134,9 +204,9 @@ export function AssetDialog({
       } else {
         throw new Error(data.error || '生成失败，未返回图片链接');
       }
-    } catch (error: any) {
+    } catch (error) {
       console.error('Generation error:', error);
-      alert(`生成图片失败: ${error.message || '未知错误'}`);
+      alert(`生成图片失败: ${getErrorMessage(error)}`);
     } finally {
       setIsGenerating(false);
     }
@@ -198,7 +268,7 @@ export function AssetDialog({
                             size="sm" 
                             className="h-8 text-xs"
                             onClick={handleGenerateImage}
-                            disabled={isGenerating || !formData.visualPrompt}
+                            disabled={isGenerating || isUploading || !formData.visualPrompt}
                         >
                             {isGenerating ? <Loader2 className="w-3 h-3 mr-1 animate-spin" /> : <Wand2 className="w-3 h-3 mr-1" />}
                             生成图片
@@ -220,11 +290,29 @@ export function AssetDialog({
 
             <div className="space-y-2">
                 <Label>图片预览</Label>
+                <input
+                    ref={fileInputRef}
+                    type="file"
+                    accept="image/*"
+                    className="hidden"
+                    onChange={handleFileChange}
+                />
                 <div className="border-2 border-dashed rounded-lg aspect-video flex items-center justify-center bg-muted/30 relative overflow-hidden group">
                     {formData.imageUrl ? (
                         <>
                             <img src={formData.imageUrl} alt="Preview" className="w-full h-full object-contain cursor-pointer" onClick={() => setIsPreviewOpen(true)} />
                             <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex flex-col sm:flex-row items-center justify-center gap-2 pointer-events-none">
+                                <Button
+                                    type="button"
+                                    variant="secondary"
+                                    size="sm"
+                                    onClick={openFilePicker}
+                                    disabled={isUploading}
+                                    className="pointer-events-auto"
+                                >
+                                    {isUploading ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Upload className="w-4 h-4 mr-2" />}
+                                    {isUploading ? '上传中...' : '替换图片'}
+                                </Button>
                                 <Button 
                                     type="button" 
                                     variant="secondary" 
@@ -249,25 +337,39 @@ export function AssetDialog({
                         </>
                     ) : (
                         <div className="flex flex-col items-center text-muted-foreground">
-                            {isGenerating ? (
+                            {isGenerating || isUploading ? (
                                 <>
                                     <Loader2 className="w-10 h-10 animate-spin mb-2" />
-                                    <span className="text-sm">正在生成...</span>
+                                    <span className="text-sm">{isUploading ? '正在上传...' : '正在生成...'}</span>
                                 </>
                             ) : (
                                 <>
                                     <ImageIcon className="w-10 h-10 mb-2 opacity-50" />
                                     <span className="text-sm">暂无图片</span>
+                                    <Button
+                                        type="button"
+                                        variant="outline"
+                                        size="sm"
+                                        className="mt-4"
+                                        onClick={openFilePicker}
+                                    >
+                                        <Upload className="w-4 h-4 mr-2" />
+                                        上传{typeMap[assetType]}图片
+                                    </Button>
                                 </>
                             )}
                         </div>
                     )}
                 </div>
+                {uploadError && (
+                    <p className="text-xs text-red-500">{uploadError}</p>
+                )}
                 <Input 
                     placeholder="或输入图片 URL" 
                     value={formData.imageUrl} 
                     onChange={(e) => setFormData({ ...formData, imageUrl: e.target.value })}
                     className="text-xs"
+                    disabled={isUploading}
                 />
             </div>
         </div>
@@ -290,7 +392,7 @@ export function AssetDialog({
                 <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
                 取消
                 </Button>
-                <Button type="submit" disabled={isSubmitting} onClick={handleSubmit}>
+                <Button type="submit" disabled={isSubmitting || isUploading} onClick={handleSubmit}>
                 {isSubmitting ? '保存中...' : '保存'}
                 </Button>
             </div>
