@@ -114,6 +114,178 @@ const getSemaphore = (config: AIAPIConfig) => {
 
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
+type VideoReferenceAsset = {
+  name?: string | null;
+  type?: string | null;
+  imageUrl?: string | null;
+};
+
+type VideoPromptSection = {
+  label: string;
+  value?: string | null;
+};
+
+const encodeVideoImageUrl = (url: string) => {
+  const trimmed = url.trim();
+  if (!trimmed) return trimmed;
+  try {
+    return encodeURI(decodeURI(trimmed));
+  } catch {
+    return encodeURI(trimmed);
+  }
+};
+
+const dedupeEncodedImageUrls = (urls: string[]) => {
+  const seen = new Set<string>();
+  const result: string[] = [];
+  for (const url of urls) {
+    const encodedUrl = encodeVideoImageUrl(url);
+    if (!encodedUrl || seen.has(encodedUrl)) continue;
+    seen.add(encodedUrl);
+    result.push(encodedUrl);
+  }
+  return result;
+};
+
+const normalizeVideoReferenceAssets = (referenceAssets: VideoReferenceAsset[] = []) =>
+  referenceAssets
+    .map((asset) => ({
+      name: typeof asset.name === 'string' ? asset.name.trim() : '',
+      type: typeof asset.type === 'string' ? asset.type.trim().toLowerCase() : '',
+      imageUrl: typeof asset.imageUrl === 'string' ? encodeVideoImageUrl(asset.imageUrl) : '',
+    }))
+    .filter((asset) => asset.imageUrl)
+    .filter(
+      (asset, index, assets) =>
+        assets.findIndex((candidate) => candidate.imageUrl === asset.imageUrl) === index
+    );
+
+const getVideoReferenceLabel = (
+  asset: ReturnType<typeof normalizeVideoReferenceAssets>[number],
+  index: number
+) => {
+  const fallbackName =
+    asset.type === 'character'
+      ? 'Character reference'
+      : asset.type === 'location'
+        ? 'Location reference'
+        : 'Reference image';
+  return `${asset.name || fallbackName}<<<image_${index + 1}>>>`;
+};
+
+const buildVideoGenerationMetadata = (
+  metadata?: Record<string, unknown>,
+  extraParams?: Record<string, unknown>
+) => {
+  const nextMetadata: Record<string, unknown> = metadata ? { ...metadata } : {};
+  const imageUrls: string[] = [];
+
+  if (typeof extraParams?.image_url === 'string' && extraParams.image_url.trim()) {
+    imageUrls.push(extraParams.image_url);
+  }
+
+  if (Array.isArray(nextMetadata.images)) {
+    for (const item of nextMetadata.images) {
+      if (typeof item === 'string' && item.trim()) {
+        imageUrls.push(item);
+      }
+    }
+  }
+
+  if (Array.isArray(nextMetadata.image_list)) {
+    for (const item of nextMetadata.image_list) {
+      if (
+        item &&
+        typeof item === 'object' &&
+        'image_url' in item &&
+        typeof item.image_url === 'string' &&
+        item.image_url.trim()
+      ) {
+        imageUrls.push(item.image_url);
+      }
+    }
+  }
+
+  const encodedImageUrls = dedupeEncodedImageUrls(imageUrls);
+  delete nextMetadata.images;
+
+  if (encodedImageUrls.length > 0) {
+    nextMetadata.image_list = encodedImageUrls.map((imageUrl) => ({ image_url: imageUrl }));
+  } else {
+    delete nextMetadata.image_list;
+  }
+
+  if (
+    extraParams &&
+    typeof extraParams.aspect_ratio === 'string' &&
+    !nextMetadata.aspect_ratio
+  ) {
+    nextMetadata.aspect_ratio = extraParams.aspect_ratio;
+  }
+
+  return Object.keys(nextMetadata).length > 0 ? nextMetadata : undefined;
+};
+
+export const buildVideoGenerationPrompt = (
+  sections: VideoPromptSection[],
+  referenceAssets: VideoReferenceAsset[] = []
+) => {
+  const promptLines = sections
+    .map((section) => ({
+      label: section.label.trim(),
+      value: typeof section.value === 'string' ? section.value.trim() : '',
+    }))
+    .filter((section) => section.label && section.value)
+    .map((section) => `${section.label}: ${section.value}`);
+
+  const promptText = promptLines.join('\n');
+  if (promptText.includes('<<<image_')) {
+    return promptText;
+  }
+
+  const normalizedAssets = normalizeVideoReferenceAssets(referenceAssets);
+  if (normalizedAssets.length === 0) {
+    return promptText;
+  }
+
+  const locationAssets = normalizedAssets
+    .filter((asset) => asset.type !== 'character')
+    .map((asset) => {
+      const assetIndex = normalizedAssets.findIndex(
+        (candidate) => candidate.imageUrl === asset.imageUrl
+      );
+      return getVideoReferenceLabel(asset, assetIndex);
+    });
+  const characterAssets = normalizedAssets
+    .filter((asset) => asset.type === 'character')
+    .map((asset) => {
+      const assetIndex = normalizedAssets.findIndex(
+        (candidate) => candidate.imageUrl === asset.imageUrl
+      );
+      return getVideoReferenceLabel(asset, assetIndex);
+    });
+
+  const assetLines: string[] = [];
+  if (locationAssets.length > 0) {
+    assetLines.push(`Locations: ${locationAssets.join(', ')}.`);
+  }
+  if (characterAssets.length > 0) {
+    assetLines.push(`Visible characters/entities: ${characterAssets.join(', ')}.`);
+  }
+  if (assetLines.length === 0) {
+    assetLines.push(
+      `Reference images: ${normalizedAssets
+        .map((asset, index) => getVideoReferenceLabel(asset, index))
+        .join(', ')}.`
+    );
+  }
+  assetLines.push(
+    'Continuity rules: Match the referenced images exactly for subject identity, wardrobe, environment, and lighting continuity.'
+  );
+
+  return [...assetLines, ...promptLines].join('\n');
+};
+
 const acquireGlobalSemaphore = async (config: AIAPIConfig): Promise<() => void | Promise<void>> => {
   const isKVConfigured = !!(process.env.KV_REST_API_URL && process.env.KV_REST_API_TOKEN);
   if (!isKVConfigured) {
@@ -418,19 +590,16 @@ export const callAIVideoGeneration = async (
     };
     
     if (duration) payload.duration = duration;
-    
-    if (extraParams?.image_url) {
-      if (!metadata) metadata = {};
-      metadata.images = [extraParams.image_url];
-      payload.image_url = extraParams.image_url; 
-    }
-    
+
     if (extraParams) {
-        Object.assign(payload, extraParams);
+      Object.assign(payload, extraParams);
     }
-    
-    if (metadata) {
-      payload.metadata = metadata;
+
+    delete payload.image_url;
+
+    const finalMetadata = buildVideoGenerationMetadata(metadata, extraParams);
+    if (finalMetadata) {
+      payload.metadata = finalMetadata;
     }
 
     const response = await fetchWithTimeout(

@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 import {
   AIAPIError,
+  buildVideoGenerationPrompt,
   callAIVideoGeneration,
   completeVideoTask,
   getAIVideoStatus,
@@ -80,31 +81,51 @@ export async function POST(req: Request) {
         });
       }
 
-      const fullPrompt = [
-        claimedShot.video_prompt ? `[Video Prompt] ${claimedShot.video_prompt}` : '',
-        claimedShot.description ? `[Visual Description] ${claimedShot.description}` : '',
-        claimedShot.character_action ? `[Action] ${claimedShot.character_action}` : '',
-        claimedShot.lighting_atmosphere ? `[Lighting/Atmosphere] ${claimedShot.lighting_atmosphere}` : '',
-        claimedShot.scene_label ? `[Scene] ${claimedShot.scene_label}` : '',
-        claimedShot.emotion ? `[Emotion] ${claimedShot.emotion}` : '',
-        (claimedShot.camera || claimedShot.size) ? `[Camera/Size] ${claimedShot.camera || ''} ${claimedShot.size || ''}`.trim() : '',
-        claimedShot.dialogue ? `[Dialogue] ${claimedShot.dialogue}` : '',
-        claimedShot.sound_effect ? `[Sound Effect] ${claimedShot.sound_effect}` : '',
-      ].filter(Boolean).join('\n');
+      const referenceAssets: Array<{ name?: string; type?: string; imageUrl?: string }> = [];
+      if (claimedShot.reference_image) {
+        referenceAssets.push({
+          name: claimedShot.scene_label || 'Scene reference',
+          type: 'location',
+          imageUrl: claimedShot.reference_image,
+        });
+      }
 
-      const allImages = [];
-      if (claimedShot.reference_image) allImages.push(claimedShot.reference_image);
       if (claimedShot.related_asset_ids && claimedShot.related_asset_ids.length > 0) {
         const { data: assets } = await supabase
           .from('assets')
-          .select('image_url')
+          .select('id, name, type, image_url')
           .in('id', claimedShot.related_asset_ids);
         if (assets) {
-          assets.forEach((asset) => {
-            if (asset.image_url) allImages.push(asset.image_url);
+          const assetsById = new Map(assets.map((asset) => [asset.id, asset]));
+          claimedShot.related_asset_ids.forEach((assetId: string) => {
+            const asset = assetsById.get(assetId);
+            if (!asset?.image_url) return;
+            referenceAssets.push({
+              name: asset.name,
+              type: asset.type,
+              imageUrl: asset.image_url,
+            });
           });
         }
       }
+
+      const fullPrompt = buildVideoGenerationPrompt(
+        [
+          { label: 'Scene heading', value: claimedShot.scene_label },
+          { label: 'Video prompt', value: claimedShot.video_prompt },
+          { label: 'Visual description', value: claimedShot.description },
+          { label: 'Shot action', value: claimedShot.character_action },
+          { label: 'Emotion', value: claimedShot.emotion },
+          { label: 'Lighting', value: claimedShot.lighting_atmosphere },
+          {
+            label: 'Camera framing',
+            value: [claimedShot.camera, claimedShot.size].filter(Boolean).join(' '),
+          },
+          { label: 'Dialogue', value: claimedShot.dialogue },
+          { label: 'Sound design', value: claimedShot.sound_effect },
+        ],
+        referenceAssets
+      );
 
       try {
         const result = await callAIVideoGeneration(
@@ -114,7 +135,9 @@ export async function POST(req: Request) {
             multi_shot: false,
             aspect_ratio: '9:16',
             sound: 'on',
-            images: allImages.length > 0 ? allImages : undefined,
+            image_list: referenceAssets
+              .filter((asset) => asset.imageUrl)
+              .map((asset) => ({ image_url: asset.imageUrl! })),
           },
           undefined,
           claimedShot.id,

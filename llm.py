@@ -7,6 +7,7 @@ import time
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
+from urllib.parse import quote, unquote
 
 import requests
 from openai import APIConnectionError, APIError, APITimeoutError, OpenAI
@@ -362,6 +363,58 @@ def call_ai_image_edit(
         semaphore.release()
 
 
+def _encode_video_image_url(url: str) -> str:
+    trimmed = url.strip()
+    if not trimmed:
+        return trimmed
+    try:
+        return quote(unquote(trimmed), safe=":/?&=#%")
+    except Exception:
+        return quote(trimmed, safe=":/?&=#%")
+
+
+def _normalize_video_metadata(
+    metadata: dict[str, Any] | None,
+    image_url: str | None = None,
+    aspect_ratio: str | None = None,
+) -> dict[str, Any] | None:
+    next_metadata: dict[str, Any] = dict(metadata or {})
+    image_urls: list[str] = []
+
+    if image_url and image_url.strip():
+        image_urls.append(image_url)
+
+    raw_images = next_metadata.get("images")
+    if isinstance(raw_images, list):
+        image_urls.extend(item for item in raw_images if isinstance(item, str) and item.strip())
+
+    raw_image_list = next_metadata.get("image_list")
+    if isinstance(raw_image_list, list):
+        for item in raw_image_list:
+            if isinstance(item, dict):
+                candidate = item.get("image_url")
+                if isinstance(candidate, str) and candidate.strip():
+                    image_urls.append(candidate)
+
+    next_metadata.pop("images", None)
+
+    encoded_image_urls = []
+    for url in image_urls:
+        encoded_url = _encode_video_image_url(url)
+        if encoded_url and encoded_url not in encoded_image_urls:
+            encoded_image_urls.append(encoded_url)
+
+    if encoded_image_urls:
+        next_metadata["image_list"] = [{"image_url": url} for url in encoded_image_urls]
+    else:
+        next_metadata.pop("image_list", None)
+
+    if aspect_ratio and not next_metadata.get("aspect_ratio"):
+        next_metadata["aspect_ratio"] = aspect_ratio
+
+    return next_metadata or None
+
+
 def call_ai_video_generation(
     prompt: str,
     config: AIAPIConfig | None = None,
@@ -397,12 +450,9 @@ def call_ai_video_generation(
                 "prompt": prompt,
                 "duration": duration,
             }
-            if metadata is not None:
-                payload["metadata"] = metadata
-            if image_url is not None:
-                payload["image_url"] = image_url
-            if aspect_ratio is not None:
-                payload["aspect_ratio"] = aspect_ratio
+            normalized_metadata = _normalize_video_metadata(metadata, image_url, aspect_ratio)
+            if normalized_metadata is not None:
+                payload["metadata"] = normalized_metadata
 
             headers = {
                 "Content-Type": "application/json",

@@ -78,6 +78,55 @@ export function loadAiApiConfig(): AIAPIConfig {
   return { baseUrl, apiKey, model, imageModel, videoModel, timeout, maxConcurrency, minIntervalMs };
 }
 
+function encodeVideoImageUrl(url: string): string {
+  const trimmed = url.trim();
+  if (!trimmed) return trimmed;
+  try {
+    return encodeURI(decodeURI(trimmed));
+  } catch {
+    return encodeURI(trimmed);
+  }
+}
+
+function normalizeVideoMetadata(metadata?: Record<string, unknown>): Record<string, unknown> | undefined {
+  if (!metadata) return undefined;
+
+  const nextMetadata: Record<string, unknown> = { ...metadata };
+  const imageUrls: string[] = [];
+
+  const rawImages = nextMetadata.images;
+  if (Array.isArray(rawImages)) {
+    for (const item of rawImages) {
+      if (typeof item === 'string' && item.trim()) {
+        imageUrls.push(item);
+      }
+    }
+  }
+
+  const rawImageList = nextMetadata.image_list;
+  if (Array.isArray(rawImageList)) {
+    for (const item of rawImageList) {
+      if (
+        item &&
+        typeof item === 'object' &&
+        'image_url' in item &&
+        typeof item.image_url === 'string'
+      ) {
+        imageUrls.push(item.image_url);
+      }
+    }
+  }
+
+  delete nextMetadata.images;
+
+  if (imageUrls.length > 0) {
+    const dedupedUrls = [...new Set(imageUrls.map((url) => encodeVideoImageUrl(url)).filter(Boolean))];
+    nextMetadata.image_list = dedupedUrls.map((imageUrl) => ({ image_url: imageUrl }));
+  }
+
+  return Object.keys(nextMetadata).length > 0 ? nextMetadata : undefined;
+}
+
 function getSemaphoreKey(config: AIAPIConfig): string {
   return `${config.baseUrl}|${config.apiKey}|${config.model}|${config.maxConcurrency}`;
 }
@@ -325,7 +374,7 @@ export async function callAiVideoGeneration(
   prompt: string,
   config?: AIAPIConfig,
   duration: number = 15,
-  metadata?: Record<string, any>
+  metadata?: Record<string, unknown>
 ): Promise<any> {
   const currentConfig = config || loadAiApiConfig();
   const semaphore = getSemaphore(currentConfig);
@@ -339,8 +388,9 @@ export async function callAiVideoGeneration(
       prompt,
       duration,
     };
-    if (metadata) {
-      payload.metadata = metadata;
+    const normalizedMetadata = normalizeVideoMetadata(metadata);
+    if (normalizedMetadata) {
+      payload.metadata = normalizedMetadata;
     }
 
     const response = await fetchWithTimeout(

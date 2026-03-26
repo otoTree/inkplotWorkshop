@@ -1,6 +1,11 @@
 import { NextResponse } from 'next/server';
 import { createAdminClient } from '@/lib/supabase/admin';
-import { getAIVideoStatus, completeVideoTask, callAIVideoGeneration } from '@/lib/ai-server';
+import {
+  buildVideoGenerationPrompt,
+  getAIVideoStatus,
+  completeVideoTask,
+  callAIVideoGeneration,
+} from '@/lib/ai-server';
 
 // Optional: Force dynamic so Vercel doesn't cache the cron route
 export const dynamic = 'force-dynamic';
@@ -84,31 +89,51 @@ export async function GET(req: Request) {
       // but tryAcquireVideoSlot will protect AI concurrency.
       for (const shot of queuedShots) {
         try {
-          const fullPrompt = [
-            shot.video_prompt ? `[Video Prompt] ${shot.video_prompt}` : '',
-            shot.description ? `[Visual Description] ${shot.description}` : '',
-            shot.character_action ? `[Action] ${shot.character_action}` : '',
-            shot.lighting_atmosphere ? `[Lighting/Atmosphere] ${shot.lighting_atmosphere}` : '',
-            shot.scene_label ? `[Scene] ${shot.scene_label}` : '',
-            shot.emotion ? `[Emotion] ${shot.emotion}` : '',
-            (shot.camera || shot.size) ? `[Camera/Size] ${shot.camera || ''} ${shot.size || ''}`.trim() : '',
-            shot.dialogue ? `[Dialogue] ${shot.dialogue}` : '',
-            shot.sound_effect ? `[Sound Effect] ${shot.sound_effect}` : '',
-          ].filter(Boolean).join('\n');
-
-          // Collect images. We need related assets but Cron doesn't easily have them unless we query.
-          // For now, if we don't have all assets here, it might be better to store `metadata.images` when queuing.
-          // Wait, the frontend didn't store metadata.images in the shot!
-          // We must ensure the AI gets the images.
-          // Let's query related assets if needed, but since we are in Cron, we can do it.
-          const allImages = [];
-          if (shot.reference_image) allImages.push(shot.reference_image);
-          if (shot.related_asset_ids && shot.related_asset_ids.length > 0) {
-             const { data: assets } = await supabase.from('assets').select('image_url').in('id', shot.related_asset_ids);
-             if (assets) {
-               assets.forEach(a => { if (a.image_url) allImages.push(a.image_url); });
-             }
+          const referenceAssets: Array<{ name?: string; type?: string; imageUrl?: string }> = [];
+          if (shot.reference_image) {
+            referenceAssets.push({
+              name: shot.scene_label || 'Scene reference',
+              type: 'location',
+              imageUrl: shot.reference_image,
+            });
           }
+
+          if (shot.related_asset_ids && shot.related_asset_ids.length > 0) {
+            const { data: assets } = await supabase
+              .from('assets')
+              .select('id, name, type, image_url')
+              .in('id', shot.related_asset_ids);
+            if (assets) {
+              const assetsById = new Map(assets.map((asset) => [asset.id, asset]));
+              shot.related_asset_ids.forEach((assetId: string) => {
+                const asset = assetsById.get(assetId);
+                if (!asset?.image_url) return;
+                referenceAssets.push({
+                  name: asset.name,
+                  type: asset.type,
+                  imageUrl: asset.image_url,
+                });
+              });
+            }
+          }
+
+          const fullPrompt = buildVideoGenerationPrompt(
+            [
+              { label: 'Scene heading', value: shot.scene_label },
+              { label: 'Video prompt', value: shot.video_prompt },
+              { label: 'Visual description', value: shot.description },
+              { label: 'Shot action', value: shot.character_action },
+              { label: 'Emotion', value: shot.emotion },
+              { label: 'Lighting', value: shot.lighting_atmosphere },
+              {
+                label: 'Camera framing',
+                value: [shot.camera, shot.size].filter(Boolean).join(' '),
+              },
+              { label: 'Dialogue', value: shot.dialogue },
+              { label: 'Sound design', value: shot.sound_effect },
+            ],
+            referenceAssets
+          );
 
           const result = await callAIVideoGeneration(
             fullPrompt,
@@ -117,7 +142,9 @@ export async function GET(req: Request) {
               multi_shot: false,
               aspect_ratio: "9:16",
               sound: "on",
-              images: allImages.length > 0 ? allImages : undefined
+              image_list: referenceAssets
+                .filter((asset) => asset.imageUrl)
+                .map((asset) => ({ image_url: asset.imageUrl! }))
             },
             undefined,
             shot.id,
@@ -139,7 +166,6 @@ export async function GET(req: Request) {
 
             // Also replace the placeholder in active queue with the real taskId
             try {
-              const { tryAcquireVideoSlot } = await import('@/lib/ai-server');
               const { getAIAPIConfig } = await import('@/lib/ai-server');
               const config = getAIAPIConfig();
               const redis = (await import('@upstash/redis')).Redis.fromEnv();
