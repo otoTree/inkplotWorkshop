@@ -58,12 +58,11 @@ export function loadAiApiConfig(): AIAPIConfig {
   const baseUrl = process.env.AI_API_BASE_URL?.trim().replace(/\/$/, '') || process.env.OPENAI_BASE_URL?.trim().replace(/\/$/, '') || 'https://api.openai.com/v1';
   const apiKey = process.env.AI_API_KEY?.trim() || process.env.OPENAI_API_KEY?.trim() || '';
   
-  // 文本、图片、视频分别支持独立的模型配置，如果未设置图片/视频模型，则 fallback 到基础 model
   const model = process.env.AI_API_MODEL?.trim() || process.env.OPENAI_MODEL?.trim() || 'gpt-4o';
   const imageModel = process.env.AI_API_IMAGE_MODEL?.trim() || model;
   const videoModel = process.env.AI_API_VIDEO_MODEL?.trim() || model;
   
-  const timeout = parseInt(process.env.AI_API_TIMEOUT_MS || process.env.AI_API_TIMEOUT || '300000', 10); // 默认 5分钟 (300s -> 300000ms)
+  const timeout = parseInt(process.env.AI_API_TIMEOUT_MS || process.env.AI_API_TIMEOUT || '300000', 10);
   const maxConcurrency = parseInt(process.env.AI_API_MAX_CONCURRENCY || '50', 10);
   const minIntervalMs = parseInt(process.env.AI_API_MIN_INTERVAL_MS || '0', 10);
 

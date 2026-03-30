@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
-import { AIAPIError, callAIChatCompletion, extractFirstMessageContent, extractImageUrls } from '@/lib/ai-server';
+import { AIAPIError, callAIChatCompletion, extractFirstMessageContent, extractImageUrls, getAIAPIConfig } from '@/lib/ai-server';
 import { put } from '@vercel/blob';
 
 export const maxDuration = 300;
@@ -15,12 +15,12 @@ export async function POST(req: Request) {
     }
 
     const body = await req.json();
-    const { imageUrl, prompt, upload = false, n = 1 } = body;
+    const { imageUrl, prompt, upload = false, n = 1, aspectRatio = '1:1' } = body;
     if (!imageUrl || !prompt) {
       return NextResponse.json({ error: 'Missing imageUrl or prompt' }, { status: 400 });
     }
 
-    const finalPrompt = `${prompt}, aspect ratio 3:4`;
+    const finalPrompt = aspectRatio !== '1:1' ? `${prompt}, aspect ratio ${aspectRatio}` : prompt;
 
     // Construct messages for Gemini image editing
     const messages = [
@@ -43,6 +43,7 @@ export async function POST(req: Request) {
 
     const result = await callAIChatCompletion({
       messages,
+      config: getAIAPIConfig(),
       extraPayload: { model: 'gemini-3-pro-image-preview', n }
     });
 

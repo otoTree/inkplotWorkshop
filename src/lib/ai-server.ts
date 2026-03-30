@@ -20,7 +20,8 @@ export class AIAPIError extends Error {
   }
 }
 
-const configCache: { value: AIAPIConfig | null } = { value: null };
+const llmConfigCache: { value: AIAPIConfig | null } = { value: null };
+const mediaConfigCache: { value: AIAPIConfig | null } = { value: null };
 const semaphoreByKey = new Map<string, AsyncSemaphore>();
 const lastRequestAtByKey = new Map<string, number>();
 
@@ -68,32 +69,104 @@ const toTimeoutMs = (value: number) => {
   return Math.round(value);
 };
 
-export const getAIAPIConfig = () => {
-  if (configCache.value) return configCache.value;
+const getFirstDefinedEnv = (...values: Array<string | undefined>) => {
+  for (const value of values) {
+    if (typeof value === 'string' && value.trim()) {
+      return value.trim();
+    }
+  }
+  return '';
+};
 
-  const baseUrl = (process.env.AI_API_BASE_URL || process.env.OPENAI_BASE_URL || 'https://api.openai.com/v1')
-    .trim()
-    .replace(/\/+$/, '');
-  const apiKey = (process.env.AI_API_KEY || process.env.OPENAI_API_KEY || '').trim();
-  const model = (process.env.AI_API_MODEL || process.env.OPENAI_MODEL || 'gpt-4o').trim();
-  const timeoutMs = toTimeoutMs(
-    getNumberFromEnv(
-      process.env.AI_API_TIMEOUT_MS || process.env.AI_API_TIMEOUT || process.env.OPENAI_TIMEOUT_MS,
-      300
-    )
-  );
-  const maxConcurrency = Math.max(
-    1,
-    Math.min(50, Math.round(getNumberFromEnv(process.env.AI_API_MAX_CONCURRENCY, 50)))
-  );
-  const minIntervalMs = Math.max(0, getNumberFromEnv(process.env.AI_API_MIN_INTERVAL_MS, 0));
+const buildAIAPIConfig = ({
+  baseUrlValues,
+  apiKeyValues,
+  modelValues,
+  timeoutValues,
+  maxConcurrencyValues,
+  minIntervalValues,
+}: {
+  baseUrlValues: Array<string | undefined>;
+  apiKeyValues: Array<string | undefined>;
+  modelValues: Array<string | undefined>;
+  timeoutValues: Array<string | undefined>;
+  maxConcurrencyValues: Array<string | undefined>;
+  minIntervalValues: Array<string | undefined>;
+}) => {
+  const baseUrl = (getFirstDefinedEnv(...baseUrlValues) || 'https://api.openai.com/v1').replace(/\/+$/, '');
+  const apiKey = getFirstDefinedEnv(...apiKeyValues);
+  const model = getFirstDefinedEnv(...modelValues) || 'gpt-4o';
+  const timeoutMs = toTimeoutMs(getNumberFromEnv(getFirstDefinedEnv(...timeoutValues), 300));
+  const maxConcurrency = Math.max(1, Math.min(50, Math.round(getNumberFromEnv(getFirstDefinedEnv(...maxConcurrencyValues), 50))));
+  const minIntervalMs = Math.max(0, getNumberFromEnv(getFirstDefinedEnv(...minIntervalValues), 0));
 
   if (!baseUrl || !apiKey || !model) {
     throw new AIAPIError('AI API 配置不完整', 500);
   }
 
-  const config = { baseUrl, apiKey, model, timeoutMs, maxConcurrency, minIntervalMs };
-  configCache.value = config;
+  return { baseUrl, apiKey, model, timeoutMs, maxConcurrency, minIntervalMs };
+};
+
+export const getAILLMAPIConfig = () => {
+  if (llmConfigCache.value) return llmConfigCache.value;
+
+  const config = buildAIAPIConfig({
+    baseUrlValues: [
+      process.env.AI_LLM_API_BASE_URL,
+      process.env.AI_TEXT_API_BASE_URL,
+      process.env.AI_API_BASE_URL,
+      process.env.OPENAI_BASE_URL,
+    ],
+    apiKeyValues: [
+      process.env.AI_LLM_API_KEY,
+      process.env.AI_TEXT_API_KEY,
+      process.env.AI_API_KEY,
+      process.env.OPENAI_API_KEY,
+    ],
+    modelValues: [
+      process.env.AI_LLM_API_MODEL,
+      process.env.AI_TEXT_API_MODEL,
+      process.env.AI_API_MODEL,
+      process.env.OPENAI_MODEL,
+    ],
+    timeoutValues: [
+      process.env.AI_LLM_API_TIMEOUT_MS,
+      process.env.AI_LLM_API_TIMEOUT,
+      process.env.AI_TEXT_API_TIMEOUT_MS,
+      process.env.AI_TEXT_API_TIMEOUT,
+      process.env.AI_API_TIMEOUT_MS,
+      process.env.AI_API_TIMEOUT,
+      process.env.OPENAI_TIMEOUT_MS,
+    ],
+    maxConcurrencyValues: [
+      process.env.AI_LLM_API_MAX_CONCURRENCY,
+      process.env.AI_TEXT_API_MAX_CONCURRENCY,
+      process.env.AI_API_MAX_CONCURRENCY,
+    ],
+    minIntervalValues: [
+      process.env.AI_LLM_API_MIN_INTERVAL_MS,
+      process.env.AI_TEXT_API_MIN_INTERVAL_MS,
+      process.env.AI_API_MIN_INTERVAL_MS,
+    ],
+  });
+
+  llmConfigCache.value = config;
+  return config;
+};
+
+export const getAIAPIConfig = () => {
+  if (mediaConfigCache.value) return mediaConfigCache.value;
+
+  const config = buildAIAPIConfig({
+    baseUrlValues: [process.env.AI_API_BASE_URL, process.env.OPENAI_BASE_URL],
+    apiKeyValues: [process.env.AI_API_KEY, process.env.OPENAI_API_KEY],
+    modelValues: [process.env.AI_API_MODEL, process.env.OPENAI_MODEL],
+    timeoutValues: [process.env.AI_API_TIMEOUT_MS, process.env.AI_API_TIMEOUT, process.env.OPENAI_TIMEOUT_MS],
+    maxConcurrencyValues: [process.env.AI_API_MAX_CONCURRENCY],
+    minIntervalValues: [process.env.AI_API_MIN_INTERVAL_MS],
+  });
+
+  mediaConfigCache.value = config;
   return config;
 };
 
@@ -472,7 +545,7 @@ const withThrottle = async <T>(config: AIAPIConfig, fn: () => Promise<T>) => {
 
 export type AIChatMessage = {
   role: string;
-  content: string | any[];
+  content: string | unknown[];
 };
 
 type ChatCompletionParams = {
@@ -480,6 +553,7 @@ type ChatCompletionParams = {
   temperature?: number;
   maxTokens?: number;
   extraPayload?: Record<string, unknown>;
+  config?: AIAPIConfig;
 };
 
 export const callAIChatCompletion = async ({
@@ -487,28 +561,29 @@ export const callAIChatCompletion = async ({
   temperature = 0.7,
   maxTokens,
   extraPayload,
+  config,
 }: ChatCompletionParams) => {
-  const config = getAIAPIConfig();
+  const currentConfig = config || getAILLMAPIConfig();
   const payload: Record<string, unknown> = {
-    model: config.model,
+    model: currentConfig.model,
     messages,
     temperature,
   };
   if (typeof maxTokens === 'number') payload.max_tokens = maxTokens;
   if (extraPayload) Object.assign(payload, extraPayload);
 
-  return await withThrottle(config, async () => {
+  return await withThrottle(currentConfig, async () => {
     const response = await fetchWithTimeout(
-      `${config.baseUrl}/chat/completions`,
+      `${currentConfig.baseUrl}/chat/completions`,
       {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          Authorization: `Bearer ${config.apiKey}`,
+          Authorization: `Bearer ${currentConfig.apiKey}`,
         },
         body: JSON.stringify(payload),
       },
-      config.timeoutMs
+      currentConfig.timeoutMs
     );
 
     if (!response.ok) {
@@ -556,6 +631,7 @@ export const callAIImageGeneration = async (prompt: string, aspectRatio: string 
 
   return await callAIChatCompletion({
     messages,
+    config,
     extraPayload: { model: imageModel, n },
   });
 };
