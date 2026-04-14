@@ -1,64 +1,26 @@
 import { createClient } from '@/lib/supabase/client';
 import { Project, Episode, Asset, Shot } from '@/types';
+import {
+  parseProjectVisualStyle,
+  resolveProjectVisualStyleSelection,
+  serializeProjectVisualStyle,
+} from '@/lib/project-visual-style';
 
 const supabase = createClient();
 
-type ArtStyleFields = Pick<Project, 'artStyle' | 'characterArtStyle' | 'sceneArtStyle'>;
-
-const parseArtStyle = (value: unknown): ArtStyleFields => {
-  if (!value) return {};
-  if (typeof value === 'object') {
-    const record = value as Record<string, unknown>;
-    return {
-      artStyle: typeof record.artStyle === 'string' ? record.artStyle : undefined,
-      characterArtStyle: typeof record.characterArtStyle === 'string' ? record.characterArtStyle : undefined,
-      sceneArtStyle: typeof record.sceneArtStyle === 'string' ? record.sceneArtStyle : undefined,
-    };
-  }
-  if (typeof value === 'string') {
-    const trimmed = value.trim();
-    if (!trimmed) return {};
-    try {
-      const parsed = JSON.parse(trimmed) as unknown;
-      if (parsed && typeof parsed === 'object') {
-        const record = parsed as Record<string, unknown>;
-        return {
-          artStyle: typeof record.artStyle === 'string' ? record.artStyle : undefined,
-          characterArtStyle: typeof record.characterArtStyle === 'string' ? record.characterArtStyle : undefined,
-          sceneArtStyle: typeof record.sceneArtStyle === 'string' ? record.sceneArtStyle : undefined,
-        };
-      }
-    } catch {
-      return { artStyle: trimmed };
-    }
-    return { artStyle: trimmed };
-  }
-  return {};
-};
-
-const serializeArtStyle = (input: Partial<Project>) => {
-  const artStyle = (input.artStyle || '').trim();
-  const characterArtStyle = (input.characterArtStyle || '').trim();
-  const sceneArtStyle = (input.sceneArtStyle || '').trim();
-  if (!artStyle && !characterArtStyle && !sceneArtStyle) return null;
-  return JSON.stringify({
-    artStyle: artStyle || undefined,
-    characterArtStyle: characterArtStyle || undefined,
-    sceneArtStyle: sceneArtStyle || undefined,
-  });
-};
-
 const toProject = (row: Record<string, unknown>): Project => {
-  const { artStyle, characterArtStyle, sceneArtStyle } = parseArtStyle(row.art_style);
+  const resolvedStyle = resolveProjectVisualStyleSelection(row.art_style);
   return {
     id: row.id as string,
     title: row.title as string,
     logline: (row.logline as string) || '',
     genre: (row.genre as string[]) || [],
     language: (row.language as string) || 'zh',
-    artStyle,
-    characterArtStyle,
-    sceneArtStyle,
+    visualStylePreset: resolvedStyle.visualStylePreset,
+    visualStylePresetSource: resolvedStyle.source,
+    artStyle: resolvedStyle.artStyle,
+    characterArtStyle: resolvedStyle.characterArtStyle,
+    sceneArtStyle: resolvedStyle.sceneArtStyle,
     sensitivityPrompt: (row.sensitivity_prompt as string) || '',
     seriesPlan: row.series_plan,
     coverImageUrl: row.cover_image_url as string | undefined,
@@ -115,7 +77,7 @@ const toShot = (row: Record<string, unknown>): Shot => ({
   videoUrl: row.video_url ? String(row.video_url) : undefined,
   videoGenerationId: row.video_generation_id ? String(row.video_generation_id) : undefined,
   videoStatus: row.video_status ? (row.video_status as Shot['videoStatus']) : undefined,
-  characters: row.characters as any,
+  characters: row.characters as Shot['characters'] | undefined,
 });
 
 export const api = {
@@ -153,7 +115,7 @@ export const api = {
         logline: project.logline,
         genre: project.genre,
         language: project.language || 'zh',
-        art_style: serializeArtStyle(project),
+        art_style: serializeProjectVisualStyle(project),
         sensitivity_prompt: project.sensitivityPrompt || '',
         series_plan: project.seriesPlan,
         created_at: new Date(project.createdAt).toISOString(),
@@ -168,8 +130,22 @@ export const api = {
       if (updates.logline) dbUpdates.logline = updates.logline;
       if (updates.genre) dbUpdates.genre = updates.genre;
       if (updates.language !== undefined) dbUpdates.language = updates.language || 'zh';
-      if ('artStyle' in updates || 'characterArtStyle' in updates || 'sceneArtStyle' in updates) {
-        dbUpdates.art_style = serializeArtStyle(updates);
+      if ('visualStylePreset' in updates || 'artStyle' in updates || 'characterArtStyle' in updates || 'sceneArtStyle' in updates) {
+        const { data: existingStyleRow, error: existingStyleError } = await supabase
+          .from('projects')
+          .select('art_style')
+          .eq('id', id)
+          .single();
+
+        if (existingStyleError && existingStyleError.code !== 'PGRST116') {
+          throw existingStyleError;
+        }
+
+        const mergedStyle = {
+          ...parseProjectVisualStyle(existingStyleRow?.art_style),
+          ...updates,
+        };
+        dbUpdates.art_style = serializeProjectVisualStyle(mergedStyle);
       }
       if (updates.sensitivityPrompt !== undefined) dbUpdates.sensitivity_prompt = updates.sensitivityPrompt;
       if (updates.seriesPlan) dbUpdates.series_plan = updates.seriesPlan;

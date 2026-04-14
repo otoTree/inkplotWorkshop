@@ -50,6 +50,10 @@ export async function POST(req: Request) {
       project_blueprint,
       story_analysis,
       existing_episodes,
+      visualStylePreset,
+      artStyle,
+      characterArtStyle,
+      sceneArtStyle,
     } = await req.json();
     const targetLanguage = language || 'zh';
 
@@ -78,7 +82,12 @@ export async function POST(req: Request) {
         Array.isArray(existing_assets) ? existing_assets : []
       );
     } else if (type === 'project_details') {
-      prompt = getProjectDetailsPrompt(theme);
+      prompt = getProjectDetailsPrompt(theme, {
+        visualStylePreset,
+        artStyle,
+        characterArtStyle,
+        sceneArtStyle,
+      });
     } else {
       return NextResponse.json({ error: 'Invalid type' }, { status: 400 });
     }

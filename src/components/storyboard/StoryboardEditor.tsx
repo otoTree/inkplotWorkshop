@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef } from 'react';
 import { api } from '@/lib/api';
-import { ArtStyleConfig, Episode, Asset, Shot, Project } from '@/types';
+import { Episode, Asset, Shot, Project } from '@/types';
 import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Badge } from '@/components/ui/badge';
@@ -10,6 +10,7 @@ import { Loader2, Plus, Wand2, FileText, Sparkles, Video } from 'lucide-react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { Progress } from '@/components/ui/progress';
 import { ShotCard } from './ShotCard';
+import { buildVisualStyleRequestPayload } from '@/lib/project-visual-style';
 
 interface StoryboardEditorProps {
   projectId: string;
@@ -68,12 +69,6 @@ export function StoryboardEditor({ projectId }: StoryboardEditorProps) {
     api.assets.list(projectId).then(setAssets);
   }, [projectId]);
 
-  const artStyleConfig: ArtStyleConfig = {
-    artStyle: project?.artStyle,
-    characterArtStyle: project?.characterArtStyle,
-    sceneArtStyle: project?.sceneArtStyle,
-  };
-
   // Fetch shots when episode changes
   useEffect(() => {
     if (selectedEpisodeId) {
@@ -115,6 +110,7 @@ export function StoryboardEditor({ projectId }: StoryboardEditorProps) {
 
     for (let i = 0; i < chunks.length; i++) {
        const chunkScript = (i > 0 ? `[Context: Previous shot ended with: ${lastShotContext}]\n\n` : '') + chunks[i];
+       const stylePayload = buildVisualStyleRequestPayload(project);
 
        const res = await fetch('/api/ai/generate-storyboard', {
           method: 'POST',
@@ -122,8 +118,8 @@ export function StoryboardEditor({ projectId }: StoryboardEditorProps) {
           body: JSON.stringify({
             script: chunkScript,
             assets: assets || [],
-           artStyle: artStyleConfig,
-            language: project?.language
+            language: project?.language,
+            ...stylePayload,
           })
         });
 

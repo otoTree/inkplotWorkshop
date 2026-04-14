@@ -1,9 +1,21 @@
+export type ProjectVisualStylePreset =
+  | 'overseas-live-action'
+  | 'domestic-live-action'
+  | 'domestic-3dcg';
+
+export type ProjectVisualStylePresetSource =
+  | 'preset'
+  | 'legacy-inferred'
+  | 'default';
+
 export interface Project {
   id: string;             // UUID
   title: string;          // 剧名
   logline: string;        // 核心梗概
   genre: string[];        // 类型标签
   language?: string;      // 剧本语言
+  visualStylePreset?: ProjectVisualStylePreset; // 剧集画面风格预设
+  visualStylePresetSource?: ProjectVisualStylePresetSource; // 预设来源: 显式选择 / 旧字段推断 / 默认兜底
   artStyle?: string;      // 美术风格 (e.g. 赛博朋克, 水墨, 皮克斯)
   characterArtStyle?: string;
   sceneArtStyle?: string;
@@ -32,7 +44,7 @@ export interface Project {
   engagementConfig?: EngagementConfig;
 }
 
-export type ArtStyleConfig = Pick<Project, 'artStyle' | 'characterArtStyle' | 'sceneArtStyle'>;
+export type ArtStyleConfig = Pick<Project, 'visualStylePreset' | 'artStyle' | 'characterArtStyle' | 'sceneArtStyle'>;
 
 export interface Episode {
   id: string;             // UUID

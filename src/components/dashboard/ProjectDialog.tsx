@@ -23,7 +23,12 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { api } from '@/lib/api';
-import { Project } from '@/types';
+import { Project, ProjectVisualStylePreset } from '@/types';
+import {
+  DEFAULT_PROJECT_VISUAL_STYLE_PRESET,
+  parseProjectVisualStyle,
+} from '@/lib/project-visual-style';
+import { ProjectVisualStylePresetSelector } from './ProjectVisualStylePresetSelector';
 
 interface ProjectDialogProps {
   children?: React.ReactNode;
@@ -44,19 +49,28 @@ export function ProjectDialog({ children, project, open: controlledOpen, onOpenC
   const [title, setTitle] = useState('');
   const [logline, setLogline] = useState('');
   const [language, setLanguage] = useState('zh');
+  const [visualStylePreset, setVisualStylePreset] = useState<ProjectVisualStylePreset>(DEFAULT_PROJECT_VISUAL_STYLE_PRESET);
   const [characterArtStyle, setCharacterArtStyle] = useState('');
   const [sceneArtStyle, setSceneArtStyle] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [ideaInput, setIdeaInput] = useState('');
   const [isGenerating, setIsGenerating] = useState(false);
+  const compatibilityHint =
+    project?.visualStylePresetSource === 'legacy-inferred'
+      ? '这是历史项目：系统已根据原有人物或场景美术描述自动匹配预设，保存后会写入新的风格预设字段。'
+      : project?.visualStylePresetSource === 'default'
+        ? '这是历史项目：未检测到可迁移的风格信息，当前以“国内真人剧”作为安全默认值，保存后会写入新的风格预设字段。'
+        : undefined;
 
   // Reset or pre-fill form when dialog opens
   useEffect(() => {
     if (open) {
       if (project) {
+        const parsedStyle = parseProjectVisualStyle(project);
         setTitle(project.title);
         setLogline(project.logline);
         setLanguage(project.language || 'zh');
+        setVisualStylePreset(parsedStyle.visualStylePreset || DEFAULT_PROJECT_VISUAL_STYLE_PRESET);
         setCharacterArtStyle(project.characterArtStyle || project.artStyle || '');
         setSceneArtStyle(project.sceneArtStyle || project.artStyle || '');
         setIdeaInput('');
@@ -67,6 +81,7 @@ export function ProjectDialog({ children, project, open: controlledOpen, onOpenC
           setTitle('');
           setLogline('');
           setLanguage('zh');
+          setVisualStylePreset(DEFAULT_PROJECT_VISUAL_STYLE_PRESET);
           setCharacterArtStyle('');
           setSceneArtStyle('');
           setIdeaInput('');
@@ -84,7 +99,7 @@ export function ProjectDialog({ children, project, open: controlledOpen, onOpenC
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ 
           type: 'project_details', 
-          theme: ideaInput 
+          theme: ideaInput,
         }),
       });
       const data = await response.json();
@@ -95,6 +110,16 @@ export function ProjectDialog({ children, project, open: controlledOpen, onOpenC
       if (data.sceneArtStyle) setSceneArtStyle(data.sceneArtStyle);
       if (data.artStyle && !data.characterArtStyle) setCharacterArtStyle(data.artStyle);
       if (data.artStyle && !data.sceneArtStyle) setSceneArtStyle(data.artStyle);
+      if (data.visualStylePreset || data.artStyle || data.characterArtStyle || data.sceneArtStyle) {
+        setVisualStylePreset(
+          parseProjectVisualStyle({
+            visualStylePreset: data.visualStylePreset,
+            artStyle: data.artStyle,
+            characterArtStyle: data.characterArtStyle,
+            sceneArtStyle: data.sceneArtStyle,
+          }).visualStylePreset || DEFAULT_PROJECT_VISUAL_STYLE_PRESET
+        );
+      }
       if (data.language) setLanguage(data.language);
       
     } catch (error) {
@@ -117,6 +142,7 @@ export function ProjectDialog({ children, project, open: controlledOpen, onOpenC
           title,
           logline,
           language: normalizedLanguage,
+          visualStylePreset,
           characterArtStyle,
           sceneArtStyle,
           updatedAt: Date.now(),
@@ -157,6 +183,7 @@ export function ProjectDialog({ children, project, open: controlledOpen, onOpenC
           title,
           logline,
           language: normalizedLanguage,
+          visualStylePreset,
           characterArtStyle,
           sceneArtStyle,
           genre: [],
@@ -175,6 +202,7 @@ export function ProjectDialog({ children, project, open: controlledOpen, onOpenC
         setTitle('');
         setLogline('');
         setLanguage('zh');
+        setVisualStylePreset(DEFAULT_PROJECT_VISUAL_STYLE_PRESET);
         setCharacterArtStyle('');
         setSceneArtStyle('');
       }
@@ -191,7 +219,7 @@ export function ProjectDialog({ children, project, open: controlledOpen, onOpenC
   return (
     <Dialog open={open} onOpenChange={setOpen}>
       {children && <DialogTrigger asChild>{children}</DialogTrigger>}
-      <DialogContent className="sm:max-w-[425px]">
+      <DialogContent className="sm:max-w-[720px]">
         <form onSubmit={handleSubmit}>
           <DialogHeader>
             <DialogTitle>{isEdit ? '编辑项目' : '新建项目'}</DialogTitle>
@@ -263,6 +291,21 @@ export function ProjectDialog({ children, project, open: controlledOpen, onOpenC
                 </Select>
               </div>
             </div>
+            <div className="grid grid-cols-4 items-start gap-4">
+              <Label htmlFor="visualStylePreset" className="pt-2 text-right">
+                画面风格
+              </Label>
+              <div className="col-span-3">
+                <div id="visualStylePreset">
+                  <ProjectVisualStylePresetSelector
+                    value={visualStylePreset}
+                    onChange={setVisualStylePreset}
+                    helperText="剧集画面风格预设是主入口；下方人物与场景美术仅作为补充偏好，未填写时将沿用预设默认风格。"
+                    compatibilityHint={compatibilityHint}
+                  />
+                </div>
+              </div>
+            </div>
             <div className="grid grid-cols-4 items-center gap-4">
               <Label htmlFor="characterArtStyle" className="text-right">
                 人物美术
@@ -272,7 +315,7 @@ export function ProjectDialog({ children, project, open: controlledOpen, onOpenC
                 value={characterArtStyle}
                 onChange={(e) => setCharacterArtStyle(e.target.value)}
                 className="col-span-3"
-                placeholder="例如：水墨人物、赛博朋克角色、皮克斯风..."
+                placeholder="可选补充，例如：高级感肖像光、写实皮肤质感、风格化角色材质..."
               />
             </div>
             <div className="grid grid-cols-4 items-center gap-4">
@@ -284,7 +327,7 @@ export function ProjectDialog({ children, project, open: controlledOpen, onOpenC
                 value={sceneArtStyle}
                 onChange={(e) => setSceneArtStyle(e.target.value)}
                 className="col-span-3"
-                placeholder="例如：电影感光影、东方水墨场景、复古胶片..."
+                placeholder="可选补充，例如：电影感布光、现实室内空间、3DCG 体积光氛围..."
               />
             </div>
             <div className="grid grid-cols-4 items-center gap-4">

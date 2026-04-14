@@ -1,18 +1,183 @@
 
-export const getProjectDetailsPrompt = (userInput: string) => {
+import { ArtStyleConfig, ProjectVisualStylePreset } from '@/types';
+import { resolveArtStyleConfig } from '@/lib/project-visual-style';
+
+type ArtStyleInput = string | ArtStyleConfig;
+
+type VisualStylePromptStrategy = {
+  projectDetails: {
+    presetLabel: string;
+    characterDirective: string;
+    sceneDirective: string;
+    hardConstraints: string;
+  };
+  assetExtraction: {
+    overview: string;
+    characterDirective: string;
+    locationDirective: string;
+  };
+  imageGeneration: {
+    characterTemplate: string;
+    locationTemplate: string;
+  };
+  storyboard: {
+    systemRole: string;
+    styleDirective: string;
+    videoDirective: string;
+    negativeDirective: string;
+  };
+};
+
+const VISUAL_STYLE_PROMPT_STRATEGIES: Record<ProjectVisualStylePreset, VisualStylePromptStrategy> = {
+  'overseas-live-action': {
+    projectDetails: {
+      presetLabel: '海外真人剧',
+      characterDirective:
+        'Suggest a premium overseas live-action series character style. Emphasize real human actors, natural skin texture, international streaming-drama wardrobe, cinematic portrait lighting, and grounded realism. Match ethnicity and styling to the story context rather than defaulting to Chinese casting.',
+      sceneDirective:
+        'Suggest a premium overseas live-action environment style. Emphasize realistic locations, layered production design, moody cinematic lighting, and grounded atmosphere suitable for an international streaming drama.',
+      hardConstraints:
+        'Do not use domestic short-drama wording. Do not use 3DCG, animation, anime, cartoon, or game-CG language.',
+    },
+    assetExtraction: {
+      overview:
+        'All visual prompts must target a premium overseas live-action series look with real human performers, grounded production design, and cinematic photography.',
+      characterDirective:
+        'Characters must read as real human actors. Include age, facial structure, wardrobe, and region-appropriate ethnicity inferred from the script context. Avoid Chinese-default casting unless the script clearly supports it.',
+      locationDirective:
+        'Locations must read as real photographed places or sets from an overseas drama with realistic architecture, atmospheric lighting, and no stylized CG rendering.',
+    },
+    imageGeneration: {
+      characterTemplate:
+        'premium overseas live-action series, real human actor turnaround sheet, front view side view back view, full body standing pose, neutral expression, natural skin texture, cinematic portrait lighting, wardrobe continuity, no background, isolated on seamless white studio backdrop',
+      locationTemplate:
+        'premium overseas live-action series set photography, realistic environment, empty scene, no people, wide cinematic composition, layered production design, atmospheric practical lighting, natural materials, photographed location realism',
+    },
+    storyboard: {
+      systemRole:
+        'You are an expert director and storyboard artist for premium overseas live-action streaming dramas.',
+      styleDirective:
+        'The entire storyboard must read as overseas live-action cinematography: real human actors, grounded blocking, realistic sets, subtle but high-end dramatic lighting, and premium streaming-series visual language.',
+      videoDirective:
+        'In every videoPrompt, emphasize live-action cinematography, photoreal skin and fabric detail, realistic lens behavior, practical lighting, and physically believable motion.',
+      negativeDirective:
+        'Never describe the visuals as 3DCG, animation, anime, toon, game CG, digital human render, or any non-live-action medium.',
+    },
+  },
+  'domestic-live-action': {
+    projectDetails: {
+      presetLabel: '国内真人剧',
+      characterDirective:
+        'Suggest a premium domestic live-action short-drama character style. Emphasize Chinese live-action casting, polished wardrobe, expressive facial performance, realistic skin texture, and emotionally heightened cinematic portrait lighting.',
+      sceneDirective:
+        'Suggest a premium domestic live-action short-drama environment style. Emphasize realistic Chinese settings, concise but polished production design, emotionally charged lighting, and grounded live-action atmosphere.',
+      hardConstraints:
+        'Do not drift into overseas casting language. Do not use 3DCG, animation, anime, cartoon, or game-CG language.',
+    },
+    assetExtraction: {
+      overview:
+        'All visual prompts must target a premium domestic live-action short-drama look with Chinese real-person casting, realistic sets, and polished cinematic photography.',
+      characterDirective:
+        'Characters must read as Chinese live-action performers unless the script clearly establishes another background. Focus on real-person facial detail, wardrobe styling, and emotionally legible expressions.',
+      locationDirective:
+        'Locations must read as realistic Chinese interiors or exteriors with live-action production design, cinematic lighting, and no stylized CG rendering.',
+    },
+    imageGeneration: {
+      characterTemplate:
+        'premium domestic live-action short drama, Chinese real actor turnaround sheet, front view side view back view, full body standing pose, neutral expression, polished wardrobe, realistic skin texture, cinematic rim lighting, no background, isolated on seamless white studio backdrop',
+      locationTemplate:
+        'premium domestic live-action short drama set photography, realistic Chinese environment, empty scene, no people, wide cinematic composition, emotionally charged lighting, believable architectural detail, photographed location realism',
+    },
+    storyboard: {
+      systemRole:
+        'You are an expert director and storyboard artist for premium domestic live-action short dramas.',
+      styleDirective:
+        'The entire storyboard must read as domestic live-action short-drama cinematography: Chinese real actors, emotionally intensified blocking, realistic Chinese spaces, and polished yet grounded camera language.',
+      videoDirective:
+        'In every videoPrompt, emphasize live-action cinematography, photoreal facial detail, believable wardrobe motion, realistic lighting, and tangible environmental reactions.',
+      negativeDirective:
+        'Never describe the visuals as 3DCG, animation, anime, toon, game CG, digital human render, or any non-live-action medium.',
+    },
+  },
+  'domestic-3dcg': {
+    projectDetails: {
+      presetLabel: '国内 3DCG 剧',
+      characterDirective:
+        'Suggest a premium domestic 3DCG short-drama character style. Emphasize stylized digital humans, high-detail materials, expressive silhouettes, rendered cinematic lighting, and premium CG drama presentation.',
+      sceneDirective:
+        'Suggest a premium domestic 3DCG short-drama environment style. Emphasize stylized CG sets, physically based materials, volumetric render lighting, and cinematic animated-world atmosphere.',
+      hardConstraints:
+        'Do not force live-action, photoreal human-actor, or anti-3D restrictions. 3DCG, CG rendering, stylized digital-human, and cinematic animation language are allowed and encouraged.',
+    },
+    assetExtraction: {
+      overview:
+        'All visual prompts must target a premium domestic 3DCG short-drama render with stylized digital characters, cinematic CG lighting, and physically based materials.',
+      characterDirective:
+        'Characters should read as premium 3DCG digital humans or stylized CG characters. Focus on silhouette, hair and cloth simulation potential, material definition, and expressive facial design. Do not force real-human actor wording.',
+      locationDirective:
+        'Locations should read as premium 3DCG environments with rendered depth, PBR materials, stylized architecture, volumetric lighting, and no live-action photography requirement.',
+    },
+    imageGeneration: {
+      characterTemplate:
+        'premium domestic 3DCG short drama, stylized digital human character turnaround, front view side view back view, full body standing pose, neutral expression, high-detail PBR materials, clean topology-friendly silhouette, cinematic CG render lighting, no background, isolated on pure white render backdrop',
+      locationTemplate:
+        'premium domestic 3DCG short drama environment render, stylized CG set, empty scene, no people, wide cinematic composition, physically based materials, volumetric lighting, high-detail rendered atmosphere, no live-action photography',
+    },
+    storyboard: {
+      systemRole:
+        'You are an expert director and storyboard artist for premium domestic 3DCG short dramas and cinematic animation sequences.',
+      styleDirective:
+        'The entire storyboard must read as premium domestic 3DCG cinematics: stylized digital humans, rendered environments, cinematic animation staging, physically based materials, and dramatic CG lighting.',
+      videoDirective:
+        'In every videoPrompt, emphasize premium 3DCG rendering, stylized but coherent digital-human performance, camera motion inside a rendered world, simulation-friendly cloth and hair behavior, volumetric light, and physically based materials.',
+      negativeDirective:
+        'Never force live-action-only wording such as real human actors, on-set photography, or anti-3D constraints. Keep the output firmly in premium 3DCG cinematic language.',
+    },
+  },
+};
+
+const normalizeArtStyle = (artStyle?: ArtStyleInput) => {
+  return resolveArtStyleConfig(artStyle);
+};
+
+const resolvePromptStrategy = (artStyle?: ArtStyleInput) => {
+  const resolvedStyle = normalizeArtStyle(artStyle);
+  const preset = resolvedStyle.visualStylePreset;
+  return {
+    resolvedStyle,
+    preset,
+    strategy: VISUAL_STYLE_PROMPT_STRATEGIES[preset],
+  };
+};
+
+const joinPromptSegments = (...segments: Array<string | undefined>) => {
+  return segments
+    .map((segment) => segment?.trim().replace(/^,\s*/, '').replace(/\s*,\s*$/, ''))
+    .filter((segment): segment is string => Boolean(segment))
+    .join(', ');
+};
+
+export const getProjectDetailsPrompt = (userInput: string, artStyle?: ArtStyleInput) => {
+  const { resolvedStyle, preset, strategy } = resolvePromptStrategy(artStyle);
+  const characterStyleSeed = resolvedStyle.characterArtStyle || resolvedStyle.artStyle;
+  const sceneStyleSeed = resolvedStyle.sceneArtStyle || resolvedStyle.artStyle;
   return `
 Task: Analyze the user's input and extract project details for a script writing project.
 User Input: "${userInput}"
+Selected visual style preset: "${preset}" (${strategy.projectDetails.presetLabel})
 
 Requirements:
 1. **Title**: Generate a catchy, short title (max 10 words).
 2. **Logline**: A concise summary of the story (1-2 sentences).
-3. **Character Art Style**: Suggest a specific and detailed visual style suitable for character generation. Include keywords for lighting, palette, rendering style, and atmosphere. Avoid background/scene terms, 3D, game CG, or anime styles. Prefer cinematic live-action styles. Keep it under 20 words.
-4. **Scene Art Style**: Suggest a specific and detailed visual style suitable for scenes and environments. Include keywords for lighting, palette, rendering style, and atmosphere. Avoid 3D, game CG, or anime styles. Prefer cinematic live-action styles. Keep it under 20 words.
-5. **Language**: Detect the language of the input and use it for the output fields (title, logline, characterArtStyle, sceneArtStyle). Return the detected language code ('zh', 'en', 'jp', 'kr') in the "language" field. Default to 'zh' if unsure.
+3. **Visual Style Preset**: The output \`visualStylePreset\` MUST be exactly "${preset}".
+4. **Character Art Style**: ${strategy.projectDetails.characterDirective} Keep it under 20 words. ${characterStyleSeed ? `Blend in this seed if useful: "${characterStyleSeed}".` : ''}
+5. **Scene Art Style**: ${strategy.projectDetails.sceneDirective} Keep it under 20 words. ${sceneStyleSeed ? `Blend in this seed if useful: "${sceneStyleSeed}".` : ''}
+6. **Hard Constraints**: ${strategy.projectDetails.hardConstraints}
+7. **Language**: Detect the language of the input and use it for the output fields (title, logline, characterArtStyle, sceneArtStyle). Return the detected language code ('zh', 'en', 'jp', 'kr') in the "language" field. Default to 'zh' if unsure.
 
 Output Format: JSON
 {
+  "visualStylePreset": "${preset}",
   "title": "...",
   "logline": "...",
   "characterArtStyle": "...",
@@ -238,24 +403,9 @@ export const SYSTEM_PROMPT = getSystemPrompt('zh');
 export const ORIGINAL_STORY_PROMPT = getOriginalStoryPrompt('{theme}', 'zh');
 export const EPISODE_CONTENT_PROMPT = getEpisodeContentPrompt(1, {}, '{current_summary}', 'zh');
 
-type ArtStyleInput = string | {
-  artStyle?: string;
-  characterArtStyle?: string;
-  sceneArtStyle?: string;
-};
-
-const normalizeArtStyle = (artStyle?: ArtStyleInput) => {
-  if (!artStyle) {
-    return {};
-  }
-  if (typeof artStyle === 'string') {
-    return { artStyle };
-  }
-  return artStyle;
-};
-
 export const getAssetExtractionPrompt = (scriptContent: string, artStyle?: ArtStyleInput) => {
-  const { artStyle: baseStyle, characterArtStyle, sceneArtStyle } = normalizeArtStyle(artStyle);
+  const { resolvedStyle, strategy } = resolvePromptStrategy(artStyle);
+  const { artStyle: baseStyle, characterArtStyle, sceneArtStyle } = resolvedStyle;
   const characterStyle = characterArtStyle || baseStyle || 'Cinematic realism, Photorealistic, Highly detailed';
   const sceneStyle = sceneArtStyle || baseStyle || 'Cinematic realism, Photorealistic, Highly detailed';
   return `
@@ -268,12 +418,11 @@ Requirements:
    - **Characters**: Main and supporting characters.
    - **Locations**: Key settings where scenes take place.
 2. **Visual Prompts**: For EACH asset, generate a specific "visual_prompt" in English suitable for AI image generation (Midjourney/Stable Diffusion style).
-   - **Style Constraint**:
-     - **Characters** MUST follow: "${characterStyle}".
-     - **Locations** MUST follow: "${sceneStyle}".
-     - **Note**: Strictly avoid 3D, game CG, anime, or cartoon terms in the visual prompt. Always prefer cinematic live-action terminology.
-   - **Characters**: Describe appearance, clothing, style, age, and **ethnicity/race** based on the script context. If the script implies a specific background (e.g., Western names, settings), ensure the visual prompt reflects that (e.g., 'Caucasian', 'Black', 'Latino'). Do NOT default to Asian/Chinese unless the script context suggests it. (Do not describe actions, props, or background. Character ONLY. No background, plain white.) Identify up to 2 main protagonists and mark them with \`"isMain": true\`. Other characters should have \`"isMain": false\`.
-   - **Locations**: Describe atmosphere, lighting, architectural style. (Empty scene, no people).
+   - **Preset Strategy**: ${strategy.assetExtraction.overview}
+   - **Characters** MUST follow: "${characterStyle}".
+   - **Locations** MUST follow: "${sceneStyle}".
+   - **Characters**: ${strategy.assetExtraction.characterDirective} Do not describe actions, props, or background. Character ONLY. No background, plain white. Identify up to 2 main protagonists and mark them with \`"isMain": true\`. Other characters should have \`"isMain": false\`.
+   - **Locations**: ${strategy.assetExtraction.locationDirective} Empty scene, no people.
 3. **Descriptions**: Provide a short description in the script's language.
 
 Output Format: JSON
@@ -293,20 +442,26 @@ Output Format: JSON
 };
 
 export const getImageGenerationPrompt = (basePrompt: string, type: 'character' | 'location', artStyle?: ArtStyleInput) => {
-  const { artStyle: baseStyle, characterArtStyle, sceneArtStyle } = normalizeArtStyle(artStyle);
-  const resolvedStyle = type === 'character'
+  const { resolvedStyle, strategy } = resolvePromptStrategy(artStyle);
+  const { artStyle: baseStyle, characterArtStyle, sceneArtStyle } = resolvedStyle;
+  const styleSeed = type === 'character'
     ? (characterArtStyle || baseStyle)
     : (sceneArtStyle || baseStyle);
-  const styleSuffix = resolvedStyle
-    ? `, ${resolvedStyle} style, cinematic realism, photorealistic, highly detailed, professional cinematography, film grain, live-action, 8k resolution`
-    : ', cinematic realism, photorealistic, highly detailed, professional cinematography, film grain, live-action, 8k resolution';
-  
+
   if (type === 'character') {
-    return `${basePrompt}, three-view drawing (front view, side view, back view), character sheet, standing pose, neutral expression, full body, landscape 16:9, ${styleSuffix}, no background, isolated on white background, solid white background`;
+    return joinPromptSegments(
+      basePrompt,
+      styleSeed,
+      strategy.imageGeneration.characterTemplate
+    );
   } else if (type === 'location') {
-    return `${basePrompt}, empty scene, no people, wide shot, atmospheric lighting${styleSuffix}`;
+    return joinPromptSegments(
+      basePrompt,
+      styleSeed,
+      strategy.imageGeneration.locationTemplate
+    );
   }
-  return basePrompt + styleSuffix;
+  return joinPromptSegments(basePrompt, styleSeed);
 };
 
 type ExistingAsset = {
@@ -317,7 +472,8 @@ type ExistingAsset = {
 
 export const getStoryboardGenerationPrompt = (scriptContent: string, existingAssets: ExistingAsset[], artStyle?: ArtStyleInput, language: string = 'zh') => {
   const isEnglish = language === 'en';
-  const { artStyle: baseStyle, sceneArtStyle } = normalizeArtStyle(artStyle);
+  const { resolvedStyle, strategy } = resolvePromptStrategy(artStyle);
+  const { artStyle: baseStyle, sceneArtStyle } = resolvedStyle;
   const resolvedSceneStyle = sceneArtStyle || baseStyle || 'Cinematic realism, Photorealistic';
   return `
 # Skill: Narrative-to-Visual Reasoning
@@ -333,6 +489,8 @@ export const getStoryboardGenerationPrompt = (scriptContent: string, existingAss
 5. **Mandatory Visual Continuity**: Shot transitions MUST have clear visual logic (e.g., eyeline match, action continuity, reaction shot). No illogical hard cuts.
 6. **Asset Coverage & Matching**: Each shot MUST list all involved **characters and locations**. If an asset exists in the provided list, use its exact name (case-insensitive match). **CRITICAL: EVERY single shot MUST have at least one explicit scene/location assigned to it in \`sceneLabel\` and \`suggestedAssets.locations\`. Even for close-ups or continuous action, you MUST explicitly state the scene/location. Never leave the scene empty.**
 7. **Opening Highlight Shot**: Shot \`sequence: 1\` MUST be the current episode's highlight moment: the single most emotionally explosive, visually striking, or plot-defining shot from this episode. It must function as a cold open teaser, not a generic establishing shot.
+8. **Style Strategy**: ${strategy.storyboard.styleDirective}
+9. **Negative Style Rule**: ${strategy.storyboard.negativeDirective}
 
 ## 1. Visual & Aesthetic Layer
 **Definition**: The expression layer used to **enhance emotional and thematic impact**.
@@ -345,7 +503,7 @@ export const getStoryboardGenerationPrompt = (scriptContent: string, existingAss
 
 ### 🎬 Video Generation Prompt Rules
 When generating the \`videoPrompt\`, assume the AI video model has zero context. You MUST include:
-1. **Cinematic Realism**: Emphasize photorealistic, cinematic lighting, highly detailed textures, and professional cinematography.
+1. **Medium Fidelity**: ${strategy.storyboard.videoDirective}
 2. **Camera Movement**: Start with specific, dynamic camera movements (e.g., "Explosive fast push-in", "Slow tracking shot").
 3. **Physical Dynamics**: Describe muscle contractions, physics of fluids/particles (e.g., "blood splashing in slow motion", "dust swirling from the wind").
 4. **Action Impact**: Describe the force and weight of the action.
@@ -375,6 +533,8 @@ ${scriptContent.slice(0, 15000)}...
 ${JSON.stringify(existingAssets.map(a => ({ id: a.id, name: a.name, type: a.type })))}
 
 **Scene Art Style**: ${resolvedSceneStyle}
+**Style Strategy**: ${strategy.storyboard.styleDirective}
+**Negative Directive**: ${strategy.storyboard.negativeDirective}
 
 **Output Format**: JSON
 {
@@ -405,7 +565,7 @@ ${JSON.stringify(existingAssets.map(a => ({ id: a.id, name: a.name, type: a.type
       "camera": "Close-up / Pan Right / ...",
       "size": "Medium Shot / Close-up / Long Shot",
       "duration": 5, // Estimated duration in seconds (4-6s flexible)
-      "videoPrompt": "Detailed English prompt for video generation. MUST emphasize cinematic realism, photorealistic textures, and professional cinematography. Strictly avoid 3D, game CG, or anime styles. MUST include camera movement (e.g. 'Explosive fast push-in'), physical dynamics (muscle contraction, fluid/particle physics), action impact, and environmental reactions. Be extremely specific.",
+      "videoPrompt": "Detailed English prompt for video generation. MUST obey the selected style strategy above, include camera movement (e.g. 'Explosive fast push-in'), physical dynamics (muscle contraction, fluid/particle physics), action impact, and environmental reactions. Be extremely specific.",
       "suggestedAssetNames": ["Char Name", "Location Name"],
       "characters": [
         {
@@ -422,6 +582,11 @@ ${JSON.stringify(existingAssets.map(a => ({ id: a.id, name: a.name, type: a.type
   ]
 }
 `;
+};
+
+export const getStoryboardSystemPrompt = (artStyle?: ArtStyleInput) => {
+  const { strategy } = resolvePromptStrategy(artStyle);
+  return strategy.storyboard.systemRole;
 };
 
 export const getCoverDesignPrompt = (title: string, logline: string, characters: string[] = [], language: string = 'zh') => {

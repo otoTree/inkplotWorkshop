@@ -10,6 +10,8 @@ import { Loader2, BookOpen, Users, Image as ImageIcon, Film, Video, Layers, Acti
 import { formatDistanceToNow } from 'date-fns';
 import { zhCN } from 'date-fns/locale';
 import { ProjectCoverCard } from './ProjectCoverCard';
+import { resolveArtStyleConfig } from '@/lib/project-visual-style';
+import { ProjectVisualStylePresetSelector } from './ProjectVisualStylePresetSelector';
 
 interface DashboardData {
   project: Project | null;
@@ -41,8 +43,8 @@ export function ProjectOverview({ projectId }: { projectId: string }) {
         const allShots = shotsArrays.flat();
 
         setData({ project, episodes, assets, shots: allShots });
-      } catch (err: any) {
-        setError(err.message || '加载数据失败');
+      } catch (err: unknown) {
+        setError(err instanceof Error ? err.message : '加载数据失败');
       } finally {
         setLoading(false);
       }
@@ -69,6 +71,13 @@ export function ProjectOverview({ projectId }: { projectId: string }) {
   }
 
   const { project, episodes, assets, shots } = data;
+  const resolvedArtStyle = resolveArtStyleConfig(project);
+  const visualStyleCompatibilityHint =
+    project.visualStylePresetSource === 'legacy-inferred'
+      ? '当前预设由历史项目的旧美术字段自动匹配得出；下次保存项目设置后会写入新的预设字段。'
+      : project.visualStylePresetSource === 'default'
+        ? '当前项目没有可迁移的风格字段，系统以“国内真人剧”作为安全默认值兜底。'
+        : undefined;
 
   // Calculate metrics
   const totalEpisodes = episodes.length;
@@ -210,16 +219,20 @@ export function ProjectOverview({ projectId }: { projectId: string }) {
           </CardHeader>
           <CardContent className="space-y-4">
             <div>
-              <span className="text-xs text-black/50 block mb-1">全局美术风格</span>
-              <div className="text-sm text-black/80 font-medium">{project.artStyle || '未设置'}</div>
+              <span className="text-xs text-black/50 block mb-1">剧集画面风格预设</span>
+              <ProjectVisualStylePresetSelector
+                value={resolvedArtStyle.visualStylePreset}
+                helperText="下游资产提取、出图与分镜会统一读取当前预设。"
+                compatibilityHint={visualStyleCompatibilityHint}
+              />
             </div>
             <div>
               <span className="text-xs text-black/50 block mb-1">角色美术偏好</span>
-              <div className="text-sm text-black/80">{project.characterArtStyle || '默认'}</div>
+              <div className="text-sm text-black/80">{resolvedArtStyle.characterArtStyle || '默认'}</div>
             </div>
             <div>
               <span className="text-xs text-black/50 block mb-1">场景美术偏好</span>
-              <div className="text-sm text-black/80">{project.sceneArtStyle || '默认'}</div>
+              <div className="text-sm text-black/80">{resolvedArtStyle.sceneArtStyle || '默认'}</div>
             </div>
             {project.sensitivityPrompt && (
               <div>

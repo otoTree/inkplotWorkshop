@@ -1,8 +1,9 @@
 
 import { NextResponse } from 'next/server';
-import { getStoryboardGenerationPrompt } from '@/lib/prompts';
+import { getStoryboardGenerationPrompt, getStoryboardSystemPrompt } from '@/lib/prompts';
 import { createClient } from '@/lib/supabase/server';
 import { AIAPIError, callAIChatCompletion, extractFirstMessageContent } from '@/lib/ai-server';
+import { resolveArtStyleConfig } from '@/lib/project-visual-style';
 
 export const maxDuration = 300; // Longer timeout for storyboard generation
 
@@ -15,13 +16,29 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    const { script, assets, artStyle, language } = await req.json();
-    const prompt = getStoryboardGenerationPrompt(script, assets, artStyle, language);
+    const body = await req.json();
+    const {
+      script,
+      assets,
+      artStyle,
+      language,
+      visualStylePreset,
+      characterArtStyle,
+      sceneArtStyle,
+    } = body;
+    const styleInput = artStyle ?? {
+      visualStylePreset,
+      artStyle: typeof artStyle === 'string' ? artStyle : undefined,
+      characterArtStyle,
+      sceneArtStyle,
+    };
+    const resolvedStyle = resolveArtStyleConfig(styleInput);
+    const prompt = getStoryboardGenerationPrompt(script, assets, resolvedStyle, language);
     const data = await callAIChatCompletion({
       messages: [
         {
           role: 'system',
-          content: 'You are an expert film director and storyboard artist specializing in visual storytelling.',
+          content: getStoryboardSystemPrompt(resolvedStyle),
         },
         { role: 'user', content: prompt },
       ],

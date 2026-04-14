@@ -4,6 +4,7 @@ import { ArtStyleConfig, Asset, AssetType } from '@/types';
 import { useState, useEffect } from 'react';
 import { User, MapPin, Box, Wand2, Loader2, Image as ImageIcon } from 'lucide-react';
 import { getImageGenerationPrompt } from '@/lib/prompts';
+import { buildVisualStyleRequestPayload } from '@/lib/project-visual-style';
 
 interface ExtractionPreviewDialogProps {
   open: boolean;
@@ -58,13 +59,15 @@ export function ExtractionPreviewDialog({
     try {
       const fullPrompt = getImageGenerationPrompt(asset.visualPrompt, asset.type as AssetType, artStyle);
       const aspectRatio = asset.type === 'character' ? '16:9' : '16:9';
+      const stylePayload = buildVisualStyleRequestPayload(artStyle);
 
       const response = await fetch('/api/ai/generate-image', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ 
             prompt: fullPrompt,
-            aspectRatio
+            aspectRatio,
+            ...stylePayload,
         }),
       });
       

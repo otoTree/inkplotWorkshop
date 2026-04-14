@@ -5,12 +5,13 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Progress } from '@/components/ui/progress';
-import { Plus, User, MapPin, Box, Wand2, Loader2, Sparkles, Trash2 } from 'lucide-react';
+import { Plus, User, MapPin, Wand2, Loader2, Sparkles, Trash2 } from 'lucide-react';
 import { ArtStyleConfig, Asset, AssetType, Project } from '@/types';
 import { useState, useEffect, useCallback } from 'react';
 import { AssetDialog } from './AssetDialog';
 import { ExtractionPreviewDialog } from './ExtractionPreviewDialog';
 import { getImageGenerationPrompt } from '@/lib/prompts';
+import { buildVisualStyleRequestPayload, resolveArtStyleConfig } from '@/lib/project-visual-style';
 
 export function AssetGallery({ projectId }: { projectId: string }) {
   const [assets, setAssets] = useState<Asset[]>([]);
@@ -52,11 +53,7 @@ export function AssetGallery({ projectId }: { projectId: string }) {
       fetchData();
   }, [fetchData]);
 
-  const artStyleConfig: ArtStyleConfig = {
-    artStyle: project?.artStyle,
-    characterArtStyle: project?.characterArtStyle,
-    sceneArtStyle: project?.sceneArtStyle,
-  };
+  const artStyleConfig: ArtStyleConfig = resolveArtStyleConfig(project);
 
   const getAssetsByType = (type: AssetType) => assets?.filter((a) => a.type === type) || [];
 
@@ -151,10 +148,11 @@ export function AssetGallery({ projectId }: { projectId: string }) {
         const scriptContent = `Episode ${episode.episodeNumber}: ${episode.title}\n${episode.content}`;
         
         try {
+          const stylePayload = buildVisualStyleRequestPayload(project);
           const response = await fetch('/api/ai/extract-assets', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ scriptContent, artStyle: artStyleConfig }),
+            body: JSON.stringify({ scriptContent, ...stylePayload }),
           });
           
           if (!response.ok) {
@@ -244,12 +242,14 @@ export function AssetGallery({ projectId }: { projectId: string }) {
         const fullPrompt = getImageGenerationPrompt(asset.visualPrompt, asset.type, artStyleConfig);
         const aspectRatio = asset.type === 'character' ? '16:9' : '16:9';
         
+        const stylePayload = buildVisualStyleRequestPayload(project);
         const response = await fetch('/api/ai/generate-image', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ 
                 prompt: fullPrompt,
-                aspectRatio
+                aspectRatio,
+                ...stylePayload
             }),
         });
         
@@ -308,12 +308,14 @@ export function AssetGallery({ projectId }: { projectId: string }) {
             const fullPrompt = getImageGenerationPrompt(asset.visualPrompt, asset.type, artStyleConfig);
             const aspectRatio = asset.type === 'character' ? '16:9' : '16:9';
 
+            const stylePayload = buildVisualStyleRequestPayload(project);
             const response = await fetch('/api/ai/generate-image', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ 
                     prompt: fullPrompt,
-                    aspectRatio
+                    aspectRatio,
+                    ...stylePayload
                 }),
             });
             

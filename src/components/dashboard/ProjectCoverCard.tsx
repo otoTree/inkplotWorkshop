@@ -5,6 +5,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/com
 import { Button } from '@/components/ui/button';
 import { Loader2, Image as ImageIcon, Wand2, RefreshCw, Edit2 } from 'lucide-react';
 import Image from 'next/image';
+import { buildVisualStyleRequestPayload } from '@/lib/project-visual-style';
 
 interface ProjectCoverCardProps {
   project: Project;
@@ -78,6 +79,7 @@ export function ProjectCoverCard({ project, assets = [], onUpdate }: ProjectCove
       const mainCharacterWithImage = mainCharacters.find(a => a.imageUrl);
       const fallbackCharacterWithImage = assets.find(a => a.type === 'character' && a.imageUrl);
       const referenceImageUrl = mainCharacterWithImage ? mainCharacterWithImage.imageUrl : fallbackCharacterWithImage?.imageUrl;
+      const stylePayload = buildVisualStyleRequestPayload(project);
 
       const response = await fetch('/api/ai/generate-image', {
         method: 'POST',
@@ -86,7 +88,8 @@ export function ProjectCoverCard({ project, assets = [], onUpdate }: ProjectCove
           prompt: project.coverPrompt,
           aspectRatio: '3:4',
           n: 4, // 请求生成4张图片
-          referenceImageUrl
+          referenceImageUrl,
+          ...stylePayload,
         }),
       });
 

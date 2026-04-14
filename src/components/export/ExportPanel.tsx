@@ -8,6 +8,7 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { Progress } from '@/components/ui/progress';
 import { Download, Loader2, AlertCircle, CheckCircle2 } from 'lucide-react';
 import { useState } from 'react';
+import { resolveArtStyleConfig } from '@/lib/project-visual-style';
 
 interface VirtualFileSystem {
   saveFile: (path: string[], filename: string, data: Blob | string) => Promise<void>;
@@ -109,8 +110,9 @@ export function ExportPanel({ projectId }: { projectId: string }) {
     setExportProgress(0);
     setExportStatus('准备导出...');
     try {
-      const characterStyle = project.characterArtStyle || project.artStyle || 'N/A';
-      const sceneStyle = project.sceneArtStyle || project.artStyle || 'N/A';
+      const resolvedArtStyle = resolveArtStyleConfig(project);
+      const characterStyle = resolvedArtStyle.characterArtStyle || 'N/A';
+      const sceneStyle = resolvedArtStyle.sceneArtStyle || 'N/A';
 
       const folderName = project.title.replace(/[<>:"/\\|?*]/g, '_');
 

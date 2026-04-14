@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { getAssetExtractionPrompt, getSystemPrompt } from '@/lib/prompts';
 import { createClient } from '@/lib/supabase/server';
 import { AIAPIError, callAIChatCompletion, extractFirstMessageContent } from '@/lib/ai-server';
+import { resolveArtStyleConfig } from '@/lib/project-visual-style';
 
 export const maxDuration = 300;
 
@@ -14,8 +15,22 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    const { scriptContent, language, artStyle } = await req.json();
-    const prompt = getAssetExtractionPrompt(scriptContent, artStyle);
+    const body = await req.json();
+    const {
+      scriptContent,
+      language,
+      artStyle,
+      visualStylePreset,
+      characterArtStyle,
+      sceneArtStyle,
+    } = body;
+    const styleInput = artStyle ?? {
+      visualStylePreset,
+      artStyle: typeof artStyle === 'string' ? artStyle : undefined,
+      characterArtStyle,
+      sceneArtStyle,
+    };
+    const prompt = getAssetExtractionPrompt(scriptContent, resolveArtStyleConfig(styleInput));
     const data = await callAIChatCompletion({
       messages: [
         { role: 'system', content: getSystemPrompt(language || 'zh') },

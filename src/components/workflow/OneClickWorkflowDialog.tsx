@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import { api } from '@/lib/api';
-import { Project, Episode, Asset, Shot, ArtStyleConfig } from '@/types';
+import { Episode, Asset, Shot, ArtStyleConfig } from '@/types';
 import {
   Dialog,
   DialogContent,
@@ -13,8 +13,9 @@ import {
 } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Progress } from '@/components/ui/progress';
-import { Loader2, Rocket, CheckCircle2, XCircle } from 'lucide-react';
+import { Loader2, Rocket, CheckCircle2 } from 'lucide-react';
 import { getImageGenerationPrompt } from '@/lib/prompts';
+import { buildVisualStyleRequestPayload, resolveArtStyleConfig } from '@/lib/project-visual-style';
 
 interface OneClickWorkflowDialogProps {
   projectId: string;
@@ -136,11 +137,7 @@ export function OneClickWorkflowDialog({ projectId, open, onOpenChange }: OneCli
         }
       }
 
-      const artStyleConfig: ArtStyleConfig = {
-        artStyle: project.artStyle,
-        characterArtStyle: project.characterArtStyle,
-        sceneArtStyle: project.sceneArtStyle,
-      };
+      const artStyleConfig: ArtStyleConfig = resolveArtStyleConfig(project);
 
       // 1. 生成缺失的剧本 (Generate missing scripts)
       const episodesToGenerate = episodes.filter(ep => ep.structure?.summary && !ep.content?.trim());
@@ -223,10 +220,11 @@ export function OneClickWorkflowDialog({ projectId, open, onOpenChange }: OneCli
           try {
             const fullPrompt = getImageGenerationPrompt(asset.visualPrompt, asset.type, artStyleConfig);
             const aspectRatio = asset.type === 'character' ? '16:9' : '16:9';
+            const stylePayload = buildVisualStyleRequestPayload(project);
             const res = await fetch('/api/ai/generate-image', {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ prompt: fullPrompt, aspectRatio }),
+              body: JSON.stringify({ prompt: fullPrompt, aspectRatio, ...stylePayload }),
             });
             if (res.ok) {
               const data = await res.json();
@@ -287,14 +285,15 @@ export function OneClickWorkflowDialog({ projectId, open, onOpenChange }: OneCli
           // 注意：单集内的分段(chunks)必须按顺序生成，因为有上下文依赖(lastShotContext)
           for (let j = 0; j < chunks.length; j++) {
             const chunkScript = (j > 0 ? `[Context: Previous shot ended with: ${lastShotContext}]\n\n` : '') + chunks[j];
+            const stylePayload = buildVisualStyleRequestPayload(project);
             const res = await fetch('/api/ai/generate-storyboard', {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({
                 script: chunkScript,
                 assets: assets || [],
-                artStyle: artStyleConfig,
-                language: project?.language
+                language: project?.language,
+                ...stylePayload,
               })
             });
 
