@@ -11,6 +11,7 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { Save, Trash2, Plus, Box, Maximize2, Download, Copy, Shield, Video, Loader2 } from 'lucide-react';
 import { toPng } from 'html-to-image';
 import { ShotDetailDialog } from './ShotDetailDialog';
+import { normalizeShotDurationSeconds } from '@/lib/duration';
 
 interface ShotCardProps {
   shot: Shot;
@@ -226,7 +227,7 @@ export function ShotCard({ shot, assets, projectId, sensitivityPrompt, onUpdate,
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ 
           prompt: fullPrompt,
-          duration: current.duration || 5,
+          duration: normalizeShotDurationSeconds(current.duration),
           metadata: {
             multi_shot: false,
             aspect_ratio: "9:16",

@@ -6,6 +6,7 @@ import {
   completeVideoTask,
   callAIVideoGeneration,
 } from '@/lib/ai-server';
+import { normalizeShotDurationSeconds } from '@/lib/duration';
 
 // Optional: Force dynamic so Vercel doesn't cache the cron route
 export const dynamic = 'force-dynamic';
@@ -137,7 +138,7 @@ export async function GET(req: Request) {
 
           const result = await callAIVideoGeneration(
             fullPrompt,
-            shot.duration || 5,
+            normalizeShotDurationSeconds(shot.duration),
             {
               multi_shot: false,
               aspect_ratio: "9:16",

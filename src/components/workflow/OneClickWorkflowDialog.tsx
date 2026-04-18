@@ -16,6 +16,10 @@ import { Progress } from '@/components/ui/progress';
 import { Loader2, Rocket, CheckCircle2 } from 'lucide-react';
 import { getImageGenerationPrompt } from '@/lib/prompts';
 import { buildVisualStyleRequestPayload, resolveArtStyleConfig } from '@/lib/project-visual-style';
+import {
+  normalizeEpisodeDurationSeconds,
+  normalizeShotDurationSeconds,
+} from '@/lib/duration';
 
 interface OneClickWorkflowDialogProps {
   projectId: string;
@@ -87,7 +91,7 @@ export function OneClickWorkflowDialog({ projectId, open, onOpenChange }: OneCli
               summary: ep.summary || '',
               hook: ep.hook || '',
               cliffhanger: ep.cliffhanger || '',
-              duration_seconds: ep.duration_seconds || 60,
+              duration_seconds: normalizeEpisodeDurationSeconds(ep.duration_seconds),
             },
             lastEdited: Date.now(),
           }));
@@ -322,7 +326,7 @@ export function OneClickWorkflowDialog({ projectId, open, onOpenChange }: OneCli
                     dialogue: s.dialogue || '',
                     camera: s.camera || '',
                     size: s.size || '',
-                    duration: s.duration || 10,
+                    duration: normalizeShotDurationSeconds(s.duration),
                     sensitivityReduction: s.sensitivityReduction ?? 0,
                     videoPrompt: s.videoPrompt || '',
                     characters: Array.isArray(s.characters) ? s.characters : [],
@@ -419,7 +423,7 @@ export function OneClickWorkflowDialog({ projectId, open, onOpenChange }: OneCli
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ 
                   prompt: fullPrompt,
-                  duration: currentShot.duration || 5,
+                  duration: normalizeShotDurationSeconds(currentShot.duration),
                   metadata: {
                     multi_shot: false,
                     aspect_ratio: "9:16",

@@ -11,6 +11,11 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from 
 import { Progress } from '@/components/ui/progress';
 import { ShotCard } from './ShotCard';
 import { buildVisualStyleRequestPayload } from '@/lib/project-visual-style';
+import {
+  DEFAULT_SHOT_DURATION_SECONDS,
+  getStoryboardTotalDurationSeconds,
+  normalizeShotDurationSeconds,
+} from '@/lib/duration';
 
 interface StoryboardEditorProps {
   projectId: string;
@@ -187,7 +192,7 @@ export function StoryboardEditor({ projectId }: StoryboardEditorProps) {
         dialogue: s.dialogue || '',
         camera: s.camera || '',
         size: s.size || '',
-        duration: s.duration || 10,
+        duration: normalizeShotDurationSeconds(s.duration),
         sensitivityReduction: s.sensitivityReduction ?? 0,
         videoPrompt: s.videoPrompt || '',
         characters: Array.isArray(s.characters) ? s.characters : [],
@@ -344,7 +349,7 @@ export function StoryboardEditor({ projectId }: StoryboardEditorProps) {
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ 
               prompt: fullPrompt,
-              duration: currentShot.duration || 5,
+              duration: normalizeShotDurationSeconds(currentShot.duration),
               metadata: {
                 multi_shot: false,
                 aspect_ratio: "9:16",
@@ -428,7 +433,7 @@ export function StoryboardEditor({ projectId }: StoryboardEditorProps) {
       dialogue: '',
       camera: '',
       size: '',
-      duration: 4,
+      duration: DEFAULT_SHOT_DURATION_SECONDS,
       sensitivityReduction: 0,
       videoPrompt: '',
       characters: [],
@@ -517,7 +522,7 @@ export function StoryboardEditor({ projectId }: StoryboardEditorProps) {
                 {shots?.length || 0} 个镜头
               </Badge>
               <Badge variant="outline" className="font-mono text-xs text-gray-500">
-                共 {shots?.reduce((sum, shot) => sum + (shot.duration || 0), 0) || 0} 秒
+                共 {shots?.length ? getStoryboardTotalDurationSeconds(shots) : 0} 秒
               </Badge>
             </div>
           </div>

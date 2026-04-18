@@ -1,6 +1,13 @@
 
 import { NextResponse } from 'next/server';
 import { getStoryboardGenerationPrompt, getStoryboardSystemPrompt } from '@/lib/prompts';
+import {
+  EPISODE_DURATION_MAX_SECONDS,
+  EPISODE_DURATION_MIN_SECONDS,
+  normalizeStoryboardShots,
+  STORYBOARD_SHOT_COUNT_MAX,
+  STORYBOARD_SHOT_COUNT_MIN,
+} from '@/lib/duration';
 import { createClient } from '@/lib/supabase/server';
 import { AIAPIError, callAIChatCompletion, extractFirstMessageContent } from '@/lib/ai-server';
 import { resolveArtStyleConfig } from '@/lib/project-visual-style';
@@ -75,6 +82,34 @@ export async function POST(req: Request) {
       if (!jsonContent.shots && jsonContent.shot_list) {
           jsonContent.shots = jsonContent.shot_list;
       }
+
+      if (!Array.isArray(jsonContent.shots)) {
+        return NextResponse.json({ error: 'Invalid storyboard output: missing shots array' }, { status: 502 });
+      }
+
+      if (
+        jsonContent.shots.length < STORYBOARD_SHOT_COUNT_MIN ||
+        jsonContent.shots.length > STORYBOARD_SHOT_COUNT_MAX
+      ) {
+        return NextResponse.json(
+          {
+            error: `Invalid storyboard output: shot count must be between ${STORYBOARD_SHOT_COUNT_MIN} and ${STORYBOARD_SHOT_COUNT_MAX}`,
+          },
+          { status: 502 }
+        );
+      }
+
+      const normalizedShots = normalizeStoryboardShots(jsonContent.shots);
+      if (!normalizedShots) {
+        return NextResponse.json(
+          {
+            error: `Invalid storyboard output: total duration must be normalizable to ${EPISODE_DURATION_MIN_SECONDS}-${EPISODE_DURATION_MAX_SECONDS} seconds`,
+          },
+          { status: 502 }
+        );
+      }
+
+      jsonContent.shots = normalizedShots;
 
       return NextResponse.json(jsonContent);
     } catch (e) {

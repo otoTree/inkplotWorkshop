@@ -5,6 +5,7 @@ import {
   resolveProjectVisualStyleSelection,
   serializeProjectVisualStyle,
 } from '@/lib/project-visual-style';
+import { normalizeShotDurationSeconds } from '@/lib/duration';
 
 const supabase = createClient();
 
@@ -64,7 +65,7 @@ const toShot = (row: Record<string, unknown>): Shot => ({
   dialogue: (row.dialogue as string) || '',
   camera: (row.camera as string) || '',
   size: (row.size as string) || '',
-  duration: row.duration as number | undefined,
+  duration: normalizeShotDurationSeconds(row.duration),
   sensitivityReduction: (row.sensitivity_reduction as number) || 0,
   relatedAssetIds: (row.related_asset_ids as string[]) || [],
   sceneLabel: row.scene_label ? String(row.scene_label) : undefined,
@@ -359,7 +360,7 @@ export const api = {
          dialogue: shot.dialogue,
          camera: shot.camera,
          size: shot.size,
-         duration: shot.duration,
+         duration: normalizeShotDurationSeconds(shot.duration),
          sensitivity_reduction: shot.sensitivityReduction,
          related_asset_ids: shot.relatedAssetIds,
          scene_label: shot.sceneLabel,
@@ -391,7 +392,7 @@ export const api = {
             dialogue: s.dialogue,
             camera: s.camera,
             size: s.size,
-            duration: s.duration,
+            duration: normalizeShotDurationSeconds(s.duration),
             sensitivity_reduction: s.sensitivityReduction,
             related_asset_ids: s.relatedAssetIds,
             scene_label: s.sceneLabel,
@@ -418,7 +419,7 @@ export const api = {
         if (updates.dialogue !== undefined) dbUpdates.dialogue = updates.dialogue;
         if (updates.camera !== undefined) dbUpdates.camera = updates.camera;
         if (updates.size !== undefined) dbUpdates.size = updates.size;
-        if (updates.duration !== undefined) dbUpdates.duration = updates.duration;
+        if (updates.duration !== undefined) dbUpdates.duration = normalizeShotDurationSeconds(updates.duration);
         if (updates.sensitivityReduction !== undefined) dbUpdates.sensitivity_reduction = updates.sensitivityReduction;
         if (updates.relatedAssetIds !== undefined) dbUpdates.related_asset_ids = updates.relatedAssetIds;
         if (updates.sceneLabel !== undefined) dbUpdates.scene_label = updates.sceneLabel;

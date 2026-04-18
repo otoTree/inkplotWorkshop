@@ -11,6 +11,11 @@ import { Badge } from '@/components/ui/badge';
 import { Search, Box, Check } from 'lucide-react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import {
+  SHOT_DURATION_MAX_SECONDS,
+  SHOT_DURATION_MIN_SECONDS,
+  normalizeShotDurationSeconds,
+} from '@/lib/duration';
 
 interface ShotDetailDialogProps {
   open: boolean;
@@ -94,7 +99,9 @@ export function ShotDetailDialog({ open, onOpenChange, shot, assets, onSave }: S
                       <Input 
                         type="number"
                         value={data.duration} 
-                        onChange={e => setData({ ...data, duration: Number(e.target.value) })}
+                        min={SHOT_DURATION_MIN_SECONDS}
+                        max={SHOT_DURATION_MAX_SECONDS}
+                        onChange={e => setData({ ...data, duration: normalizeShotDurationSeconds(e.target.value) })}
                         className="h-8 text-right pr-6 font-mono"
                       />
                       <span className="absolute right-2 top-2 text-xs text-gray-400">s</span>

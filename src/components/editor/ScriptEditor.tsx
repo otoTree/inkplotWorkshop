@@ -23,6 +23,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Progress } from "@/components/ui/progress";
 import { Textarea } from "@/components/ui/textarea";
+import { EPISODE_DURATION_MIN_SECONDS, normalizeEpisodeDurationSeconds } from '@/lib/duration';
 
 type SeriesOutlineItem = {
   episode_number: number;
@@ -315,7 +316,7 @@ export function ScriptEditor({ projectId }: { projectId: string }) {
             summary: ep.summary || '',
             hook: ep.hook || '',
             cliffhanger: ep.cliffhanger || '',
-            duration_seconds: ep.duration_seconds || 60,
+            duration_seconds: normalizeEpisodeDurationSeconds(ep.duration_seconds),
           });
         }
       });
@@ -327,7 +328,7 @@ export function ScriptEditor({ projectId }: { projectId: string }) {
             summary: project?.language === 'en' ? 'To be generated' : '待生成',
             hook: project?.language === 'en' ? 'Pending hook' : '待补充钩子',
             cliffhanger: project?.language === 'en' ? 'Pending cliffhanger' : '待补充悬念',
-            duration_seconds: 60,
+            duration_seconds: EPISODE_DURATION_MIN_SECONDS,
           });
         }
       }

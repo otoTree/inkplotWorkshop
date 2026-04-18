@@ -7,6 +7,7 @@ import {
   completeVideoTask,
   getAIVideoStatus,
 } from '@/lib/ai-server';
+import { normalizeShotDurationSeconds } from '@/lib/duration';
 
 export const maxDuration = 120;
 
@@ -130,7 +131,7 @@ export async function POST(req: Request) {
       try {
         const result = await callAIVideoGeneration(
           fullPrompt,
-          claimedShot.duration || 5,
+          normalizeShotDurationSeconds(claimedShot.duration),
           {
             multi_shot: false,
             aspect_ratio: '9:16',

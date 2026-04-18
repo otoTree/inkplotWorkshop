@@ -1,5 +1,14 @@
 
 import { ArtStyleConfig, ProjectVisualStylePreset } from '@/types';
+import {
+  DEFAULT_SHOT_DURATION_SECONDS,
+  EPISODE_DURATION_MAX_SECONDS,
+  EPISODE_DURATION_MIN_SECONDS,
+  SHOT_DURATION_MAX_SECONDS,
+  SHOT_DURATION_MIN_SECONDS,
+  STORYBOARD_SHOT_COUNT_MAX,
+  STORYBOARD_SHOT_COUNT_MIN,
+} from '@/lib/duration';
 import { resolveArtStyleConfig } from '@/lib/project-visual-style';
 
 type ArtStyleInput = string | ArtStyleConfig;
@@ -298,7 +307,7 @@ Requirements:
    - summary
    - hook
    - cliffhanger
-   - duration_seconds (must be >= 60)
+   - duration_seconds (must be between ${EPISODE_DURATION_MIN_SECONDS} and ${EPISODE_DURATION_MAX_SECONDS})
 5. **Retention**: Each episode must contain at least one clear hook and one clear end cliffhanger.
 6. **Escalation**: Stakes should escalate and align with long-arc progression.
 
@@ -311,7 +320,7 @@ Output Format: JSON
       "summary": "...",
       "hook": "...",
       "cliffhanger": "...",
-      "duration_seconds": 60
+      "duration_seconds": ${EPISODE_DURATION_MIN_SECONDS}
     }
   ]
 }
@@ -359,7 +368,10 @@ Requirements:
 1. **Aesthetic**: Ensure dialogue is natural for native speakers of ${language}.
 2. **Structure Consistency (HARD CONSTRAINT)**: script_content MUST use time-slice structure only. Scene-based headers are forbidden.
 3. **Language**: The script content MUST be in ${isEnglish ? 'English' : 'the target language (' + language + ')'}.
-4. **Content Quality (CRITICAL)**:
+4. **Episode Duration (HARD CONSTRAINT)**:
+   - The full episode must play in ${EPISODE_DURATION_MIN_SECONDS}-${EPISODE_DURATION_MAX_SECONDS}${isEnglish ? ' seconds' : '秒'} total.
+   - Do not write material that implies a runtime shorter than ${EPISODE_DURATION_MIN_SECONDS}${isEnglish ? 's' : '秒'} or longer than ${EPISODE_DURATION_MAX_SECONDS}${isEnglish ? 's' : '秒'}.
+5. **Content Quality (CRITICAL)**:
    - **Visual Storytelling**: Use "Show, Don't Tell". Describe actions, expressions, and camera angles.
    - **TikTok Pacing**:
      - **0-3s**: Visual hook / shocking moment.
@@ -367,23 +379,21 @@ Requirements:
      - **15-30s**: New information or reversal.
      - **30-45s**: Escalation and pressure increase.
      - **45-60s**: Decision/action with visible risk.
-     - **60-75s**: Consequence and stronger confrontation.
-     - **75-90s**: Cliffhanger setup and unresolved ending.
-5. **Asset Consistency (HARD CONSTRAINT)**:
+     - **60-70s**: Consequence, strongest confrontation, and cliffhanger landing.
+6. **Asset Consistency (HARD CONSTRAINT)**:
    - Character names in the script MUST ONLY come from Allowed Characters.
    - Scene locations in the script MUST ONLY come from Allowed Locations.
    - You are STRICTLY FORBIDDEN from inventing or introducing any new characters or locations not listed in the Allowed list.
    - If the summary implies an unavailable role/location, adapt the plot using the closest allowed assets instead of inventing.
-6. **Output Template (MANDATORY)**:
+7. **Output Template (MANDATORY)**:
    - script_content MUST be plain text.
-   - script_content MUST contain exactly these 7 sections in this order:
+   - script_content MUST contain exactly these 6 sections in this order:
      [0-3${isEnglish ? 's' : '秒'}]
      [3-15${isEnglish ? 's' : '秒'}]
      [15-30${isEnglish ? 's' : '秒'}]
      [30-45${isEnglish ? 's' : '秒'}]
      [45-60${isEnglish ? 's' : '秒'}]
-     [60-75${isEnglish ? 's' : '秒'}]
-     [75-90${isEnglish ? 's' : '秒'}]
+     [60-70${isEnglish ? 's' : '秒'}]
    - Each section must include:
      - One location/action line in parentheses.
      - 2-4 lines of dialogue/action beats.
@@ -485,7 +495,7 @@ export const getStoryboardGenerationPrompt = (scriptContent: string, existingAss
 1. **State Change is the Minimal Unit**: Not "what happened", but "what the character became after it happened".
 2. **Verbs > Nouns**: Action > Scene > Style.
 3. **Language Requirement**: All content in the JSON output MUST be in ${isEnglish ? 'English' : 'the target language (' + language + ')'}.
-4. **Flexible Duration (4s-6s)**: Each shot should typically last between 4s to 6s. It must capture a specific action, reaction, or dialogue beat.
+4. **Strict Shot Duration (${SHOT_DURATION_MIN_SECONDS}s-${SHOT_DURATION_MAX_SECONDS}s)**: Each shot MUST last between ${SHOT_DURATION_MIN_SECONDS}s and ${SHOT_DURATION_MAX_SECONDS}s. Do not output any shot shorter or longer than this range.
 5. **Mandatory Visual Continuity**: Shot transitions MUST have clear visual logic (e.g., eyeline match, action continuity, reaction shot). No illogical hard cuts.
 6. **Asset Coverage & Matching**: Each shot MUST list all involved **characters and locations**. If an asset exists in the provided list, use its exact name (case-insensitive match). **CRITICAL: EVERY single shot MUST have at least one explicit scene/location assigned to it in \`sceneLabel\` and \`suggestedAssets.locations\`. Even for close-ups or continuous action, you MUST explicitly state the scene/location. Never leave the scene empty.**
 7. **Opening Highlight Shot**: Shot \`sequence: 1\` MUST be the current episode's highlight moment: the single most emotionally explosive, visually striking, or plot-defining shot from this episode. It must function as a cold open teaser, not a generic establishing shot.
@@ -521,7 +531,7 @@ When generating the \`videoPrompt\`, assume the AI video model has zero context.
 Analyze the provided script and generate a storyboard sequence.
 **IMPORTANT**: 
 1. **Detail Level**: You MUST generate extremely detailed descriptions and Video Prompts as specified above. Do not summarize or be concise. The more granular detail about lighting, physics, and camera movement, the better.
-2. **Shot Breakdown Strategy**: You MUST generate AT LEAST 15 shots. There is NO limit on the maximum number of shots. Break down actions and dialogue into as many short shots (4-6s each) as necessary to perfectly capture the pacing. Do not over-compress. Ensure the total episode duration (across all chunks) exceeds 70 seconds.
+2. **Shot Breakdown Strategy**: You MUST generate between ${STORYBOARD_SHOT_COUNT_MIN} and ${STORYBOARD_SHOT_COUNT_MAX} shots total. Break down actions and dialogue into short shots of ${SHOT_DURATION_MIN_SECONDS}-${SHOT_DURATION_MAX_SECONDS} seconds each. Do not over-compress. The sum of all \`duration\` values MUST be between ${EPISODE_DURATION_MIN_SECONDS} and ${EPISODE_DURATION_MAX_SECONDS} seconds inclusive.
 3. **Mandatory Scene Requirement**: EVERY shot MUST have a non-empty \`sceneLabel\` and at least one item in \`suggestedAssets.locations\`. Do not leave the scene blank under any circumstances, even if it is a continuation of the previous shot.
 4. **First Shot Priority**: The very first shot must be the episode highlight shot with the highest dramatic value, strongest emotion, or biggest suspense payoff in the current script. Start with impact. Only after that may you unfold the rest of the episode beats.
 5. **Temporal Clarity After Teaser**: If shot 1 is a cold open from a later peak moment, shot 2 or the following shots MUST clearly signal the rewind or time shift in \`transition.timeGap\` and \`timeline\` so the sequence still reads coherently.
@@ -564,7 +574,7 @@ ${JSON.stringify(existingAssets.map(a => ({ id: a.id, name: a.name, type: a.type
       "dialogue": "Character Name: Content (or Voiceover: Content)",
       "camera": "Close-up / Pan Right / ...",
       "size": "Medium Shot / Close-up / Long Shot",
-      "duration": 5, // Estimated duration in seconds (4-6s flexible)
+      "duration": ${DEFAULT_SHOT_DURATION_SECONDS}, // Estimated duration in seconds, must stay within ${SHOT_DURATION_MIN_SECONDS}-${SHOT_DURATION_MAX_SECONDS}
       "videoPrompt": "Detailed English prompt for video generation. MUST obey the selected style strategy above, include camera movement (e.g. 'Explosive fast push-in'), physical dynamics (muscle contraction, fluid/particle physics), action impact, and environmental reactions. Be extremely specific.",
       "suggestedAssetNames": ["Char Name", "Location Name"],
       "characters": [

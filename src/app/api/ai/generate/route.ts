@@ -7,6 +7,7 @@ import {
   getEpisodeContentPrompt,
   getProjectDetailsPrompt,
 } from '@/lib/prompts';
+import { normalizeEpisodeDurationSeconds } from '@/lib/duration';
 import { createClient } from '@/lib/supabase/server';
 import { AIAPIError, callAIChatCompletion, extractFirstMessageContent } from '@/lib/ai-server';
 
@@ -104,6 +105,13 @@ export async function POST(req: Request) {
 
     try {
       const jsonContent = parseJSONFromLLM(content);
+      if (type === 'story_batch' && Array.isArray(jsonContent.series_outline)) {
+        jsonContent.series_outline = jsonContent.series_outline.map((episode: Record<string, unknown>) => ({
+          ...episode,
+          duration_seconds: normalizeEpisodeDurationSeconds(episode.duration_seconds),
+        }));
+      }
+
       if (type === 'episode' && Array.isArray(existing_assets)) {
         const characterSet = new Set(
           existing_assets
