@@ -501,6 +501,9 @@ export const getStoryboardGenerationPrompt = (scriptContent: string, existingAss
 7. **Opening Highlight Shot**: Shot \`sequence: 1\` MUST be the current episode's highlight moment: the single most emotionally explosive, visually striking, or plot-defining shot from this episode. It must function as a cold open teaser, not a generic establishing shot.
 8. **Style Strategy**: ${strategy.storyboard.styleDirective}
 9. **Negative Style Rule**: ${strategy.storyboard.negativeDirective}
+10. **Model-Executable Camera Language**: Do not write shots as static human-readable labels only. Every shot must describe what the camera physically does over time, what enters frame first, how the subject moves, what changes in the environment, and where the shot lands.
+11. **Shot Description Formula**: Each \`description\`, \`characterAction\`, \`camera\`, and \`videoPrompt\` must follow this logic whenever possible: **start frame -> camera path -> subject action -> environment reaction -> end frame / emotional landing**.
+12. **No Empty Shorthand**: Avoid bare phrasing such as "static low angle", "medium shot of character looking up", or "character stands there sadly" unless you immediately expand it into precise temporal action and screen movement.
 
 ## 1. Visual & Aesthetic Layer
 **Definition**: The expression layer used to **enhance emotional and thematic impact**.
@@ -518,6 +521,9 @@ When generating the \`videoPrompt\`, assume the AI video model has zero context.
 3. **Physical Dynamics**: Describe muscle contractions, physics of fluids/particles (e.g., "blood splashing in slow motion", "dust swirling from the wind").
 4. **Action Impact**: Describe the force and weight of the action.
 5. **Environmental Reaction**: How does the environment react to the action? (e.g., flickering firelight, shaking camera).
+6. **Temporal Sequencing**: Write the prompt as a time-based unfolding shot, not a list of tags. Clarify what appears first, what the camera reveals next, what the subject does during the move, and what the final frame emphasizes.
+7. **Static Shot Rule**: If the camera is locked off, explicitly say "camera locked off while..." and still describe body movement, gaze shift, cloth movement, breath, particles, light change, and final emotional landing. "Static" alone is forbidden.
+8. **Avoid Abstract Compression**: Do not compress a whole shot into a short summary. Replace abstract wording with visible action, visible motion, and visible change.
 
 ## 2. Continuity & Cohesion Layer (CRITICAL for Video Gen)
 **Definition**: Metadata fields that force the AI to maintain spatial and temporal logic between shots.
@@ -535,6 +541,15 @@ Analyze the provided script and generate a storyboard sequence.
 3. **Mandatory Scene Requirement**: EVERY shot MUST have a non-empty \`sceneLabel\` and at least one item in \`suggestedAssets.locations\`. Do not leave the scene blank under any circumstances, even if it is a continuation of the previous shot.
 4. **First Shot Priority**: The very first shot must be the episode highlight shot with the highest dramatic value, strongest emotion, or biggest suspense payoff in the current script. Start with impact. Only after that may you unfold the rest of the episode beats.
 5. **Temporal Clarity After Teaser**: If shot 1 is a cold open from a later peak moment, shot 2 or the following shots MUST clearly signal the rewind or time shift in \`transition.timeGap\` and \`timeline\` so the sequence still reads coherently.
+6. **Motion-First Writing**: For each shot, write visible motion before interpretation. Prioritize body mechanics, camera path, gaze change, object movement, cloth/hair response, dust/smoke/light shifts, and only then emotional reading.
+7. **Ban Weak Shot Writing**:
+   - Bad: "Low angle medium shot, character looks up sadly."
+   - Good: "The shot opens on a bright sky; the camera tilts downward past stone spires and lands on the character leaning on a broom at the courtyard edge. The character slowly raises his chin, eyes tracking movement above the clouds, lips parting as sunlight cuts across one side of his face while the other remains in shadow."
+8. **Per-Field Action Requirement**:
+   - \`description\`: A full shot paragraph with continuous visual progression, not a static summary.
+   - \`characterAction\`: Explicit start state, motion path, micro-action, and end state.
+   - \`camera\`: Start framing + movement path + end framing. Example: "Begins high on the sky, slow tilt down past towers, settles into low-angle medium shot on Aris."
+   - \`videoPrompt\`: Must be production-ready English for a video model and must read like a directed moving shot, not keyword fragments.
 
 **Script Content**:
 ${scriptContent.slice(0, 15000)}...
@@ -551,7 +566,7 @@ ${JSON.stringify(existingAssets.map(a => ({ id: a.id, name: a.name, type: a.type
   "shots": [
     {
       "sequence": 1,
-      "description": "EXTREMELY DETAILED visual description. Include composition (e.g. Extreme Close-Up, Dutch angle), character details [Name: traits, clothing, micro-expressions], spatial relations, lighting geometry, and cinematic texture (e.g. Kodak 500T).",
+      "description": "EXTREMELY DETAILED moving-shot description. Write the shot as continuous screen action: what appears first in frame, how the camera moves, how the character moves during the shot, how the environment reacts, and what the final frame emphasizes. Include composition, character details [Name: traits, clothing, micro-expressions], spatial relations, lighting geometry, and cinematic texture.",
       "sceneLabel": "Scene location tag (e.g. City Ruins, Supermarket)",
       
       "transition": {
@@ -567,15 +582,15 @@ ${JSON.stringify(existingAssets.map(a => ({ id: a.id, name: a.name, type: a.type
       "environmentalState": "Physical state of the environment to maintain continuity",
       "generationConstraints": ["Rule 1 to prevent AI errors", "Rule 2"],
 
-      "characterAction": "Detailed action including Start State, End State, Muscle Tension, and Speed",
+      "characterAction": "Detailed action including Start State, movement process, gaze change, hand/body micro-movements, muscle tension, speed, and End State",
       "emotion": "Dominant emotion (e.g. Panic, Despair)",
       "lightingAtmosphere": "Lighting and atmosphere (e.g. High contrast hard light, Dim orange firelight)",
       "soundEffect": "Key sound effects (e.g. Heavy footsteps, Distant sirens)",
       "dialogue": "Character Name: Content (or Voiceover: Content)",
-      "camera": "Close-up / Pan Right / ...",
+      "camera": "Start framing + camera path + end framing, e.g. Begins on bright sky, slow tilt down past castle spires, settles into low-angle medium shot on Aris",
       "size": "Medium Shot / Close-up / Long Shot",
       "duration": ${DEFAULT_SHOT_DURATION_SECONDS}, // Estimated duration in seconds, must stay within ${SHOT_DURATION_MIN_SECONDS}-${SHOT_DURATION_MAX_SECONDS}
-      "videoPrompt": "Detailed English prompt for video generation. MUST obey the selected style strategy above, include camera movement (e.g. 'Explosive fast push-in'), physical dynamics (muscle contraction, fluid/particle physics), action impact, and environmental reactions. Be extremely specific.",
+      "videoPrompt": "Detailed English prompt for video generation. MUST obey the selected style strategy above and read as a continuous moving shot. Start with the opening frame, then describe the camera movement, subject motion, physical dynamics, action impact, environmental reactions, and the final image. Be extremely specific and avoid tag-only phrasing.",
       "suggestedAssetNames": ["Char Name", "Location Name"],
       "characters": [
         {
