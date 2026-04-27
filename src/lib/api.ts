@@ -29,6 +29,7 @@ const toProject = (row: Record<string, unknown>): Project => {
     coverTitle: row.cover_title as string | undefined,
     coverSlogan: row.cover_slogan as string | undefined,
     coverPrompt: row.cover_prompt as string | undefined,
+    volcengineVideoSettings: row.volcengine_video_settings as Project['volcengineVideoSettings'] | undefined,
     createdAt: new Date(row.created_at as string).getTime(),
     updatedAt: new Date(row.updated_at as string).getTime(),
   };
@@ -55,6 +56,13 @@ const toAsset = (row: Record<string, unknown>): Asset => ({
   status: row.status as Asset['status'],
   metadata: (row.metadata as Asset['metadata']) || {},
   isMain: row.is_main as boolean | undefined,
+  volcengineAssetId: row.volcengine_asset_id as string | undefined,
+  volcengineAssetStatus: row.volcengine_asset_status as Asset['volcengineAssetStatus'],
+  volcengineAssetGroupId: row.volcengine_asset_group_id as string | undefined,
+  volcengineAssetProjectName: row.volcengine_asset_project_name as string | undefined,
+  volcengineAssetType: row.volcengine_asset_type as Asset['volcengineAssetType'],
+  volcengineAssetError: row.volcengine_asset_error as Asset['volcengineAssetError'],
+  volcengineAssetSyncedAt: row.volcengine_asset_synced_at as string | undefined,
 });
 
 const toShot = (row: Record<string, unknown>): Shot => ({
@@ -78,6 +86,7 @@ const toShot = (row: Record<string, unknown>): Shot => ({
   videoUrl: row.video_url ? String(row.video_url) : undefined,
   videoGenerationId: row.video_generation_id ? String(row.video_generation_id) : undefined,
   videoStatus: row.video_status ? (row.video_status as Shot['videoStatus']) : undefined,
+  videoGenerationMetadata: row.video_generation_metadata as Shot['videoGenerationMetadata'] | undefined,
   characters: row.characters as Shot['characters'] | undefined,
 });
 
@@ -119,6 +128,7 @@ export const api = {
         art_style: serializeProjectVisualStyle(project),
         sensitivity_prompt: project.sensitivityPrompt || '',
         series_plan: project.seriesPlan,
+        volcengine_video_settings: project.volcengineVideoSettings || {},
         created_at: new Date(project.createdAt).toISOString(),
         updated_at: new Date(project.updatedAt).toISOString(),
       });
@@ -155,6 +165,7 @@ export const api = {
       if (updates.coverTitle !== undefined) dbUpdates.cover_title = updates.coverTitle;
       if (updates.coverSlogan !== undefined) dbUpdates.cover_slogan = updates.coverSlogan;
       if (updates.coverPrompt !== undefined) dbUpdates.cover_prompt = updates.coverPrompt;
+      if (updates.volcengineVideoSettings !== undefined) dbUpdates.volcengine_video_settings = updates.volcengineVideoSettings || {};
       dbUpdates.updated_at = new Date().toISOString();
 
       const { error } = await supabase
@@ -278,6 +289,13 @@ export const api = {
         status: asset.status,
         metadata: asset.metadata,
         is_main: asset.isMain,
+        volcengine_asset_id: asset.volcengineAssetId,
+        volcengine_asset_status: asset.volcengineAssetStatus,
+        volcengine_asset_group_id: asset.volcengineAssetGroupId,
+        volcengine_asset_project_name: asset.volcengineAssetProjectName,
+        volcengine_asset_type: asset.volcengineAssetType,
+        volcengine_asset_error: asset.volcengineAssetError,
+        volcengine_asset_synced_at: asset.volcengineAssetSyncedAt,
       });
       if (error) throw error;
     },
@@ -299,6 +317,13 @@ export const api = {
         status: asset.status,
         metadata: asset.metadata,
         is_main: asset.isMain,
+        volcengine_asset_id: asset.volcengineAssetId,
+        volcengine_asset_status: asset.volcengineAssetStatus,
+        volcengine_asset_group_id: asset.volcengineAssetGroupId,
+        volcengine_asset_project_name: asset.volcengineAssetProjectName,
+        volcengine_asset_type: asset.volcengineAssetType,
+        volcengine_asset_error: asset.volcengineAssetError,
+        volcengine_asset_synced_at: asset.volcengineAssetSyncedAt,
       }));
 
       const { error } = await supabase.from('assets').insert(rows);
@@ -314,6 +339,13 @@ export const api = {
       if (updates.status) dbUpdates.status = updates.status;
       if (updates.metadata) dbUpdates.metadata = updates.metadata;
       if (updates.isMain !== undefined) dbUpdates.is_main = updates.isMain;
+      if (updates.volcengineAssetId !== undefined) dbUpdates.volcengine_asset_id = updates.volcengineAssetId;
+      if (updates.volcengineAssetStatus !== undefined) dbUpdates.volcengine_asset_status = updates.volcengineAssetStatus;
+      if (updates.volcengineAssetGroupId !== undefined) dbUpdates.volcengine_asset_group_id = updates.volcengineAssetGroupId;
+      if (updates.volcengineAssetProjectName !== undefined) dbUpdates.volcengine_asset_project_name = updates.volcengineAssetProjectName;
+      if (updates.volcengineAssetType !== undefined) dbUpdates.volcengine_asset_type = updates.volcengineAssetType;
+      if (updates.volcengineAssetError !== undefined) dbUpdates.volcengine_asset_error = updates.volcengineAssetError;
+      if (updates.volcengineAssetSyncedAt !== undefined) dbUpdates.volcengine_asset_synced_at = updates.volcengineAssetSyncedAt;
 
       const { error } = await supabase
         .from('assets')
@@ -373,6 +405,7 @@ export const api = {
          video_url: shot.videoUrl,
          video_generation_id: shot.videoGenerationId,
          video_status: shot.videoStatus,
+         video_generation_metadata: shot.videoGenerationMetadata,
          characters: shot.characters
        });
        if (error) throw error;
@@ -405,6 +438,7 @@ export const api = {
             video_url: s.videoUrl,
             video_generation_id: s.videoGenerationId,
             video_status: s.videoStatus,
+            video_generation_metadata: s.videoGenerationMetadata,
             characters: s.characters
         }));
         
@@ -432,6 +466,7 @@ export const api = {
         if (updates.videoUrl !== undefined) dbUpdates.video_url = updates.videoUrl;
         if (updates.videoGenerationId !== undefined) dbUpdates.video_generation_id = updates.videoGenerationId;
         if (updates.videoStatus !== undefined) dbUpdates.video_status = updates.videoStatus;
+        if (updates.videoGenerationMetadata !== undefined) dbUpdates.video_generation_metadata = updates.videoGenerationMetadata;
         if (updates.characters !== undefined) dbUpdates.characters = updates.characters;
 
         const { error } = await supabase.from('shots').update(dbUpdates).eq('id', id);

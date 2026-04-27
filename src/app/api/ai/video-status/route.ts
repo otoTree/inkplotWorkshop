@@ -1,6 +1,11 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 import { AIAPIError, getAIVideoStatus, completeVideoTask } from '@/lib/ai-server';
+import {
+  extractVolcengineVideoUrl,
+  getSeedance2VideoTask,
+  mapVolcengineTaskStatus,
+} from '@/lib/volcengine/video-client';
 
 export const maxDuration = 120;
 
@@ -19,15 +24,33 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: 'Missing videoId' }, { status: 400 });
     }
 
-    const result = await getAIVideoStatus(videoId);
+    const { data: shotForProvider } = await supabase
+      .from('shots')
+      .select('id, video_generation_metadata')
+      .eq('video_generation_id', videoId)
+      .eq('user_id', user.id)
+      .maybeSingle();
+
+    const metadata = (shotForProvider?.video_generation_metadata || {}) as {
+      provider?: string;
+      usage?: Record<string, unknown>;
+    };
+    const isVolcengineTask = metadata.provider === 'volcengine';
+
+    const result = isVolcengineTask
+      ? await getSeedance2VideoTask(videoId)
+      : await getAIVideoStatus(videoId);
     const statusInfo = result.data || result;
     const status = (statusInfo.status || '').toLowerCase();
+    const mappedVolcengineStatus = isVolcengineTask ? mapVolcengineTaskStatus(status) : null;
     
-    if (['completed', 'succeeded', 'success'].includes(status)) {
+    if ((isVolcengineTask && mappedVolcengineStatus === 'completed') || (!isVolcengineTask && ['completed', 'succeeded', 'success'].includes(status))) {
       const directUrl =
+        (isVolcengineTask ? extractVolcengineVideoUrl(result) : null) ||
         statusInfo.url ||
         statusInfo.video_url ||
-        (statusInfo.data && (statusInfo.data.url || statusInfo.data.video_url)) ||
+        statusInfo.content?.video_url ||
+        (statusInfo.data && (statusInfo.data.url || statusInfo.data.video_url || statusInfo.data.content?.video_url)) ||
         `/api/ai/download-video?videoId=${videoId}`;
 
       const { error: updateError } = await supabase
@@ -35,6 +58,15 @@ export async function POST(req: Request) {
         .update({
           video_status: 'completed',
           video_url: directUrl,
+          ...(isVolcengineTask
+            ? {
+                video_generation_metadata: {
+                  ...metadata,
+                  rawStatus: status,
+                  usage: statusInfo.usage || result.usage || metadata.usage,
+                },
+              }
+            : {}),
         })
         .eq('video_generation_id', videoId)
         .eq('user_id', user.id)
@@ -43,11 +75,20 @@ export async function POST(req: Request) {
       if (updateError) {
         console.error('Failed to persist completed video status:', updateError);
       }
-    } else if (['failed', 'error'].includes(status)) {
+    } else if ((isVolcengineTask && mappedVolcengineStatus === 'failed') || (!isVolcengineTask && ['failed', 'error'].includes(status))) {
       const { error: updateError } = await supabase
         .from('shots')
         .update({
           video_status: 'failed',
+          ...(isVolcengineTask
+            ? {
+                video_generation_metadata: {
+                  ...metadata,
+                  rawStatus: status,
+                  error: statusInfo.error || result.error || null,
+                },
+              }
+            : {}),
         })
         .eq('video_generation_id', videoId)
         .eq('user_id', user.id)
@@ -59,7 +100,10 @@ export async function POST(req: Request) {
     }
 
     // If the task has finished (success or failure), remove it from the global active tasks set
-    if (['completed', 'succeeded', 'success', 'failed', 'error'].includes(status)) {
+    if (
+      (isVolcengineTask && (mappedVolcengineStatus === 'completed' || mappedVolcengineStatus === 'failed')) ||
+      (!isVolcengineTask && ['completed', 'succeeded', 'success', 'failed', 'error'].includes(status))
+    ) {
       await completeVideoTask(videoId);
     }
 

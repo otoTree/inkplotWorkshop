@@ -144,7 +144,11 @@ export function ShotCard({ shot, assets, projectId, sensitivityPrompt, onUpdate,
         
         if (['completed', 'succeeded', 'success'].includes(status)) {
           // extract url from nested data structure if needed
-          const directUrl = statusInfo.url || statusInfo.video_url || (statusInfo.data && (statusInfo.data.url || statusInfo.data.video_url));
+          const directUrl =
+            statusInfo.content?.video_url ||
+            statusInfo.url ||
+            statusInfo.video_url ||
+            (statusInfo.data && (statusInfo.data.content?.video_url || statusInfo.data.url || statusInfo.data.video_url));
           onUpdateRef.current({
             ...latestCurrent,
             videoStatus: 'completed',
