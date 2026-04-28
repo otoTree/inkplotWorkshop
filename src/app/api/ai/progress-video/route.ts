@@ -8,8 +8,64 @@ import {
   getAIVideoStatus,
 } from '@/lib/ai-server';
 import { normalizeShotDurationSeconds } from '@/lib/duration';
+import {
+  extractVolcengineTaskId,
+  extractVolcengineVideoUrl,
+  getSeedance2VideoTask,
+  getVolcengineVideoConfig,
+  isSeedance2Model,
+  mapVolcengineTaskStatus,
+  createSeedance2VideoTask,
+} from '@/lib/volcengine/video-client';
+import { buildSeedance2VideoPayload } from '@/lib/volcengine/video-payload';
+import {
+  mapVolcengineAssetRow,
+  resolveVolcengineReferenceAssets,
+  type LocalReferenceAsset,
+  type VolcengineVideoSettings,
+} from '@/lib/volcengine/asset-sync';
 
 export const maxDuration = 120;
+
+type ServerSupabaseClient = Awaited<ReturnType<typeof createClient>>;
+type VideoTaskResult = Record<string, unknown> & {
+  id?: string;
+  task_id?: string;
+  status?: string;
+  url?: string;
+  video_url?: string;
+  data?: {
+    id?: string;
+    task_id?: string;
+    status?: string;
+    url?: string;
+    video_url?: string;
+    usage?: Record<string, unknown>;
+  };
+  usage?: Record<string, unknown>;
+  __volcengineMetadata?: Record<string, unknown>;
+};
+
+const shouldUseSeedance2 = (settings?: VolcengineVideoSettings | null) =>
+  settings?.preferredVideoModel === 'seedance-2.0' ||
+  isSeedance2Model(process.env.VOLCENGINE_ARK_VIDEO_MODEL);
+
+const getProjectVideoSettings = async (supabase: ServerSupabaseClient, episodeId: string) => {
+  const { data: episode } = await supabase
+    .from('episodes')
+    .select('project_id')
+    .eq('id', episodeId)
+    .maybeSingle();
+  if (!episode?.project_id) return null;
+
+  const { data: project } = await supabase
+    .from('projects')
+    .select('volcengine_video_settings')
+    .eq('id', episode.project_id)
+    .maybeSingle();
+
+  return (project?.volcengine_video_settings || null) as VolcengineVideoSettings | null;
+};
 
 export async function POST(req: Request) {
   try {
@@ -82,7 +138,7 @@ export async function POST(req: Request) {
         });
       }
 
-      const referenceAssets: Array<{ name?: string; type?: string; imageUrl?: string }> = [];
+      const referenceAssets: LocalReferenceAsset[] = [];
       if (claimedShot.reference_image) {
         referenceAssets.push({
           name: claimedShot.scene_label || 'Scene reference',
@@ -94,22 +150,20 @@ export async function POST(req: Request) {
       if (claimedShot.related_asset_ids && claimedShot.related_asset_ids.length > 0) {
         const { data: assets } = await supabase
           .from('assets')
-          .select('id, name, type, image_url')
+          .select('id, name, type, image_url, volcengine_asset_id, volcengine_asset_status, volcengine_asset_group_id, volcengine_asset_project_name, volcengine_asset_type')
           .in('id', claimedShot.related_asset_ids);
         if (assets) {
           const assetsById = new Map(assets.map((asset) => [asset.id, asset]));
           claimedShot.related_asset_ids.forEach((assetId: string) => {
             const asset = assetsById.get(assetId);
             if (!asset?.image_url) return;
-            referenceAssets.push({
-              name: asset.name,
-              type: asset.type,
-              imageUrl: asset.image_url,
-            });
+            referenceAssets.push(mapVolcengineAssetRow(asset));
           });
         }
       }
 
+      const projectVideoSettings = await getProjectVideoSettings(supabase, claimedShot.episode_id);
+      const useSeedance2 = shouldUseSeedance2(projectVideoSettings);
       const fullPrompt = buildVideoGenerationPrompt(
         [
           { label: 'Scene heading', value: claimedShot.scene_label },
@@ -129,26 +183,60 @@ export async function POST(req: Request) {
       );
 
       try {
-        const result = await callAIVideoGeneration(
-          fullPrompt,
-          normalizeShotDurationSeconds(claimedShot.duration),
-          {
-            multi_shot: false,
-            aspect_ratio: '9:16',
-            sound: 'on',
-            image_list: referenceAssets
-              .filter((asset) => asset.imageUrl)
-              .map((asset) => ({ image_url: asset.imageUrl! })),
-          },
-          undefined,
-          claimedShot.id,
-          false
-        );
+        const result: VideoTaskResult = useSeedance2
+          ? await (async () => {
+              const videoConfig = getVolcengineVideoConfig();
+              const resolvedReferences = await resolveVolcengineReferenceAssets({
+                references: referenceAssets,
+                settings: projectVideoSettings,
+                persistence: {
+                  updateAsset: async (assetId, updates) => {
+                    await supabase.from('assets').update(updates).eq('id', assetId).eq('user_id', user.id);
+                  },
+                },
+              });
+              const payload = buildSeedance2VideoPayload({
+                model: videoConfig.model,
+                prompt: fullPrompt,
+                references: resolvedReferences.references,
+                duration: normalizeShotDurationSeconds(claimedShot.duration),
+                ratio: '9:16',
+                generateAudio: true,
+                watermark: false,
+              });
+              const seedanceResult = await createSeedance2VideoTask(payload, videoConfig);
+              return {
+                ...seedanceResult,
+                __volcengineMetadata: {
+                  provider: 'volcengine',
+                  model: videoConfig.model,
+                  requestContentMode: resolvedReferences.requestContentMode,
+                  referenceAssetIds: resolvedReferences.referenceAssetIds,
+                  rawStatus: seedanceResult.status || seedanceResult.data?.status || 'processing',
+                  usage: seedanceResult.usage || seedanceResult.data?.usage,
+                },
+              };
+            })()
+          : await callAIVideoGeneration(
+              fullPrompt,
+              normalizeShotDurationSeconds(claimedShot.duration),
+              {
+                multi_shot: false,
+                aspect_ratio: '9:16',
+                sound: 'on',
+                image_list: referenceAssets
+                  .filter((asset) => asset.imageUrl)
+                  .map((asset) => ({ image_url: asset.imageUrl! })),
+              },
+              undefined,
+              claimedShot.id,
+              false
+            );
 
-        const taskId = result.task_id || result.id || result.data?.task_id || result.data?.id;
-        const directUrl = result.url || result.video_url || result.data?.url || result.data?.video_url;
+        const taskId = useSeedance2 ? extractVolcengineTaskId(result) : result.task_id || result.id || result.data?.task_id || result.data?.id;
+        const directUrl = useSeedance2 ? extractVolcengineVideoUrl(result) : result.url || result.video_url || result.data?.url || result.data?.video_url;
         const status = (result.status || result.data?.status || 'processing').toLowerCase();
-        const videoStatus = ['completed', 'succeeded', 'success'].includes(status) ? 'completed' : 'processing';
+        const videoStatus = useSeedance2 ? mapVolcengineTaskStatus(status) : (['completed', 'succeeded', 'success'].includes(status) ? 'completed' : 'processing');
 
         if (taskId) {
           await supabase
@@ -157,12 +245,13 @@ export async function POST(req: Request) {
               video_generation_id: taskId,
               video_status: videoStatus,
               ...(directUrl ? { video_url: directUrl } : {}),
+              ...(useSeedance2 ? { video_generation_metadata: result.__volcengineMetadata } : {}),
             })
             .eq('id', claimedShot.id)
             .eq('user_id', user.id);
         }
 
-        if (['completed', 'failed', 'error', 'success', 'succeeded'].includes(status)) {
+        if (taskId && ((useSeedance2 && videoStatus !== 'processing') || (!useSeedance2 && ['completed', 'failed', 'error', 'success', 'succeeded'].includes(status)))) {
           await completeVideoTask(taskId);
         }
 
@@ -198,6 +287,10 @@ export async function POST(req: Request) {
           .update({
             video_generation_id: null,
             video_status: 'failed',
+            video_generation_metadata: {
+              provider: useSeedance2 ? 'volcengine' : 'legacy',
+              error: error instanceof Error ? error.message : String(error),
+            },
           })
           .eq('id', claimedShot.id)
           .eq('user_id', user.id)
@@ -225,17 +318,23 @@ export async function POST(req: Request) {
       });
     }
 
-    const result = await getAIVideoStatus(videoId);
+    const metadata = (shot.video_generation_metadata || {}) as { provider?: string; usage?: Record<string, unknown> };
+    const isVolcengineTask = metadata.provider === 'volcengine';
+    const result = isVolcengineTask ? await getSeedance2VideoTask(videoId) : await getAIVideoStatus(videoId);
     const statusInfo = result.data || result;
     const status = (statusInfo.status || '').toLowerCase();
     const directUrl =
+      (isVolcengineTask ? extractVolcengineVideoUrl(result) : null) ||
       statusInfo.url ||
       statusInfo.video_url ||
-      (statusInfo.data && (statusInfo.data.url || statusInfo.data.video_url)) ||
+      statusInfo.content?.video_url ||
+      (statusInfo.data && (statusInfo.data.url || statusInfo.data.video_url || statusInfo.data.content?.video_url)) ||
       null;
 
     let videoStatus = shot.video_status || 'processing';
-    if (['completed', 'succeeded', 'success'].includes(status)) {
+    if (isVolcengineTask) {
+      videoStatus = mapVolcengineTaskStatus(status);
+    } else if (['completed', 'succeeded', 'success'].includes(status)) {
       videoStatus = 'completed';
     } else if (['failed', 'error'].includes(status)) {
       videoStatus = 'failed';
@@ -248,6 +347,16 @@ export async function POST(req: Request) {
       .update({
         video_status: videoStatus,
         ...(directUrl ? { video_url: directUrl } : {}),
+        ...(isVolcengineTask
+          ? {
+              video_generation_metadata: {
+                ...metadata,
+                rawStatus: status,
+                usage: statusInfo.usage || result.usage || metadata.usage,
+                ...(videoStatus === 'failed' ? { error: statusInfo.error || result.error || null } : {}),
+              },
+            }
+          : {}),
       })
       .eq('id', shot.id)
       .eq('user_id', user.id);

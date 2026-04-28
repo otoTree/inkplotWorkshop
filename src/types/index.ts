@@ -42,6 +42,14 @@ export interface Project {
 
   // ★NEW: 内流控制配置
   engagementConfig?: EngagementConfig;
+
+  // 火山素材库与视频生成配置
+  volcengineVideoSettings?: {
+    syncAssetsToPrivateLibrary?: boolean;
+    assetGroupId?: string;
+    projectName?: string;
+    preferredVideoModel?: 'seedance-2.0' | 'legacy';
+  };
 }
 
 export type ArtStyleConfig = Pick<Project, 'visualStylePreset' | 'artStyle' | 'characterArtStyle' | 'sceneArtStyle'>;
@@ -95,6 +103,13 @@ export interface Asset {
   status: 'draft' | 'locked'; // 锁定后不可随意更改
   metadata: Record<string, unknown>; // 额外属性 (e.g. 年龄, 风格)
   isMain?: boolean;       // ★NEW: 是否为核心主角 (最多2个)
+  volcengineAssetId?: string;
+  volcengineAssetStatus?: 'Active' | 'Processing' | 'Failed';
+  volcengineAssetGroupId?: string;
+  volcengineAssetProjectName?: string;
+  volcengineAssetType?: 'Image' | 'Video' | 'Audio';
+  volcengineAssetError?: Record<string, unknown> | null;
+  volcengineAssetSyncedAt?: string;
 }
 
 export interface Task {
@@ -135,6 +150,15 @@ export interface Shot {
   videoUrl?: string;           // ★NEW: 生成的视频URL
   videoGenerationId?: string;  // ★NEW: 视频生成任务ID
   videoStatus?: 'pending' | 'queued' | 'processing' | 'completed' | 'failed'; // ★NEW: 视频生成状态
+  videoGenerationMetadata?: {
+    provider?: 'volcengine' | string;
+    model?: string;
+    requestContentMode?: 'asset_uri' | 'url';
+    referenceAssetIds?: string[];
+    rawStatus?: string;
+    usage?: Record<string, unknown>;
+    error?: Record<string, unknown> | string;
+  };
   
   // 支持单镜头多角色描述 (最多3个)
   characters?: Array<{

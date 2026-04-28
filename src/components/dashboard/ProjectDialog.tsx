@@ -52,6 +52,10 @@ export function ProjectDialog({ children, project, open: controlledOpen, onOpenC
   const [visualStylePreset, setVisualStylePreset] = useState<ProjectVisualStylePreset>(DEFAULT_PROJECT_VISUAL_STYLE_PRESET);
   const [characterArtStyle, setCharacterArtStyle] = useState('');
   const [sceneArtStyle, setSceneArtStyle] = useState('');
+  const [videoModel, setVideoModel] = useState<'legacy' | 'seedance-2.0'>('legacy');
+  const [syncVolcengineAssets, setSyncVolcengineAssets] = useState(false);
+  const [volcengineAssetGroupId, setVolcengineAssetGroupId] = useState('');
+  const [volcengineProjectName, setVolcengineProjectName] = useState('default');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [ideaInput, setIdeaInput] = useState('');
   const [isGenerating, setIsGenerating] = useState(false);
@@ -73,6 +77,10 @@ export function ProjectDialog({ children, project, open: controlledOpen, onOpenC
         setVisualStylePreset(parsedStyle.visualStylePreset || DEFAULT_PROJECT_VISUAL_STYLE_PRESET);
         setCharacterArtStyle(project.characterArtStyle || project.artStyle || '');
         setSceneArtStyle(project.sceneArtStyle || project.artStyle || '');
+        setVideoModel(project.volcengineVideoSettings?.preferredVideoModel || 'legacy');
+        setSyncVolcengineAssets(!!project.volcengineVideoSettings?.syncAssetsToPrivateLibrary);
+        setVolcengineAssetGroupId(project.volcengineVideoSettings?.assetGroupId || '');
+        setVolcengineProjectName(project.volcengineVideoSettings?.projectName || 'default');
         setIdeaInput('');
       } else {
         // Only clear if not editing (or if we want to reset on new create)
@@ -84,6 +92,10 @@ export function ProjectDialog({ children, project, open: controlledOpen, onOpenC
           setVisualStylePreset(DEFAULT_PROJECT_VISUAL_STYLE_PRESET);
           setCharacterArtStyle('');
           setSceneArtStyle('');
+          setVideoModel('legacy');
+          setSyncVolcengineAssets(false);
+          setVolcengineAssetGroupId('');
+          setVolcengineProjectName('default');
           setIdeaInput('');
         }
       }
@@ -145,6 +157,12 @@ export function ProjectDialog({ children, project, open: controlledOpen, onOpenC
           visualStylePreset,
           characterArtStyle,
           sceneArtStyle,
+          volcengineVideoSettings: {
+            preferredVideoModel: videoModel,
+            syncAssetsToPrivateLibrary: syncVolcengineAssets,
+            assetGroupId: volcengineAssetGroupId.trim() || undefined,
+            projectName: volcengineProjectName.trim() || 'default',
+          },
           updatedAt: Date.now(),
         });
       } else {
@@ -186,6 +204,12 @@ export function ProjectDialog({ children, project, open: controlledOpen, onOpenC
           visualStylePreset,
           characterArtStyle,
           sceneArtStyle,
+          volcengineVideoSettings: {
+            preferredVideoModel: videoModel,
+            syncAssetsToPrivateLibrary: syncVolcengineAssets,
+            assetGroupId: volcengineAssetGroupId.trim() || undefined,
+            projectName: volcengineProjectName.trim() || 'default',
+          },
           genre: [],
           createdAt: Date.now(),
           updatedAt: Date.now(),
@@ -205,6 +229,10 @@ export function ProjectDialog({ children, project, open: controlledOpen, onOpenC
         setVisualStylePreset(DEFAULT_PROJECT_VISUAL_STYLE_PRESET);
         setCharacterArtStyle('');
         setSceneArtStyle('');
+        setVideoModel('legacy');
+        setSyncVolcengineAssets(false);
+        setVolcengineAssetGroupId('');
+        setVolcengineProjectName('default');
       }
       if (onSuccess) onSuccess();
     } catch (error) {
@@ -329,6 +357,60 @@ export function ProjectDialog({ children, project, open: controlledOpen, onOpenC
                 className="col-span-3"
                 placeholder="可选补充，例如：电影感布光、现实室内空间、3DCG 体积光氛围..."
               />
+            </div>
+            <div className="grid grid-cols-4 items-center gap-4">
+              <Label htmlFor="videoModel" className="text-right">
+                视频模型
+              </Label>
+              <div className="col-span-3">
+                <Select value={videoModel} onValueChange={(value) => setVideoModel(value as 'legacy' | 'seedance-2.0')}>
+                  <SelectTrigger id="videoModel">
+                    <SelectValue placeholder="选择视频模型" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="legacy">默认视频模型</SelectItem>
+                    <SelectItem value="seedance-2.0">Seedance 2.0</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+            <div className="grid grid-cols-4 items-start gap-4">
+              <Label htmlFor="syncVolcengineAssets" className="pt-1 text-right">
+                火山素材库
+              </Label>
+              <div className="col-span-3 space-y-3">
+                <label className="flex items-start gap-2 text-sm text-slate-700">
+                  <input
+                    id="syncVolcengineAssets"
+                    type="checkbox"
+                    checked={syncVolcengineAssets}
+                    onChange={(e) => setSyncVolcengineAssets(e.target.checked)}
+                    className="mt-1 h-4 w-4"
+                  />
+                  <span>
+                    同步素材到火山素材库
+                    <span className="block text-xs text-slate-500">
+                      开启后，Seedance 2.0 会优先使用火山素材库 ID 作为参考素材；素材需处理完成后才能用于生成。
+                    </span>
+                  </span>
+                </label>
+                {syncVolcengineAssets && (
+                  <div className="grid gap-3 rounded-md border border-slate-200 bg-slate-50 p-3">
+                    <Input
+                      value={volcengineAssetGroupId}
+                      onChange={(e) => setVolcengineAssetGroupId(e.target.value)}
+                      placeholder="Asset Group ID，可留空使用环境变量"
+                      className="bg-white"
+                    />
+                    <Input
+                      value={volcengineProjectName}
+                      onChange={(e) => setVolcengineProjectName(e.target.value)}
+                      placeholder="火山 ProjectName，默认 default"
+                      className="bg-white"
+                    />
+                  </div>
+                )}
+              </div>
             </div>
             <div className="grid grid-cols-4 items-center gap-4">
               <Label htmlFor="logline" className="text-right">
