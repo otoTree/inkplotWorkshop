@@ -253,18 +253,21 @@ export function ProjectDialog({ children, project, open: controlledOpen, onOpenC
   return (
     <Dialog open={open} onOpenChange={setOpen}>
       {children && <DialogTrigger asChild>{children}</DialogTrigger>}
-      <DialogContent className="sm:max-w-[720px]">
-        <form onSubmit={handleSubmit}>
+      <DialogContent className="flex max-h-[90vh] w-[min(96vw,720px)] flex-col overflow-hidden p-0 sm:w-full sm:max-w-[720px]">
+        <form onSubmit={handleSubmit} className="flex min-h-0 flex-1 flex-col">
+          <div className="border-b border-black/[0.06] px-6 pt-6 pb-4">
           <DialogHeader>
             <DialogTitle>{isEdit ? '编辑项目' : '新建项目'}</DialogTitle>
             <DialogDescription>
               {isEdit ? '修改项目基本信息。' : '开启新的创作旅程。输入故事的基本信息。'}
             </DialogDescription>
           </DialogHeader>
+          </div>
 
-          {!isEdit && (
-            <div className="px-1 py-2">
-              <div className="bg-slate-50 p-3 rounded-md border border-slate-100 space-y-2">
+          <div className="min-h-0 flex-1 overflow-y-auto px-6 py-4">
+            {!isEdit && (
+              <div className="px-1 py-2">
+                <div className="bg-slate-50 p-3 rounded-md border border-slate-100 space-y-2">
                 <div className="flex items-center justify-between">
                   <Label htmlFor="ideaInput" className="text-xs font-medium text-slate-500 flex items-center gap-1">
                     <Wand2 className="w-3 h-3" /> AI 智能填充
@@ -289,12 +292,12 @@ export function ProjectDialog({ children, project, open: controlledOpen, onOpenC
                     <span className="text-[10px]">生成</span>
                   </Button>
                 </div>
+                </div>
               </div>
-            </div>
-          )}
+            )}
 
-          <div className="grid gap-4 py-4">
-            <div className="grid grid-cols-4 items-center gap-4">
+            <div className="grid gap-4 py-4">
+              <div className="grid grid-cols-1 gap-2 sm:grid-cols-4 sm:items-center sm:gap-4">
               <Label htmlFor="title" className="text-right">
                 剧名
               </Label>
@@ -307,11 +310,11 @@ export function ProjectDialog({ children, project, open: controlledOpen, onOpenC
                 required
               />
             </div>
-            <div className="grid grid-cols-4 items-center gap-4">
-              <Label htmlFor="language" className="text-right">
+            <div className="grid grid-cols-1 gap-2 sm:grid-cols-4 sm:items-center sm:gap-4">
+              <Label htmlFor="language" className="sm:text-right">
                 语言
               </Label>
-              <div className="col-span-3">
+              <div className="sm:col-span-3">
                 <Select value={language} onValueChange={setLanguage}>
                   <SelectTrigger>
                     <SelectValue placeholder="选择语言" />
@@ -325,11 +328,11 @@ export function ProjectDialog({ children, project, open: controlledOpen, onOpenC
                 </Select>
               </div>
             </div>
-            <div className="grid grid-cols-4 items-start gap-4">
-              <Label htmlFor="visualStylePreset" className="pt-2 text-right">
+            <div className="grid grid-cols-1 gap-2 sm:grid-cols-4 sm:items-start sm:gap-4">
+              <Label htmlFor="visualStylePreset" className="sm:pt-2 sm:text-right">
                 画面风格
               </Label>
-              <div className="col-span-3">
+              <div className="sm:col-span-3">
                 <div id="visualStylePreset">
                   <ProjectVisualStylePresetSelector
                     value={visualStylePreset}
@@ -340,8 +343,8 @@ export function ProjectDialog({ children, project, open: controlledOpen, onOpenC
                 </div>
               </div>
             </div>
-            <div className="grid grid-cols-4 items-center gap-4">
-              <Label htmlFor="characterArtStyle" className="text-right">
+            <div className="grid grid-cols-1 gap-2 sm:grid-cols-4 sm:items-center sm:gap-4">
+              <Label htmlFor="characterArtStyle" className="sm:text-right">
                 人物美术
               </Label>
               <Input
@@ -352,8 +355,8 @@ export function ProjectDialog({ children, project, open: controlledOpen, onOpenC
                 placeholder="可选补充，例如：高级感肖像光、写实皮肤质感、风格化角色材质..."
               />
             </div>
-            <div className="grid grid-cols-4 items-center gap-4">
-              <Label htmlFor="sceneArtStyle" className="text-right">
+            <div className="grid grid-cols-1 gap-2 sm:grid-cols-4 sm:items-center sm:gap-4">
+              <Label htmlFor="sceneArtStyle" className="sm:text-right">
                 场景美术
               </Label>
               <Input
@@ -364,11 +367,11 @@ export function ProjectDialog({ children, project, open: controlledOpen, onOpenC
                 placeholder="可选补充，例如：电影感布光、现实室内空间、3DCG 体积光氛围..."
               />
             </div>
-            <div className="grid grid-cols-4 items-center gap-4">
-              <Label htmlFor="videoModel" className="text-right">
+            <div className="grid grid-cols-1 gap-2 sm:grid-cols-4 sm:items-center sm:gap-4">
+              <Label htmlFor="videoModel" className="sm:text-right">
                 视频模型
               </Label>
-              <div className="col-span-3">
+              <div className="sm:col-span-3">
                 <Select value={videoModel} onValueChange={(value) => setVideoModel(value as 'legacy' | 'seedance-2.0')}>
                   <SelectTrigger id="videoModel">
                     <SelectValue placeholder="选择视频模型" />
@@ -380,11 +383,11 @@ export function ProjectDialog({ children, project, open: controlledOpen, onOpenC
                 </Select>
               </div>
             </div>
-            <div className="grid grid-cols-4 items-start gap-4">
-              <Label htmlFor="syncVolcengineAssets" className="pt-1 text-right">
+            <div className="grid grid-cols-1 gap-2 sm:grid-cols-4 sm:items-start sm:gap-4">
+              <Label htmlFor="syncVolcengineAssets" className="sm:pt-1 sm:text-right">
                 火山素材库
               </Label>
-              <div className="col-span-3 space-y-3">
+              <div className="space-y-3 sm:col-span-3">
                 <label className="flex items-start gap-2 text-sm text-slate-700">
                   <input
                     id="syncVolcengineAssets"
@@ -418,8 +421,8 @@ export function ProjectDialog({ children, project, open: controlledOpen, onOpenC
                 )}
               </div>
             </div>
-            <div className="grid grid-cols-4 items-center gap-4">
-              <Label htmlFor="logline" className="text-right">
+            <div className="grid grid-cols-1 gap-2 sm:grid-cols-4 sm:items-center sm:gap-4">
+              <Label htmlFor="logline" className="sm:text-right">
                 梗概
               </Label>
               <Textarea
@@ -431,7 +434,8 @@ export function ProjectDialog({ children, project, open: controlledOpen, onOpenC
               />
             </div>
           </div>
-          <DialogFooter>
+          </div>
+          <DialogFooter className="border-t border-black/[0.06] px-6 py-4">
             <Button type="submit" disabled={isSubmitting}>
               {isSubmitting ? '保存中...' : (isEdit ? '保存修改' : '创建项目')}
             </Button>
