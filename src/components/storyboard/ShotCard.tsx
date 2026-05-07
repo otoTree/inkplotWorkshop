@@ -18,12 +18,13 @@ interface ShotCardProps {
   assets: Asset[];
   index: number;
   projectId: string;
+  videoAspectRatio: '9:16' | '16:9';
   sensitivityPrompt: string;
   onUpdate: (shot: Shot) => void;
   onDelete: (id: string) => void;
 }
 
-export function ShotCard({ shot, assets, projectId, sensitivityPrompt, onUpdate, onDelete }: ShotCardProps) {
+export function ShotCard({ shot, assets, projectId, videoAspectRatio, sensitivityPrompt, onUpdate, onDelete }: ShotCardProps) {
   const [isEditing, setIsEditing] = useState(false);
   const [isDetailOpen, setIsDetailOpen] = useState(false);
   const [draft, setDraft] = useState<Shot | null>(null);
@@ -234,7 +235,7 @@ export function ShotCard({ shot, assets, projectId, sensitivityPrompt, onUpdate,
           duration: normalizeShotDurationSeconds(current.duration),
           metadata: {
             multi_shot: false,
-            aspect_ratio: "9:16",
+            aspect_ratio: videoAspectRatio,
             sound: "on",
             images: allImages.length > 0 ? allImages : undefined
           },

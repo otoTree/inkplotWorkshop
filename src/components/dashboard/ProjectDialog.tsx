@@ -29,6 +29,7 @@ import {
   parseProjectVisualStyle,
 } from '@/lib/project-visual-style';
 import {
+  DEFAULT_PROJECT_VIDEO_ASPECT_RATIO,
   DEFAULT_PROJECT_VIDEO_MODEL,
   DEFAULT_VOLCENGINE_PROJECT_NAME,
   normalizeProjectVideoSettings,
@@ -58,6 +59,7 @@ export function ProjectDialog({ children, project, open: controlledOpen, onOpenC
   const [characterArtStyle, setCharacterArtStyle] = useState('');
   const [sceneArtStyle, setSceneArtStyle] = useState('');
   const [videoModel, setVideoModel] = useState<'legacy' | 'seedance-2.0'>(DEFAULT_PROJECT_VIDEO_MODEL);
+  const [videoAspectRatio, setVideoAspectRatio] = useState<'9:16' | '16:9'>(DEFAULT_PROJECT_VIDEO_ASPECT_RATIO);
   const [syncVolcengineAssets, setSyncVolcengineAssets] = useState(false);
   const [volcengineAssetGroupId, setVolcengineAssetGroupId] = useState('');
   const [volcengineProjectName, setVolcengineProjectName] = useState(DEFAULT_VOLCENGINE_PROJECT_NAME);
@@ -84,6 +86,7 @@ export function ProjectDialog({ children, project, open: controlledOpen, onOpenC
         setCharacterArtStyle(project.characterArtStyle || project.artStyle || '');
         setSceneArtStyle(project.sceneArtStyle || project.artStyle || '');
         setVideoModel(normalizedVideoSettings.preferredVideoModel);
+        setVideoAspectRatio(normalizedVideoSettings.aspectRatio);
         setSyncVolcengineAssets(normalizedVideoSettings.syncAssetsToPrivateLibrary);
         setVolcengineAssetGroupId(normalizedVideoSettings.assetGroupId || '');
         setVolcengineProjectName(normalizedVideoSettings.projectName);
@@ -99,6 +102,7 @@ export function ProjectDialog({ children, project, open: controlledOpen, onOpenC
           setCharacterArtStyle('');
           setSceneArtStyle('');
           setVideoModel(DEFAULT_PROJECT_VIDEO_MODEL);
+          setVideoAspectRatio(DEFAULT_PROJECT_VIDEO_ASPECT_RATIO);
           setSyncVolcengineAssets(false);
           setVolcengineAssetGroupId('');
           setVolcengineProjectName(DEFAULT_VOLCENGINE_PROJECT_NAME);
@@ -165,6 +169,7 @@ export function ProjectDialog({ children, project, open: controlledOpen, onOpenC
           sceneArtStyle,
           volcengineVideoSettings: {
             preferredVideoModel: videoModel,
+            aspectRatio: videoAspectRatio,
             syncAssetsToPrivateLibrary: syncVolcengineAssets,
             assetGroupId: volcengineAssetGroupId.trim() || undefined,
             projectName: volcengineProjectName.trim() || DEFAULT_VOLCENGINE_PROJECT_NAME,
@@ -212,6 +217,7 @@ export function ProjectDialog({ children, project, open: controlledOpen, onOpenC
           sceneArtStyle,
           volcengineVideoSettings: {
             preferredVideoModel: videoModel,
+            aspectRatio: videoAspectRatio,
             syncAssetsToPrivateLibrary: syncVolcengineAssets,
             assetGroupId: volcengineAssetGroupId.trim() || undefined,
             projectName: volcengineProjectName.trim() || DEFAULT_VOLCENGINE_PROJECT_NAME,
@@ -236,6 +242,7 @@ export function ProjectDialog({ children, project, open: controlledOpen, onOpenC
         setCharacterArtStyle('');
         setSceneArtStyle('');
         setVideoModel(DEFAULT_PROJECT_VIDEO_MODEL);
+        setVideoAspectRatio(DEFAULT_PROJECT_VIDEO_ASPECT_RATIO);
         setSyncVolcengineAssets(false);
         setVolcengineAssetGroupId('');
         setVolcengineProjectName(DEFAULT_VOLCENGINE_PROJECT_NAME);
@@ -379,6 +386,22 @@ export function ProjectDialog({ children, project, open: controlledOpen, onOpenC
                   <SelectContent>
                     <SelectItem value="legacy">默认视频模型</SelectItem>
                     <SelectItem value="seedance-2.0">Seedance 2.0</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+            <div className="grid grid-cols-1 gap-2 sm:grid-cols-4 sm:items-center sm:gap-4">
+              <Label htmlFor="videoAspectRatio" className="sm:text-right">
+                视频画幅
+              </Label>
+              <div className="sm:col-span-3">
+                <Select value={videoAspectRatio} onValueChange={(value) => setVideoAspectRatio(value as '9:16' | '16:9')}>
+                  <SelectTrigger id="videoAspectRatio">
+                    <SelectValue placeholder="选择视频画幅" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="9:16">竖版 9:16</SelectItem>
+                    <SelectItem value="16:9">横版 16:9</SelectItem>
                   </SelectContent>
                 </Select>
               </div>

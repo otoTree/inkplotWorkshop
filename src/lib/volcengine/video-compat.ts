@@ -1,12 +1,14 @@
 import { isSeedance2Model } from './video-client.ts';
 
 export type ProjectVideoModelPreference = 'legacy' | 'seedance-2.0';
+export type ProjectVideoAspectRatio = '9:16' | '16:9';
 
 export type ProjectVideoSettingsLike = {
   syncAssetsToPrivateLibrary?: boolean | null;
   assetGroupId?: string | null;
   projectName?: string | null;
   preferredVideoModel?: string | null;
+  aspectRatio?: string | null;
 };
 
 export type NormalizedProjectVideoSettings = {
@@ -14,6 +16,7 @@ export type NormalizedProjectVideoSettings = {
   assetGroupId?: string;
   projectName: string;
   preferredVideoModel: ProjectVideoModelPreference;
+  aspectRatio: ProjectVideoAspectRatio;
 };
 
 export type VideoGenerationMetadataLike = {
@@ -25,6 +28,7 @@ export type VideoGenerationMetadataLike = {
 
 export const DEFAULT_PROJECT_VIDEO_MODEL: ProjectVideoModelPreference = 'legacy';
 export const DEFAULT_VOLCENGINE_PROJECT_NAME = 'default';
+export const DEFAULT_PROJECT_VIDEO_ASPECT_RATIO: ProjectVideoAspectRatio = '9:16';
 
 const normalizeOptionalString = (value: string | null | undefined) => {
   if (typeof value !== 'string') return undefined;
@@ -40,6 +44,10 @@ export const normalizeProjectVideoModel = (
   return DEFAULT_PROJECT_VIDEO_MODEL;
 };
 
+export const normalizeProjectVideoAspectRatio = (
+  value: string | null | undefined
+): ProjectVideoAspectRatio => (value === '16:9' ? '16:9' : DEFAULT_PROJECT_VIDEO_ASPECT_RATIO);
+
 export const normalizeProjectVideoSettings = (
   settings?: ProjectVideoSettingsLike | null
 ): NormalizedProjectVideoSettings => ({
@@ -47,6 +55,7 @@ export const normalizeProjectVideoSettings = (
   assetGroupId: normalizeOptionalString(settings?.assetGroupId),
   projectName: normalizeOptionalString(settings?.projectName) || DEFAULT_VOLCENGINE_PROJECT_NAME,
   preferredVideoModel: normalizeProjectVideoModel(settings?.preferredVideoModel),
+  aspectRatio: normalizeProjectVideoAspectRatio(settings?.aspectRatio),
 });
 
 export const shouldUseSeedance2ForProject = (settings?: ProjectVideoSettingsLike | null) =>

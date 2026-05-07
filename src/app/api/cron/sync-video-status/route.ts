@@ -18,7 +18,15 @@ import {
   isSeedance2Model,
   mergeVolcengineTaskMetadata,
 } from '@/lib/volcengine/video-client';
-import { buildSeedance2VideoPayload } from '@/lib/volcengine/video-payload';
+import {
+  normalizeProjectVideoAspectRatio,
+  normalizeProjectVideoSettings,
+  type ProjectVideoSettingsLike,
+} from '@/lib/volcengine/video-compat';
+import {
+  buildSeedance2VideoPayload,
+  normalizeSeedance2AspectRatio,
+} from '@/lib/volcengine/video-payload';
 import {
   mapVolcengineAssetRow,
   resolveVolcengineReferenceAssets,
@@ -50,6 +58,25 @@ type VideoTaskResult = Record<string, unknown> & {
   };
   usage?: Record<string, unknown>;
   __volcengineMetadata?: Record<string, unknown>;
+};
+
+const getShotAspectRatio = (shot: { video_generation_metadata?: unknown }) => {
+  const metadata =
+    shot.video_generation_metadata &&
+    typeof shot.video_generation_metadata === 'object' &&
+    !Array.isArray(shot.video_generation_metadata)
+      ? (shot.video_generation_metadata as { aspectRatio?: string })
+      : null;
+  return normalizeSeedance2AspectRatio(metadata?.aspectRatio);
+};
+
+const resolveVideoAspectRatio = (
+  shot: { video_generation_metadata?: unknown },
+  settings?: ProjectVideoSettingsLike | null
+) => {
+  const shotRatio = getShotAspectRatio(shot);
+  const projectRatio = settings ? normalizeProjectVideoSettings(settings).aspectRatio : undefined;
+  return normalizeProjectVideoAspectRatio(projectRatio || shotRatio);
 };
 
 const getErrorMessage = (error: unknown) =>
@@ -188,6 +215,7 @@ export async function GET(req: Request) {
       // but tryAcquireVideoSlot will protect AI concurrency.
       for (const shot of queuedShots) {
         let useSeedance2 = false;
+        let aspectRatio = getShotAspectRatio(shot);
         try {
           const referenceAssets: LocalReferenceAsset[] = [];
           if (shot.reference_image) {
@@ -216,6 +244,7 @@ export async function GET(req: Request) {
           const projectVideoSettings = await getProjectVideoSettings(supabase, shot.episode_id);
           const projectId = await getProjectIdForEpisode(supabase, shot.episode_id);
           useSeedance2 = shouldUseSeedance2(projectVideoSettings);
+          aspectRatio = resolveVideoAspectRatio(shot, projectVideoSettings);
           const fullPrompt = buildVideoGenerationPrompt(
             [
               { label: 'Scene heading', value: shot.scene_label },
@@ -275,7 +304,8 @@ export async function GET(req: Request) {
                   prompt: fullPrompt,
                   references: resolvedReferences.references,
                   duration: normalizeShotDurationSeconds(shot.duration),
-                  ratio: '9:16',
+                  ratio: aspectRatio,
+                  resolution: '1080p',
                   generateAudio: true,
                   watermark: false,
                 });
@@ -286,6 +316,8 @@ export async function GET(req: Request) {
                     model: videoConfig.model,
                     requestContentMode: resolvedReferences.requestContentMode,
                     referenceAssetIds: resolvedReferences.referenceAssetIds,
+                    aspectRatio,
+                    resolution: '1080p',
                     result: seedanceResult,
                   }),
                 };
@@ -295,7 +327,7 @@ export async function GET(req: Request) {
                 normalizeShotDurationSeconds(shot.duration),
                 {
                   multi_shot: false,
-                  aspect_ratio: "9:16",
+                  aspect_ratio: aspectRatio,
                   sound: "on",
                   image_list: referenceAssets
                     .filter((asset) => asset.imageUrl)
@@ -362,6 +394,8 @@ export async function GET(req: Request) {
                   ...(useSeedance2 && getConfiguredVolcengineVideoModel()
                     ? { model: getConfiguredVolcengineVideoModel() }
                     : {}),
+                  aspectRatio,
+                  resolution: '1080p',
                   rawStatus: 'waiting_for_assets',
                   error: message,
                 },
@@ -379,6 +413,7 @@ export async function GET(req: Request) {
                   ...(useSeedance2 && getConfiguredVolcengineVideoModel()
                     ? { model: getConfiguredVolcengineVideoModel() }
                     : {}),
+                  ...(useSeedance2 ? { aspectRatio, resolution: '1080p' } : {}),
                   ...(useSeedance2 ? { rawStatus: 'failed' } : {}),
                   error: message,
                 },

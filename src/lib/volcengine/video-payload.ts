@@ -7,6 +7,9 @@ export type Seedance2Reference = {
   role?: 'reference_image' | 'reference_video' | 'reference_audio';
 };
 
+export type Seedance2AspectRatio = '9:16' | '16:9';
+export type Seedance2Resolution = '1080p';
+
 export type Seedance2VideoPayload = {
   model: string;
   content: Array<
@@ -16,10 +19,14 @@ export type Seedance2VideoPayload = {
     | { type: 'audio_url'; audio_url: { url: string }; role: 'reference_audio' }
   >;
   generate_audio?: boolean;
-  ratio?: string;
+  ratio?: Seedance2AspectRatio;
+  resolution?: Seedance2Resolution;
   duration?: number;
   watermark?: boolean;
 };
+
+export const normalizeSeedance2AspectRatio = (value?: string | null): Seedance2AspectRatio =>
+  value === '16:9' ? '16:9' : '9:16';
 
 const isAssetUri = (value: string) => /^asset:\/\/[^/\s]+$/i.test(value);
 
@@ -46,6 +53,7 @@ export const buildSeedance2VideoPayload = ({
   references = [],
   duration,
   ratio = '9:16',
+  resolution = '1080p',
   generateAudio = true,
   watermark = false,
 }: {
@@ -53,7 +61,8 @@ export const buildSeedance2VideoPayload = ({
   prompt: string;
   references?: Seedance2Reference[];
   duration?: number;
-  ratio?: string;
+  ratio?: Seedance2AspectRatio;
+  resolution?: Seedance2Resolution;
   generateAudio?: boolean;
   watermark?: boolean;
 }): Seedance2VideoPayload => {
@@ -94,6 +103,7 @@ export const buildSeedance2VideoPayload = ({
     content,
     generate_audio: generateAudio,
     ratio,
+    resolution,
     ...(duration ? { duration } : {}),
     watermark,
   };

@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
+import { normalizeSeedance2AspectRatio } from '@/lib/volcengine/video-payload';
 
 export const maxDuration = 300;
 
@@ -12,10 +13,16 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    const { prompt, shotId } = await req.json();
+    const { prompt, shotId, metadata } = await req.json();
     if (!prompt || typeof prompt !== 'string') {
       return NextResponse.json({ error: 'Missing prompt' }, { status: 400 });
     }
+
+    const aspectRatio = normalizeSeedance2AspectRatio(
+      metadata && typeof metadata === 'object' && metadata !== null && 'aspect_ratio' in metadata
+        ? String((metadata as { aspect_ratio?: string }).aspect_ratio)
+        : undefined
+    );
 
     if (shotId) {
       const { error: queueError } = await supabase
@@ -23,6 +30,10 @@ export async function POST(req: Request) {
         .update({
           video_status: 'queued',
           video_generation_id: null,
+          video_generation_metadata: {
+            aspectRatio,
+            resolution: '1080p',
+          },
         })
         .eq('id', shotId)
         .select('id');

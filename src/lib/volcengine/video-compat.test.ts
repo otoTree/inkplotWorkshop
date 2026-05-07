@@ -1,8 +1,10 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import {
+  DEFAULT_PROJECT_VIDEO_ASPECT_RATIO,
   DEFAULT_PROJECT_VIDEO_MODEL,
   inferVideoTaskProvider,
+  normalizeProjectVideoAspectRatio,
   normalizeProjectVideoModel,
   normalizeProjectVideoSettings,
   shouldUseSeedance2ForProject,
@@ -24,7 +26,14 @@ test('normalizeProjectVideoSettings applies explicit safe defaults', () => {
     assetGroupId: undefined,
     projectName: 'default',
     preferredVideoModel: 'legacy',
+    aspectRatio: '9:16',
   });
+});
+
+test('normalizeProjectVideoAspectRatio keeps supported values and falls back safely', () => {
+  assert.equal(normalizeProjectVideoAspectRatio('16:9'), '16:9');
+  assert.equal(normalizeProjectVideoAspectRatio(undefined), DEFAULT_PROJECT_VIDEO_ASPECT_RATIO);
+  assert.equal(normalizeProjectVideoAspectRatio('1:1'), DEFAULT_PROJECT_VIDEO_ASPECT_RATIO);
 });
 
 test('shouldUseSeedance2ForProject respects explicit project choice', () => {

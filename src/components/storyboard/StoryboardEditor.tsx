@@ -16,6 +16,10 @@ import {
   getStoryboardTotalDurationSeconds,
   normalizeShotDurationSeconds,
 } from '@/lib/duration';
+import {
+  DEFAULT_PROJECT_VIDEO_ASPECT_RATIO,
+  normalizeProjectVideoSettings,
+} from '@/lib/volcengine/video-compat';
 
 interface StoryboardEditorProps {
   projectId: string;
@@ -66,6 +70,10 @@ export function StoryboardEditor({ projectId }: StoryboardEditorProps) {
   const [episodes, setEpisodes] = useState<Episode[]>([]);
   const [assets, setAssets] = useState<Asset[]>([]);
   const [shots, setShots] = useState<Shot[]>([]);
+  const projectVideoAspectRatio =
+    project?.volcengineVideoSettings
+      ? normalizeProjectVideoSettings(project.volcengineVideoSettings).aspectRatio
+      : DEFAULT_PROJECT_VIDEO_ASPECT_RATIO;
 
   // Data fetching
   useEffect(() => {
@@ -352,7 +360,7 @@ export function StoryboardEditor({ projectId }: StoryboardEditorProps) {
               duration: normalizeShotDurationSeconds(currentShot.duration),
               metadata: {
                 multi_shot: false,
-                aspect_ratio: "9:16",
+                aspect_ratio: projectVideoAspectRatio,
                 sound: "on",
                 images: allImages.length > 0 ? allImages : undefined
               },
@@ -605,6 +613,7 @@ export function StoryboardEditor({ projectId }: StoryboardEditorProps) {
                   assets={assets || []} 
                   index={index}
                   projectId={projectId}
+                  videoAspectRatio={projectVideoAspectRatio}
                   sensitivityPrompt={project?.sensitivityPrompt || ''}
                   onUpdate={handleUpdateShot}
                   onDelete={handleDeleteShot}

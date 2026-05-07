@@ -12,6 +12,7 @@ export type VolcengineVideoSettings = {
   assetGroupId?: string;
   projectName?: string;
   preferredVideoModel?: 'seedance-2.0' | 'legacy';
+  aspectRatio?: '9:16' | '16:9';
 };
 
 export type LocalReferenceAsset = {

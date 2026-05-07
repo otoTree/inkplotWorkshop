@@ -13,6 +13,18 @@ import { resolveArtStyleConfig } from '@/lib/project-visual-style';
 
 type ArtStyleInput = string | ArtStyleConfig;
 
+const STORYBOARD_DIALOGUE_LANGUAGE_LABELS: Record<string, string> = {
+  zh: '中文',
+  en: '英文',
+  jp: '日文',
+  ja: '日文',
+  kr: '韩文',
+  ko: '韩文',
+};
+
+const getStoryboardDialogueLanguageLabel = (language: string) =>
+  STORYBOARD_DIALOGUE_LANGUAGE_LABELS[language] || `${language} 对应语言`;
+
 type VisualStylePromptStrategy = {
   projectDetails: {
     presetLabel: string;
@@ -481,75 +493,78 @@ type ExistingAsset = {
 };
 
 export const getStoryboardGenerationPrompt = (scriptContent: string, existingAssets: ExistingAsset[], artStyle?: ArtStyleInput, language: string = 'zh') => {
-  const isEnglish = language === 'en';
   const { resolvedStyle, strategy } = resolvePromptStrategy(artStyle);
   const { artStyle: baseStyle, sceneArtStyle } = resolvedStyle;
   const resolvedSceneStyle = sceneArtStyle || baseStyle || 'Cinematic realism, Photorealistic';
+  const dialogueLanguageLabel = getStoryboardDialogueLanguageLabel(language);
   return `
-# Skill: Narrative-to-Visual Reasoning
+# 技能：剧本到分镜的导演级视觉拆解
 
-> Goal: Transform the provided script into a sequence of shots where the AI acts as a director, organizing shots, and generating extremely detailed visual sequences for video generation models.
+> 目标：把给定剧本拆解成一组可执行的分镜镜头，让 AI 以导演视角组织镜头，并为视频生成模型产出高细节、可落地的视觉序列。
 
-## 0. Core Principles (Inviolable)
+## 0. 核心原则（不可违背）
 
-1. **State Change is the Minimal Unit**: Not "what happened", but "what the character became after it happened".
-2. **Verbs > Nouns**: Action > Scene > Style.
-3. **Language Requirement**: All content in the JSON output MUST be in ${isEnglish ? 'English' : 'the target language (' + language + ')'}.
-4. **Strict Shot Duration (${SHOT_DURATION_MIN_SECONDS}s-${SHOT_DURATION_MAX_SECONDS}s)**: Each shot MUST last between ${SHOT_DURATION_MIN_SECONDS}s and ${SHOT_DURATION_MAX_SECONDS}s. Do not output any shot shorter or longer than this range.
-5. **Mandatory Visual Continuity**: Shot transitions MUST have clear visual logic (e.g., eyeline match, action continuity, reaction shot). No illogical hard cuts.
-6. **Asset Coverage & Matching**: Each shot MUST list all involved **characters and locations**. If an asset exists in the provided list, use its exact name (case-insensitive match). **CRITICAL: EVERY single shot MUST have at least one explicit scene/location assigned to it in \`sceneLabel\` and \`suggestedAssets.locations\`. Even for close-ups or continuous action, you MUST explicitly state the scene/location. Never leave the scene empty.**
-7. **Opening Highlight Shot**: Shot \`sequence: 1\` MUST be the current episode's highlight moment: the single most emotionally explosive, visually striking, or plot-defining shot from this episode. It must function as a cold open teaser, not a generic establishing shot.
-8. **Style Strategy**: ${strategy.storyboard.styleDirective}
-9. **Negative Style Rule**: ${strategy.storyboard.negativeDirective}
-10. **Model-Executable Camera Language**: Do not write shots as static human-readable labels only. Every shot must describe what the camera physically does over time, what enters frame first, how the subject moves, what changes in the environment, and where the shot lands.
-11. **Shot Description Formula**: Each \`description\`, \`characterAction\`, \`camera\`, and \`videoPrompt\` must follow this logic whenever possible: **start frame -> camera path -> subject action -> environment reaction -> end frame / emotional landing**.
-12. **No Empty Shorthand**: Avoid bare phrasing such as "static low angle", "medium shot of character looking up", or "character stands there sadly" unless you immediately expand it into precise temporal action and screen movement.
+1. **状态变化才是最小单位**：不要只写“发生了什么”，而要写“人物在这件事后变成了什么状态”。
+2. **动词优先于名词**：动作 > 场景 > 风格。
+3. **语言硬性规则**：
+   - 除 \`dialogue\` 字段外，JSON 输出中的所有字段、所有说明、所有示例措辞、所有 \`videoPrompt\` 内容都必须使用**中文**。
+   - \`dialogue\` 字段必须使用项目语言：${dialogueLanguageLabel}。
+   - **禁止输出英文**，包括但不限于镜头说明、情绪、运镜、光效、场景名、角色描述、\`videoPrompt\`、约束语、标签词。若引用了提示词中的英文风格描述，也必须先理解后改写成中文，绝不能原样输出英文。
+4. **严格镜头时长（${SHOT_DURATION_MIN_SECONDS}s-${SHOT_DURATION_MAX_SECONDS}s）**：每个镜头都必须在这个范围内，不能更短也不能更长。
+5. **视觉连续性强制成立**：镜头切换必须有明确视觉逻辑，例如视线匹配、动作延续、反应镜头，禁止无因硬切。
+6. **资产覆盖与匹配**：每个镜头都必须列出涉及的**角色与场景**。如果提供的资产列表里已有对应资产，优先使用其精确名称（忽略大小写匹配）。**每个镜头都必须在 \`sceneLabel\` 和 \`suggestedAssets.locations\` 中明确给出至少一个场景，哪怕是特写或连续动作，也绝不能留空。**
+7. **开场高光镜头**：\`sequence: 1\` 必须是本集最炸裂、最具戏剧张力、最有悬念价值的高光时刻，作为冷开场预告，而不是普通建立镜头。
+8. **风格策略**：${strategy.storyboard.styleDirective}
+9. **负面风格限制**：${strategy.storyboard.negativeDirective}
+10. **镜头语言必须可执行**：不要写成人类看得懂但模型拍不出来的静态标签。每个镜头都要交代画面起始、镜头运动、主体动作、环境变化、最终落点。
+11. **镜头描述公式**：\`description\`、\`characterAction\`、\`camera\`、\`videoPrompt\` 尽量统一遵循：**起始画面 -> 镜头路径 -> 主体动作 -> 环境反应 -> 结束画面 / 情绪落点**。
+12. **禁止空洞简称**：不要只写“低机位静止镜头”“中景看向上方”“人物悲伤站着”这类空泛表达，必须展开成具体的时序动作和画面变化。
 
-## 1. Visual & Aesthetic Layer
-**Definition**: The expression layer used to **enhance emotional and thematic impact**.
-- **Composition & Depth**: Specify framing (e.g., Extreme Close-Up, Dutch Angle) and depth of field.
-- **Character Detailing**: Include highly specific character descriptions within brackets \`[Name: Age, traits, clothing, muscle tension, micro-expressions]\`.
-- **Spatial Relations**: Define foreground, midground, and background clearly. Describe exactly what is blocking or passing through the frame.
-- **Lighting & Atmosphere**: Specify lighting geometry (e.g., high contrast hard light, side backlighting) and color contrast.
-- **Cinematic Texture**: Specify film stock feel, grain, and aesthetic (e.g., Kodak 500T, high grain, dirty aesthetic).
-- **Detail Level**: EXTREMELY HIGH. Do not trust the video model to infer details. Provide granular visual information.
+## 1. 视觉与美学层
+**定义**：这一层负责强化情绪与主题的视觉表达。
+- **构图与景深**：明确景别、机位、透视关系与景深控制。
+- **角色细节**：角色描述要具体到年龄感、外貌特征、服装、肌肉紧绷感、微表情等，可用 \`[角色名：特征]\` 形式写入。
+- **空间关系**：清楚描述前景、中景、后景分别有什么，什么物体遮挡画面，什么元素穿过镜头。
+- **光线与氛围**：明确光位、明暗对比、空气感与环境氛围。
+- **电影质感**：说明颗粒、材质、镜头成像气质，但必须用中文表达。
+- **细节级别**：极高。不要指望视频模型自行补全，你必须把关键视觉细节写出来。
 
-### 🎬 Video Generation Prompt Rules
-When generating the \`videoPrompt\`, assume the AI video model has zero context. You MUST include:
-1. **Medium Fidelity**: ${strategy.storyboard.videoDirective}
-2. **Camera Movement**: Start with specific, dynamic camera movements (e.g., "Explosive fast push-in", "Slow tracking shot").
-3. **Physical Dynamics**: Describe muscle contractions, physics of fluids/particles (e.g., "blood splashing in slow motion", "dust swirling from the wind").
-4. **Action Impact**: Describe the force and weight of the action.
-5. **Environmental Reaction**: How does the environment react to the action? (e.g., flickering firelight, shaking camera).
-6. **Temporal Sequencing**: Write the prompt as a time-based unfolding shot, not a list of tags. Clarify what appears first, what the camera reveals next, what the subject does during the move, and what the final frame emphasizes.
-7. **Static Shot Rule**: If the camera is locked off, explicitly say "camera locked off while..." and still describe body movement, gaze shift, cloth movement, breath, particles, light change, and final emotional landing. "Static" alone is forbidden.
-8. **Avoid Abstract Compression**: Do not compress a whole shot into a short summary. Replace abstract wording with visible action, visible motion, and visible change.
+### 视频生成提示词规则
+生成 \`videoPrompt\` 时，默认视频模型**没有任何上下文**。你必须包含：
+1. **媒介质感要求**：${strategy.storyboard.videoDirective}
+2. **镜头运动**：优先从明确、具体的运镜动作写起，例如快速推近、缓慢跟移、俯仰下摇。
+3. **物理动态**：写清楚肌肉发力、布料摆动、液体飞溅、灰尘飘散、头发受风等可见物理反应。
+4. **动作力度**：让模型知道动作的重量感、速度感、冲击力。
+5. **环境反馈**：环境会如何响应主体动作，例如火光闪烁、桌面震动、门帘摆动、镜头轻微受力。
+6. **时间顺序**：必须按镜头展开顺序来写，先出现什么，再揭示什么，人物中途怎么动，最后停在哪个画面。
+7. **静镜头规则**：如果镜头固定，必须明确写出“镜头固定”，同时仍要描述人物呼吸、目光变化、衣物摆动、空气颗粒、光线变化与最终情绪落点，禁止只写“静止”。
+8. **避免抽象压缩**：不要用一句抽象总结代替完整镜头，必须把可见动作、可见运动、可见变化写出来。
 
-## 2. Continuity & Cohesion Layer (CRITICAL for Video Gen)
-**Definition**: Metadata fields that force the AI to maintain spatial and temporal logic between shots.
-- **Transition**: Define \`transition\` object to specify how this shot connects to the previous one (incoming action, spatial relationship, time gap).
-- **Eyeline**: Define \`eyeline\` to establish the character's gaze vector, anchoring the 3D space.
-- **Action Arcs**: \`characterAction\` must be highly detailed, explicitly stating the **Start State** and **End State** of the movement.
-- **Environmental State**: Define \`environmentalState\` to track physical changes in the scene (e.g., broken glass, smoke).
-- **Time & Motivation**: Use \`timeline\` for time anchors and \`cameraMotivation\` to explain *why* the camera moves.
+## 2. 连续性与衔接层（视频生成关键）
+**定义**：这一层负责强制维持镜头之间的时空连续与动作逻辑。
+- **Transition**：用 \`transition\` 对象说明本镜头如何接上前一镜，包括承接动作、空间关系、时间间隔。
+- **Eyeline**：用 \`eyeline\` 说明角色视线方向、视线对象与视线变化，帮助固定空间轴线。
+- **Action Arcs**：\`characterAction\` 必须明确动作的起始状态、运动过程和结束状态。
+- **Environmental State**：用 \`environmentalState\` 跟踪环境中的物理状态变化，例如碎玻璃、烟雾、湿痕、倾倒物。
+- **Time & Motivation**：用 \`timeline\` 标记时间锚点，用 \`cameraMotivation\` 说明镜头为什么移动。
 
-## Task
-Analyze the provided script and generate a storyboard sequence.
-**IMPORTANT**: 
-1. **Detail Level**: You MUST generate extremely detailed descriptions and Video Prompts as specified above. Do not summarize or be concise. The more granular detail about lighting, physics, and camera movement, the better.
-2. **Shot Breakdown Strategy**: You MUST generate between ${STORYBOARD_SHOT_COUNT_MIN} and ${STORYBOARD_SHOT_COUNT_MAX} shots total. Break down actions and dialogue into short shots of ${SHOT_DURATION_MIN_SECONDS}-${SHOT_DURATION_MAX_SECONDS} seconds each. Do not over-compress. The sum of all \`duration\` values MUST be between ${EPISODE_DURATION_MIN_SECONDS} and ${EPISODE_DURATION_MAX_SECONDS} seconds inclusive.
-3. **Mandatory Scene Requirement**: EVERY shot MUST have a non-empty \`sceneLabel\` and at least one item in \`suggestedAssets.locations\`. Do not leave the scene blank under any circumstances, even if it is a continuation of the previous shot.
-4. **First Shot Priority**: The very first shot must be the episode highlight shot with the highest dramatic value, strongest emotion, or biggest suspense payoff in the current script. Start with impact. Only after that may you unfold the rest of the episode beats.
-5. **Temporal Clarity After Teaser**: If shot 1 is a cold open from a later peak moment, shot 2 or the following shots MUST clearly signal the rewind or time shift in \`transition.timeGap\` and \`timeline\` so the sequence still reads coherently.
-6. **Motion-First Writing**: For each shot, write visible motion before interpretation. Prioritize body mechanics, camera path, gaze change, object movement, cloth/hair response, dust/smoke/light shifts, and only then emotional reading.
-7. **Ban Weak Shot Writing**:
-   - Bad: "Low angle medium shot, character looks up sadly."
-   - Good: "The shot opens on a bright sky; the camera tilts downward past stone spires and lands on the character leaning on a broom at the courtyard edge. The character slowly raises his chin, eyes tracking movement above the clouds, lips parting as sunlight cuts across one side of his face while the other remains in shadow."
-8. **Per-Field Action Requirement**:
-   - \`description\`: A full shot paragraph with continuous visual progression, not a static summary.
-   - \`characterAction\`: Explicit start state, motion path, micro-action, and end state.
-   - \`camera\`: Start framing + movement path + end framing. Example: "Begins high on the sky, slow tilt down past towers, settles into low-angle medium shot on Aris."
-   - \`videoPrompt\`: Must be production-ready English for a video model and must read like a directed moving shot, not keyword fragments.
+## 任务
+分析给定剧本并生成完整分镜序列。
+**重要要求**：
+1. **细节强度**：必须输出高度细化的镜头描述和 \`videoPrompt\`，不要总结，不要偷懒，不要写泛化短句。灯光、运动、物理反馈写得越具体越好。
+2. **镜头拆分策略**：总镜头数必须在 ${STORYBOARD_SHOT_COUNT_MIN} 到 ${STORYBOARD_SHOT_COUNT_MAX} 之间。把动作和对白拆成 ${SHOT_DURATION_MIN_SECONDS}-${SHOT_DURATION_MAX_SECONDS} 秒的短镜头，不要过度压缩。所有 \`duration\` 相加后必须落在 ${EPISODE_DURATION_MIN_SECONDS} 到 ${EPISODE_DURATION_MAX_SECONDS} 秒之间。
+3. **场景必填**：每个镜头都必须有非空的 \`sceneLabel\`，并且 \`suggestedAssets.locations\` 至少有一个场景项。无论是否承接上一镜，都不允许留空。
+4. **首镜优先级**：第一个镜头必须是本集最强戏剧点、最高情绪值或最大悬念回报点，先打击中用户，再展开剧情。
+5. **预告后的时序清晰度**：如果镜头 1 是后段高潮的冷开场，镜头 2 或后续镜头必须在 \`transition.timeGap\` 与 \`timeline\` 中明确标记回溯或时间跳转，保证叙事清楚。
+6. **先写动作，再写解释**：每个镜头都优先写可见运动，再写情绪判断。重点交代身体力学、镜头路径、目光变化、物体位移、布料头发反馈、灰尘烟雾与光线变化。
+7. **禁止弱镜头写法**：
+   - 差例：\`低机位中景，人物悲伤抬头。\`
+   - 好例：\`镜头从刺眼天光开始，缓慢下摇掠过斑驳塔尖，最后落在庭院边缘的角色身上；他半倚着扫帚杆，肩膀先微微绷紧，再慢慢抬起下巴，视线追向云层上方的异动，嘴唇轻轻分开，一侧脸被日光切亮，另一侧仍压在阴影里。\`
+8. **字段级动作要求**：
+   - \`description\`：必须是一整段连续镜头描述，不能是静态摘要。
+   - \`characterAction\`：必须包含起始状态、动作路径、微动作和结束状态。
+   - \`camera\`：必须包含起始构图、运动路径、结束构图。
+   - \`videoPrompt\`：必须是可直接给视频模型使用的**中文**成片级提示词，写成导演在调度运动镜头，而不是关键词堆砌。
 
 **Script Content**:
 ${scriptContent.slice(0, 15000)}...
@@ -566,41 +581,41 @@ ${JSON.stringify(existingAssets.map(a => ({ id: a.id, name: a.name, type: a.type
   "shots": [
     {
       "sequence": 1,
-      "description": "EXTREMELY DETAILED moving-shot description. Write the shot as continuous screen action: what appears first in frame, how the camera moves, how the character moves during the shot, how the environment reacts, and what the final frame emphasizes. Include composition, character details [Name: traits, clothing, micro-expressions], spatial relations, lighting geometry, and cinematic texture.",
-      "sceneLabel": "Scene location tag (e.g. City Ruins, Supermarket)",
+      "description": "极度详细的连续运动镜头描述。写清楚画面最先出现什么、镜头如何移动、角色如何运动、环境如何反馈、最后镜头落在哪个视觉重点上。包含构图、角色细节[角色名：特征、服装、微表情]、空间关系、光线结构和电影质感，统一使用中文。",
+      "sceneLabel": "场景标签，例如：废弃城区、便利店、医院走廊",
       
       "transition": {
-        "incomingAction": "Action state from the end of the previous shot",
-        "continuityMatch": "Visual connection point with previous shot",
-        "spatialRelationship": "Spatial position relative to previous shot",
-        "timeGap": "Continuous / 2s later / Simultaneous"
+        "incomingAction": "上一镜结束时承接过来的动作状态",
+        "continuityMatch": "与上一镜的视觉衔接点",
+        "spatialRelationship": "相对上一镜的空间位置关系",
+        "timeGap": "连续 / 2秒后 / 同时发生 / 回溯到更早"
       },
-      "eyeline": "Looking direction, target, and changes within shot",
-      "lightingEvolution": "How light changes and continuity from previous shot",
-      "cameraMotivation": "Why the camera moves (e.g., following character, revealing environment)",
-      "timeline": "Shot start, action start/end time anchors",
-      "environmentalState": "Physical state of the environment to maintain continuity",
-      "generationConstraints": ["Rule 1 to prevent AI errors", "Rule 2"],
+      "eyeline": "角色视线方向、视线对象与镜头内的变化",
+      "lightingEvolution": "光线如何变化，以及与上一镜如何保持延续",
+      "cameraMotivation": "镜头为什么移动，例如跟随人物、揭示空间、压迫情绪",
+      "timeline": "镜头开始、动作开始、动作结束等时间锚点",
+      "environmentalState": "为保持连续性需要记录的环境物理状态",
+      "generationConstraints": ["用于避免模型出错的约束 1", "用于避免模型出错的约束 2"],
 
-      "characterAction": "Detailed action including Start State, movement process, gaze change, hand/body micro-movements, muscle tension, speed, and End State",
-      "emotion": "Dominant emotion (e.g. Panic, Despair)",
-      "lightingAtmosphere": "Lighting and atmosphere (e.g. High contrast hard light, Dim orange firelight)",
-      "soundEffect": "Key sound effects (e.g. Heavy footsteps, Distant sirens)",
-      "dialogue": "Character Name: Content (or Voiceover: Content)",
-      "camera": "Start framing + camera path + end framing, e.g. Begins on bright sky, slow tilt down past castle spires, settles into low-angle medium shot on Aris",
-      "size": "Medium Shot / Close-up / Long Shot",
+      "characterAction": "详细动作描述，包含起始状态、运动过程、目光变化、手部/身体微动作、肌肉紧张度、速度与结束状态",
+      "emotion": "主导情绪，例如：惊惧、绝望、压抑、狂喜",
+      "lightingAtmosphere": "光线与氛围，例如：高反差硬光、昏暗橙色火光、潮湿冷白顶灯",
+      "soundEffect": "关键音效，例如：急促脚步声、远处警笛、玻璃碎裂声",
+      "dialogue": "角色名：台词内容（或 旁白：内容），该字段必须使用 ${dialogueLanguageLabel}",
+      "camera": "起始构图 + 镜头路径 + 结束构图，例如：从明亮天光开始，缓慢下摇掠过塔尖，最后停在角色的低机位中景上",
+      "size": "景别，例如：中景、特写、远景",
       "duration": ${DEFAULT_SHOT_DURATION_SECONDS}, // Estimated duration in seconds, must stay within ${SHOT_DURATION_MIN_SECONDS}-${SHOT_DURATION_MAX_SECONDS}
-      "videoPrompt": "Detailed English prompt for video generation. MUST obey the selected style strategy above and read as a continuous moving shot. Start with the opening frame, then describe the camera movement, subject motion, physical dynamics, action impact, environmental reactions, and the final image. Be extremely specific and avoid tag-only phrasing.",
-      "suggestedAssetNames": ["Char Name", "Location Name"],
+      "videoPrompt": "用于视频生成的高细节中文提示词。必须遵守上方风格策略，写成连续运动镜头：先写开场画面，再写镜头运动、主体动作、物理反馈、动作力度、环境反应与最后停留的画面，禁止英文，禁止关键词堆砌。",
+      "suggestedAssetNames": ["角色名", "场景名"],
       "characters": [
         {
-          "name": "Character Name",
-          "description": "Character appearance and clothing description for this shot"
+          "name": "角色名",
+          "description": "该镜头内角色的外貌、服装与状态描述，统一使用中文"
         }
       ],
       "suggestedAssets": {
-        "characters": ["Character Name"],
-        "locations": ["Location Name"]
+        "characters": ["角色名"],
+        "locations": ["场景名"]
       }
     },
     ...
@@ -611,7 +626,7 @@ ${JSON.stringify(existingAssets.map(a => ({ id: a.id, name: a.name, type: a.type
 
 export const getStoryboardSystemPrompt = (artStyle?: ArtStyleInput) => {
   const { strategy } = resolvePromptStrategy(artStyle);
-  return strategy.storyboard.systemRole;
+  return `${strategy.storyboard.systemRole} Output rule: all storyboard fields except dialogue must be written in Chinese; dialogue follows the project language. Never output English in non-dialogue fields.`;
 };
 
 export const getCoverDesignPrompt = (title: string, logline: string, characters: string[] = [], language: string = 'zh') => {

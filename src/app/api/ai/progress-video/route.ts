@@ -19,7 +19,15 @@ import {
   mergeVolcengineTaskMetadata,
   createSeedance2VideoTask,
 } from '@/lib/volcengine/video-client';
-import { buildSeedance2VideoPayload } from '@/lib/volcengine/video-payload';
+import {
+  normalizeProjectVideoAspectRatio,
+  normalizeProjectVideoSettings,
+  type ProjectVideoSettingsLike,
+} from '@/lib/volcengine/video-compat';
+import {
+  buildSeedance2VideoPayload,
+  normalizeSeedance2AspectRatio,
+} from '@/lib/volcengine/video-payload';
 import {
   mapVolcengineAssetRow,
   resolveVolcengineReferenceAssets,
@@ -50,6 +58,25 @@ type VideoTaskResult = Record<string, unknown> & {
   };
   usage?: Record<string, unknown>;
   __volcengineMetadata?: Record<string, unknown>;
+};
+
+const getShotAspectRatio = (shot: { video_generation_metadata?: unknown }) => {
+  const metadata =
+    shot.video_generation_metadata &&
+    typeof shot.video_generation_metadata === 'object' &&
+    !Array.isArray(shot.video_generation_metadata)
+      ? (shot.video_generation_metadata as { aspectRatio?: string })
+      : null;
+  return normalizeSeedance2AspectRatio(metadata?.aspectRatio);
+};
+
+const resolveVideoAspectRatio = (
+  shot: { video_generation_metadata?: unknown },
+  settings?: ProjectVideoSettingsLike | null
+) => {
+  const shotRatio = getShotAspectRatio(shot);
+  const projectRatio = settings ? normalizeProjectVideoSettings(settings).aspectRatio : undefined;
+  return normalizeProjectVideoAspectRatio(projectRatio || shotRatio);
 };
 
 const shouldUseSeedance2 = (settings?: VolcengineVideoSettings | null) =>
@@ -182,6 +209,7 @@ export async function POST(req: Request) {
       const projectVideoSettings = await getProjectVideoSettings(supabase, claimedShot.episode_id);
       const projectId = await getProjectIdForEpisode(supabase, claimedShot.episode_id, user.id);
       const useSeedance2 = shouldUseSeedance2(projectVideoSettings);
+      const aspectRatio = resolveVideoAspectRatio(claimedShot, projectVideoSettings);
       const fullPrompt = buildVideoGenerationPrompt(
         [
           { label: 'Scene heading', value: claimedShot.scene_label },
@@ -240,7 +268,8 @@ export async function POST(req: Request) {
                 prompt: fullPrompt,
                 references: resolvedReferences.references,
                 duration: normalizeShotDurationSeconds(claimedShot.duration),
-                ratio: '9:16',
+                ratio: aspectRatio,
+                resolution: '1080p',
                 generateAudio: true,
                 watermark: false,
               });
@@ -251,6 +280,8 @@ export async function POST(req: Request) {
                   model: videoConfig.model,
                   requestContentMode: resolvedReferences.requestContentMode,
                   referenceAssetIds: resolvedReferences.referenceAssetIds,
+                  aspectRatio,
+                  resolution: '1080p',
                   result: seedanceResult,
                 }),
               };
@@ -260,7 +291,7 @@ export async function POST(req: Request) {
               normalizeShotDurationSeconds(claimedShot.duration),
               {
                 multi_shot: false,
-                aspect_ratio: '9:16',
+                aspect_ratio: aspectRatio,
                 sound: 'on',
                 image_list: referenceAssets
                   .filter((asset) => asset.imageUrl)
@@ -321,6 +352,8 @@ export async function POST(req: Request) {
                     video_generation_metadata: {
                       provider: 'volcengine',
                       model: getConfiguredVolcengineVideoModel() || undefined,
+                      aspectRatio,
+                      resolution: '1080p',
                       rawStatus: 'waiting_for_assets',
                       error: error.details || error.message,
                     },
@@ -349,6 +382,7 @@ export async function POST(req: Request) {
               ...(useSeedance2 && getConfiguredVolcengineVideoModel()
                 ? { model: getConfiguredVolcengineVideoModel() }
                 : {}),
+              ...(useSeedance2 ? { aspectRatio, resolution: '1080p' } : {}),
               ...(useSeedance2 ? { rawStatus: 'failed' } : {}),
               error: error instanceof Error ? error.message : String(error),
             },
@@ -384,6 +418,8 @@ export async function POST(req: Request) {
       model?: string;
       requestContentMode?: 'asset_uri' | 'url';
       referenceAssetIds?: string[];
+      aspectRatio?: '9:16' | '16:9';
+      resolution?: '1080p';
       rawStatus?: string;
       usage?: Record<string, unknown>;
       error?: Record<string, unknown> | string | null;

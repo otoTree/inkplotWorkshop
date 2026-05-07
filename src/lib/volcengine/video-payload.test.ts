@@ -21,6 +21,8 @@ test('buildSeedance2VideoPayload prefers active asset URIs', () => {
     watermark: false,
   });
 
+  assert.equal(payload.ratio, '9:16');
+  assert.equal(payload.resolution, '1080p');
   assert.equal(payload.content[1].type, 'image_url');
   const reference = payload.content[1];
   assert.equal(reference.type, 'image_url');
@@ -47,6 +49,8 @@ test('buildSeedance2VideoPayload uses URLs when references are not synced', () =
     watermark: false,
   });
 
+  assert.equal(payload.ratio, '16:9');
+  assert.equal(payload.resolution, '1080p');
   const reference = payload.content[1];
   assert.equal(reference.type, 'image_url');
   if (reference.type === 'image_url') {

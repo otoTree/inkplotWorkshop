@@ -15,6 +15,8 @@ export type VolcengineVideoGenerationMetadata = {
   model?: string;
   requestContentMode?: 'asset_uri' | 'url';
   referenceAssetIds?: string[];
+  aspectRatio?: '9:16' | '16:9';
+  resolution?: '1080p';
   rawStatus?: string;
   usage?: Record<string, unknown>;
   error?: Record<string, unknown> | string | null;
@@ -134,11 +136,15 @@ export const buildVolcengineSubmissionMetadata = ({
   model,
   requestContentMode,
   referenceAssetIds,
+  aspectRatio,
+  resolution,
   result,
 }: {
   model: string;
   requestContentMode: 'asset_uri' | 'url';
   referenceAssetIds: string[];
+  aspectRatio: '9:16' | '16:9';
+  resolution: '1080p';
   result: unknown;
 }): VolcengineVideoGenerationMetadata => {
   const snapshot = getVolcengineTaskSnapshot(result);
@@ -148,6 +154,8 @@ export const buildVolcengineSubmissionMetadata = ({
     model,
     requestContentMode,
     referenceAssetIds,
+    aspectRatio,
+    resolution,
     rawStatus: snapshot.rawStatus || 'processing',
     usage: snapshot.usage,
     ...(snapshot.error ? { error: snapshot.error } : {}),
