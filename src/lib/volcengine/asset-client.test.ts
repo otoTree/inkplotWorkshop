@@ -1,15 +1,23 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { createAsset, type VolcengineAssetConfig } from './asset-client.ts';
+import { AIAPIError } from '../ai-server.ts';
+import {
+  createAsset,
+  getAsset,
+  getVolcengineAssetConfig,
+  type VolcengineAssetConfig,
+} from './asset-client.ts';
 
 const config: VolcengineAssetConfig = {
-  accessKeyId: 'ak-test',
-  secretAccessKey: 'sk-test',
   region: 'cn-beijing',
-  host: 'ark.cn-beijing.volcengineapi.com',
+  baseUrl: 'https://ark.cn-beijing.volcengineapi.com',
   version: '2024-01-01',
   projectName: 'default',
   groupId: 'group-test',
+  authMode: 'legacy',
+  accessKeyId: 'ak-test',
+  secretAccessKey: 'sk-test',
+  host: 'ark.cn-beijing.volcengineapi.com',
 };
 
 test('createAsset signs OpenAPI request and parses Result.Id', async () => {
@@ -48,6 +56,106 @@ test('createAsset signs OpenAPI request and parses Result.Id', async () => {
     assert.ok(requestedHeaders!.get('X-Date'));
     assert.ok(requestedHeaders!.get('X-Content-Sha256'));
     assert.ok(requestedHeaders!.get('Authorization')?.startsWith('HMAC-SHA256'));
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test('getVolcengineAssetConfig prefers ARTS bearer config and normalizes /api/v3 to /api', () => {
+  const previous = {
+    ARTS_API_BASE_URL: process.env.ARTS_API_BASE_URL,
+    ARTS_API_KEY: process.env.ARTS_API_KEY,
+    ARTS_ASSET_PROJECT_NAME: process.env.ARTS_ASSET_PROJECT_NAME,
+    ARTS_ASSET_GROUP_ID: process.env.ARTS_ASSET_GROUP_ID,
+    VOLCENGINE_ACCESS_KEY_ID: process.env.VOLCENGINE_ACCESS_KEY_ID,
+    VOLCENGINE_SECRET_ACCESS_KEY: process.env.VOLCENGINE_SECRET_ACCESS_KEY,
+  };
+
+  process.env.ARTS_API_BASE_URL = 'https://apis.artsapi.com/api/v3';
+  process.env.ARTS_API_KEY = 'arts-key';
+  process.env.ARTS_ASSET_PROJECT_NAME = 'arts-project';
+  process.env.ARTS_ASSET_GROUP_ID = 'arts-group';
+  process.env.VOLCENGINE_ACCESS_KEY_ID = 'legacy-ak';
+  process.env.VOLCENGINE_SECRET_ACCESS_KEY = 'legacy-sk';
+
+  try {
+    const resolved = getVolcengineAssetConfig();
+    assert.equal(resolved.authMode, 'arts');
+    assert.equal(resolved.baseUrl, 'https://apis.artsapi.com/api');
+    assert.equal(resolved.apiKey, 'arts-key');
+    assert.equal(resolved.projectName, 'arts-project');
+    assert.equal(resolved.groupId, 'arts-group');
+  } finally {
+    for (const [key, value] of Object.entries(previous)) {
+      if (value === undefined) {
+        delete process.env[key];
+      } else {
+        process.env[key] = value;
+      }
+    }
+  }
+});
+
+test('createAsset rejects non-public URLs', async () => {
+  assert.throws(
+    () =>
+      createAsset(
+        {
+          GroupId: 'group-test',
+          URL: 'data:image/png;base64,abc',
+          AssetType: 'Image',
+          ProjectName: 'default',
+        },
+        config
+      ),
+    (error) => error instanceof AIAPIError && error.status === 400
+  );
+});
+
+test('getAsset normalizes ARTS-style lowercase payload fields', async () => {
+  const originalFetch = globalThis.fetch;
+
+  globalThis.fetch = (async () =>
+    new Response(
+      JSON.stringify({
+        result: {
+          id: 'asset_arts_1',
+          status: 'active',
+          group_id: 'ag_1',
+          project_name: 'arts-project',
+          asset_type: 'image',
+          error: {
+            code: 'IGNORED',
+            message: 'ignored when active',
+          },
+        },
+      }),
+      {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      }
+    )) as typeof fetch;
+
+  try {
+    const result = await getAsset({ Id: 'asset_arts_1', ProjectName: 'arts-project' }, {
+      region: 'cn-beijing',
+      baseUrl: 'https://apis.artsapi.com/api',
+      version: '2024-01-01',
+      projectName: 'arts-project',
+      groupId: 'ag_1',
+      authMode: 'arts',
+      apiKey: 'arts-key',
+    });
+
+    assert.equal(result.Id, 'asset_arts_1');
+    assert.equal(result.Status, 'Active');
+    assert.equal(result.GroupId, 'ag_1');
+    assert.equal(result.ProjectName, 'arts-project');
+    assert.equal(result.AssetType, 'Image');
+    assert.deepEqual(result.Error, {
+      Code: 'IGNORED',
+      Message: 'ignored when active',
+    });
   } finally {
     globalThis.fetch = originalFetch;
   }

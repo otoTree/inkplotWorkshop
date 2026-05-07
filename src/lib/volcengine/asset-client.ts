@@ -5,13 +5,16 @@ export type VolcengineAssetType = 'Image' | 'Video' | 'Audio';
 export type VolcengineAssetStatus = 'Active' | 'Processing' | 'Failed';
 
 export type VolcengineAssetConfig = {
-  accessKeyId: string;
-  secretAccessKey: string;
   region: string;
-  host: string;
+  baseUrl: string;
   version: string;
   projectName: string;
   groupId?: string;
+  authMode: 'arts' | 'legacy';
+  apiKey?: string;
+  accessKeyId?: string;
+  secretAccessKey?: string;
+  host?: string;
 };
 
 export type VolcengineAssetResult = {
@@ -29,6 +32,7 @@ const SERVICE = 'ark';
 const DEFAULT_REGION = 'cn-beijing';
 const DEFAULT_VERSION = '2024-01-01';
 const DEFAULT_HOST = 'ark.cn-beijing.volcengineapi.com';
+const DEFAULT_ARTS_BASE_URL = 'https://apis.artsapi.com/api';
 
 const getFirstDefinedEnv = (...values: Array<string | undefined>) => {
   for (const value of values) {
@@ -43,25 +47,190 @@ const hmac = (key: crypto.BinaryLike, value: string) =>
 const hmacHex = (key: crypto.BinaryLike, value: string) =>
   crypto.createHmac('sha256', key).update(value).digest('hex');
 
-export const getVolcengineAssetConfig = (): VolcengineAssetConfig => {
-  const accessKeyId = getFirstDefinedEnv(process.env.VOLCENGINE_ACCESS_KEY_ID);
-  const secretAccessKey = getFirstDefinedEnv(process.env.VOLCENGINE_SECRET_ACCESS_KEY);
-  const region = getFirstDefinedEnv(process.env.VOLCENGINE_ASSET_REGION) || DEFAULT_REGION;
-  const projectName = getFirstDefinedEnv(process.env.VOLCENGINE_ASSET_PROJECT_NAME) || 'default';
-  const groupId = getFirstDefinedEnv(process.env.VOLCENGINE_ASSET_GROUP_ID) || undefined;
+const asRecord = (value: unknown): Record<string, unknown> =>
+  value && typeof value === 'object' ? (value as Record<string, unknown>) : {};
 
-  if (!accessKeyId || !secretAccessKey) {
-    throw new AIAPIError('火山素材库 AK/SK 配置不完整', 500);
+const getString = (record: Record<string, unknown>, key: string) =>
+  typeof record[key] === 'string' ? record[key] : undefined;
+
+export const normalizeVolcengineAssetStatus = (
+  status?: string | null
+): VolcengineAssetStatus | undefined => {
+  if (!status) return undefined;
+  const normalized = status.toLowerCase();
+  if (normalized === 'active') return 'Active';
+  if (normalized === 'processing') return 'Processing';
+  if (normalized === 'failed' || normalized === 'error') return 'Failed';
+  return undefined;
+};
+
+const normalizeVolcengineAssetType = (assetType?: string | null): VolcengineAssetType | undefined => {
+  if (!assetType) return undefined;
+  const normalized = assetType.toLowerCase();
+  if (normalized === 'image') return 'Image';
+  if (normalized === 'video') return 'Video';
+  if (normalized === 'audio') return 'Audio';
+  return undefined;
+};
+
+const unwrapVolcengineAssetApiResult = (json: unknown) => {
+  const record = asRecord(json);
+  if (record.ResponseMetadata) {
+    const responseError = asRecord(asRecord(record.ResponseMetadata).Error);
+    if (Object.keys(responseError).length > 0) {
+      throw new AIAPIError(
+        '火山素材库返回错误',
+        502,
+        JSON.stringify(responseError)
+      );
+    }
+  }
+
+  return (
+    record.Result ??
+    record.result ??
+    record.data ??
+    record
+  ) as Record<string, unknown>;
+};
+
+const normalizeVolcengineAssetError = (value: unknown) => {
+  const error = asRecord(value);
+  if (Object.keys(error).length === 0) return undefined;
+
+  const code = getString(error, 'Code') || getString(error, 'code');
+  const message = getString(error, 'Message') || getString(error, 'message');
+  if (!code && !message) return error;
+
+  return {
+    ...(code ? { Code: code } : {}),
+    ...(message ? { Message: message } : {}),
+  };
+};
+
+const normalizeVolcengineAssetResult = (value: unknown): VolcengineAssetResult => {
+  const record = asRecord(value);
+  const id =
+    getString(record, 'Id') ||
+    getString(record, 'id') ||
+    getString(record, 'AssetId') ||
+    getString(record, 'asset_id');
+
+  if (!id) {
+    throw new AIAPIError('火山素材库返回缺少 Asset ID', 502, JSON.stringify(record));
   }
 
   return {
-    accessKeyId,
-    secretAccessKey,
+    Id: id,
+    Name: getString(record, 'Name') || getString(record, 'name'),
+    URL: getString(record, 'URL') || getString(record, 'url'),
+    AssetType: normalizeVolcengineAssetType(
+      getString(record, 'AssetType') || getString(record, 'asset_type')
+    ),
+    GroupId: getString(record, 'GroupId') || getString(record, 'group_id'),
+    Status: normalizeVolcengineAssetStatus(
+      getString(record, 'Status') || getString(record, 'status')
+    ),
+    Error: normalizeVolcengineAssetError(record.Error ?? record.error),
+    ProjectName: getString(record, 'ProjectName') || getString(record, 'project_name'),
+  };
+};
+
+const normalizeVolcengineAssetListResult = (value: unknown) => {
+  const record = asRecord(value);
+  const itemsRaw = Array.isArray(record.Items)
+    ? record.Items
+    : Array.isArray(record.items)
+      ? record.items
+      : [];
+
+  return {
+    Items: itemsRaw.map((item) => normalizeVolcengineAssetResult(item)),
+    TotalCount:
+      typeof record.TotalCount === 'number'
+        ? record.TotalCount
+        : typeof record.total_count === 'number'
+          ? record.total_count
+          : itemsRaw.length,
+    PageNumber:
+      typeof record.PageNumber === 'number'
+        ? record.PageNumber
+        : typeof record.page_number === 'number'
+          ? record.page_number
+          : 1,
+    PageSize:
+      typeof record.PageSize === 'number'
+        ? record.PageSize
+        : typeof record.page_size === 'number'
+          ? record.page_size
+          : itemsRaw.length,
+  };
+};
+
+const assertPublicAssetUrl = (value: string) => {
+  let parsed: URL;
+
+  try {
+    parsed = new URL(value);
+  } catch {
+    throw new AIAPIError('火山素材库 CreateAsset 仅支持公网 URL', 400, value);
+  }
+
+  if (!['http:', 'https:'].includes(parsed.protocol)) {
+    throw new AIAPIError('火山素材库 CreateAsset 仅支持公网 URL', 400, value);
+  }
+};
+
+export const getVolcengineAssetConfig = (): VolcengineAssetConfig => {
+  const region = getFirstDefinedEnv(process.env.VOLCENGINE_ASSET_REGION) || DEFAULT_REGION;
+  const projectName =
+    getFirstDefinedEnv(process.env.ARTS_ASSET_PROJECT_NAME, process.env.VOLCENGINE_ASSET_PROJECT_NAME) ||
+    'default';
+  const groupId =
+    getFirstDefinedEnv(process.env.ARTS_ASSET_GROUP_ID, process.env.VOLCENGINE_ASSET_GROUP_ID) || undefined;
+  const artsBaseUrl = getFirstDefinedEnv(process.env.ARTS_API_BASE_URL);
+  const artsApiKey = getFirstDefinedEnv(process.env.ARTS_API_KEY);
+
+  if (artsBaseUrl || artsApiKey) {
+    if (!artsApiKey) {
+      throw new AIAPIError('ARTS_API_KEY 未配置，无法访问火山素材库', 500);
+    }
+
+    const normalizedBaseUrl = (() => {
+      const trimmed = (artsBaseUrl || DEFAULT_ARTS_BASE_URL).replace(/\/+$/, '');
+      if (/\/api\/v\d+$/i.test(trimmed)) return trimmed.replace(/\/v\d+$/i, '');
+      if (/\/api$/i.test(trimmed)) return trimmed;
+      return `${trimmed}/api`;
+    })();
+
+    return {
+      region,
+      baseUrl: normalizedBaseUrl,
+      version: DEFAULT_VERSION,
+      projectName,
+      groupId,
+      authMode: 'arts',
+      apiKey: artsApiKey,
+    };
+  }
+
+  const accessKeyId = getFirstDefinedEnv(process.env.VOLCENGINE_ACCESS_KEY_ID);
+  const secretAccessKey = getFirstDefinedEnv(process.env.VOLCENGINE_SECRET_ACCESS_KEY);
+
+  if (!accessKeyId || !secretAccessKey) {
+    throw new AIAPIError('火山素材库配置不完整，请配置 ARTS_API_BASE_URL/ARTS_API_KEY 或旧版 VOLCENGINE AK/SK', 500);
+  }
+
+  return {
     region,
-    host: DEFAULT_HOST,
+    baseUrl: `https://${DEFAULT_HOST}`,
     version: DEFAULT_VERSION,
     projectName,
     groupId,
+    authMode: 'legacy',
+    accessKeyId,
+    secretAccessKey,
+    host: DEFAULT_HOST,
   };
 };
 
@@ -76,6 +245,10 @@ export const buildVolcengineAssetHeaders = ({
   config: VolcengineAssetConfig;
   now?: Date;
 }) => {
+  if (!config.secretAccessKey || !config.accessKeyId || !config.host) {
+    throw new AIAPIError('火山素材库 legacy 签名配置不完整', 500);
+  }
+
   const xDate = now.toISOString().replace(/[:-]|\.\d{3}/g, '');
   const shortDate = xDate.slice(0, 8);
   const contentHash = sha256Hex(bodyJson);
@@ -126,8 +299,14 @@ export const requestVolcengineAssetApi = async <T>(
   config: VolcengineAssetConfig = getVolcengineAssetConfig()
 ): Promise<T> => {
   const bodyJson = JSON.stringify(body);
-  const headers = buildVolcengineAssetHeaders({ action, bodyJson, config });
-  const url = `https://${config.host}/?Action=${encodeURIComponent(action)}&Version=${encodeURIComponent(config.version)}`;
+  const headers =
+    config.authMode === 'arts'
+      ? {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${config.apiKey}`,
+        }
+      : buildVolcengineAssetHeaders({ action, bodyJson, config });
+  const url = `${config.baseUrl}?Action=${encodeURIComponent(action)}&Version=${encodeURIComponent(config.version)}`;
   const response = await fetch(url, {
     method: 'POST',
     headers,
@@ -140,14 +319,7 @@ export const requestVolcengineAssetApi = async <T>(
   }
 
   const json = await response.json();
-  if (json.ResponseMetadata?.Error) {
-    throw new AIAPIError(
-      `火山素材库 ${action} 返回错误`,
-      502,
-      JSON.stringify(json.ResponseMetadata.Error)
-    );
-  }
-  return json.Result as T;
+  return unwrapVolcengineAssetApiResult(json) as T;
 };
 
 export const createAssetGroup = (input: {
@@ -163,10 +335,17 @@ export const createAsset = (input: {
   Name?: string;
   AssetType: VolcengineAssetType;
   ProjectName?: string;
-}, config?: VolcengineAssetConfig) => requestVolcengineAssetApi<{ Id: string }>('CreateAsset', input, config);
+}, config?: VolcengineAssetConfig) => {
+  assertPublicAssetUrl(input.URL);
+  return requestVolcengineAssetApi<Record<string, unknown>>('CreateAsset', input, config).then((result) =>
+    normalizeVolcengineAssetResult(result)
+  );
+};
 
 export const getAsset = (input: { Id: string; ProjectName?: string }, config?: VolcengineAssetConfig) =>
-  requestVolcengineAssetApi<VolcengineAssetResult>('GetAsset', input, config);
+  requestVolcengineAssetApi<Record<string, unknown>>('GetAsset', input, config).then((result) =>
+    normalizeVolcengineAssetResult(result)
+  );
 
 export const listAssets = (input: {
   Filter: Record<string, unknown>;
@@ -176,9 +355,15 @@ export const listAssets = (input: {
   SortOrder?: string;
   ProjectName?: string;
 }, config?: VolcengineAssetConfig) =>
-  requestVolcengineAssetApi<{
+  requestVolcengineAssetApi<Record<string, unknown>>(
+    'ListAssets',
+    input,
+    config
+  ).then((result) =>
+    normalizeVolcengineAssetListResult(result) as {
     Items: VolcengineAssetResult[];
     TotalCount: number;
     PageNumber: number;
     PageSize: number;
-  }>('ListAssets', input, config);
+    }
+  );

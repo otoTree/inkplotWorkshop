@@ -1,0 +1,14 @@
+- [x] 运行时优先按 `docs/arts-volcengine-curl.md` 约定读取 `ARTS_API_BASE_URL`、`ARTS_API_KEY`、`ARTS_VIDEO_MODEL`
+- [x] 素材库请求统一走 `.../api?Action=<Action>&Version=2024-01-01`，并兼容 `.../api/v3` 到 `.../api` 的回退规则
+- [x] 视频任务提交与查询统一走 `.../contents/generations/tasks`
+- [x] 项目级 ARTS 素材组可以被创建、绑定并复用
+- [x] 资产上传后会持续轮询到 `Status=Active` 或 `Status=Failed`，而不是只记录受理成功
+- [x] 已处于 `Active` 的 ARTS 资产会被重复复用而不是重复上传
+- [x] `seedance-2.0` 分镜视频请求中的 ARTS 参考资产统一使用 `asset://<asset_id>` 形式
+- [x] `seedance-2.0` 在资产未 `Active` 时不会回退成普通公网 URL 继续提交任务
+- [x] `legacy` 视频生成链路保持可用，且不被新的 `asset://` 约束错误拦截
+- [x] 项目级默认视频模型可以稳定在 `seedance-2.0` 与 `legacy` 之间切换
+- [x] 历史项目和旧环境变量仍有明确兜底，不会因迁移导致生成入口直接报错
+- [x] 前台接口、状态查询接口、后台 cron 对视频任务状态的映射与持久化保持一致
+- [x] 视频失败原因与引用资产信息会被结构化保存并可用于界面展示
+- [x] 相关改动通过最小必要的类型检查、诊断或针对性验证

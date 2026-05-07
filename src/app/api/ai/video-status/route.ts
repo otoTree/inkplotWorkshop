@@ -2,10 +2,11 @@ import { NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 import { AIAPIError, getAIVideoStatus, completeVideoTask } from '@/lib/ai-server';
 import {
-  extractVolcengineVideoUrl,
+  getVolcengineTaskSnapshot,
   getSeedance2VideoTask,
-  mapVolcengineTaskStatus,
+  mergeVolcengineTaskMetadata,
 } from '@/lib/volcengine/video-client';
+import { inferVideoTaskProvider } from '@/lib/volcengine/video-compat';
 
 export const maxDuration = 120;
 
@@ -33,20 +34,28 @@ export async function POST(req: Request) {
 
     const metadata = (shotForProvider?.video_generation_metadata || {}) as {
       provider?: string;
+      model?: string;
+      requestContentMode?: 'asset_uri' | 'url';
+      referenceAssetIds?: string[];
+      rawStatus?: string;
       usage?: Record<string, unknown>;
+      error?: Record<string, unknown> | string | null;
     };
-    const isVolcengineTask = metadata.provider === 'volcengine';
+    const isVolcengineTask = inferVideoTaskProvider(videoId, metadata) === 'volcengine';
 
     const result = isVolcengineTask
       ? await getSeedance2VideoTask(videoId)
       : await getAIVideoStatus(videoId);
     const statusInfo = result.data || result;
-    const status = (statusInfo.status || '').toLowerCase();
-    const mappedVolcengineStatus = isVolcengineTask ? mapVolcengineTaskStatus(status) : null;
+    const volcengineSnapshot = isVolcengineTask ? getVolcengineTaskSnapshot(result) : null;
+    const status = isVolcengineTask
+      ? volcengineSnapshot?.rawStatus || ''
+      : (statusInfo.status || '').toLowerCase();
+    const mappedVolcengineStatus = isVolcengineTask ? volcengineSnapshot?.videoStatus || 'processing' : null;
     
     if ((isVolcengineTask && mappedVolcengineStatus === 'completed') || (!isVolcengineTask && ['completed', 'succeeded', 'success'].includes(status))) {
       const directUrl =
-        (isVolcengineTask ? extractVolcengineVideoUrl(result) : null) ||
+        (isVolcengineTask ? volcengineSnapshot?.videoUrl || null : null) ||
         statusInfo.url ||
         statusInfo.video_url ||
         statusInfo.content?.video_url ||
@@ -60,11 +69,7 @@ export async function POST(req: Request) {
           video_url: directUrl,
           ...(isVolcengineTask
             ? {
-                video_generation_metadata: {
-                  ...metadata,
-                  rawStatus: status,
-                  usage: statusInfo.usage || result.usage || metadata.usage,
-                },
+                video_generation_metadata: mergeVolcengineTaskMetadata(metadata, result),
               }
             : {}),
         })
@@ -82,11 +87,7 @@ export async function POST(req: Request) {
           video_status: 'failed',
           ...(isVolcengineTask
             ? {
-                video_generation_metadata: {
-                  ...metadata,
-                  rawStatus: status,
-                  error: statusInfo.error || result.error || null,
-                },
+                video_generation_metadata: mergeVolcengineTaskMetadata(metadata, result),
               }
             : {}),
         })

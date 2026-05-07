@@ -1,6 +1,8 @@
 export type Seedance2Reference = {
   usableUrl: string;
   mode: 'asset_uri' | 'url';
+  sourceUrl?: string;
+  volcengineAssetStatus?: string | null;
   contentType?: 'image_url' | 'video_url' | 'audio_url';
   role?: 'reference_image' | 'reference_video' | 'reference_audio';
 };
@@ -17,6 +19,25 @@ export type Seedance2VideoPayload = {
   ratio?: string;
   duration?: number;
   watermark?: boolean;
+};
+
+const isAssetUri = (value: string) => /^asset:\/\/[^/\s]+$/i.test(value);
+
+const resolveReferenceUrl = (reference: Seedance2Reference) => {
+  const fallbackUrl = reference.sourceUrl || (reference.mode === 'url' ? reference.usableUrl : '');
+
+  if (reference.mode === 'asset_uri') {
+    if (reference.volcengineAssetStatus === 'Active' && isAssetUri(reference.usableUrl)) {
+      return reference.usableUrl;
+    }
+    return fallbackUrl || null;
+  }
+
+  if (isAssetUri(reference.usableUrl)) {
+    return reference.volcengineAssetStatus === 'Active' ? reference.usableUrl : fallbackUrl || null;
+  }
+
+  return reference.usableUrl;
 };
 
 export const buildSeedance2VideoPayload = ({
@@ -44,24 +65,25 @@ export const buildSeedance2VideoPayload = ({
   ];
 
   for (const reference of references) {
-    if (!reference.usableUrl) continue;
+    const resolvedUrl = resolveReferenceUrl(reference);
+    if (!resolvedUrl) continue;
     const contentType = reference.contentType || 'image_url';
     if (contentType === 'video_url') {
       content.push({
         type: 'video_url',
-        video_url: { url: reference.usableUrl },
+        video_url: { url: resolvedUrl },
         role: reference.role === 'reference_video' ? reference.role : 'reference_video',
       });
     } else if (contentType === 'audio_url') {
       content.push({
         type: 'audio_url',
-        audio_url: { url: reference.usableUrl },
+        audio_url: { url: resolvedUrl },
         role: reference.role === 'reference_audio' ? reference.role : 'reference_audio',
       });
     } else {
       content.push({
         type: 'image_url',
-        image_url: { url: reference.usableUrl },
+        image_url: { url: resolvedUrl },
         role: 'reference_image',
       });
     }

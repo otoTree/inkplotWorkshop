@@ -28,6 +28,11 @@ import {
   DEFAULT_PROJECT_VISUAL_STYLE_PRESET,
   parseProjectVisualStyle,
 } from '@/lib/project-visual-style';
+import {
+  DEFAULT_PROJECT_VIDEO_MODEL,
+  DEFAULT_VOLCENGINE_PROJECT_NAME,
+  normalizeProjectVideoSettings,
+} from '@/lib/volcengine/video-compat';
 import { ProjectVisualStylePresetSelector } from './ProjectVisualStylePresetSelector';
 
 interface ProjectDialogProps {
@@ -52,10 +57,10 @@ export function ProjectDialog({ children, project, open: controlledOpen, onOpenC
   const [visualStylePreset, setVisualStylePreset] = useState<ProjectVisualStylePreset>(DEFAULT_PROJECT_VISUAL_STYLE_PRESET);
   const [characterArtStyle, setCharacterArtStyle] = useState('');
   const [sceneArtStyle, setSceneArtStyle] = useState('');
-  const [videoModel, setVideoModel] = useState<'legacy' | 'seedance-2.0'>('legacy');
+  const [videoModel, setVideoModel] = useState<'legacy' | 'seedance-2.0'>(DEFAULT_PROJECT_VIDEO_MODEL);
   const [syncVolcengineAssets, setSyncVolcengineAssets] = useState(false);
   const [volcengineAssetGroupId, setVolcengineAssetGroupId] = useState('');
-  const [volcengineProjectName, setVolcengineProjectName] = useState('default');
+  const [volcengineProjectName, setVolcengineProjectName] = useState(DEFAULT_VOLCENGINE_PROJECT_NAME);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [ideaInput, setIdeaInput] = useState('');
   const [isGenerating, setIsGenerating] = useState(false);
@@ -71,16 +76,17 @@ export function ProjectDialog({ children, project, open: controlledOpen, onOpenC
     if (open) {
       if (project) {
         const parsedStyle = parseProjectVisualStyle(project);
+        const normalizedVideoSettings = normalizeProjectVideoSettings(project.volcengineVideoSettings);
         setTitle(project.title);
         setLogline(project.logline);
         setLanguage(project.language || 'zh');
         setVisualStylePreset(parsedStyle.visualStylePreset || DEFAULT_PROJECT_VISUAL_STYLE_PRESET);
         setCharacterArtStyle(project.characterArtStyle || project.artStyle || '');
         setSceneArtStyle(project.sceneArtStyle || project.artStyle || '');
-        setVideoModel(project.volcengineVideoSettings?.preferredVideoModel || 'legacy');
-        setSyncVolcengineAssets(!!project.volcengineVideoSettings?.syncAssetsToPrivateLibrary);
-        setVolcengineAssetGroupId(project.volcengineVideoSettings?.assetGroupId || '');
-        setVolcengineProjectName(project.volcengineVideoSettings?.projectName || 'default');
+        setVideoModel(normalizedVideoSettings.preferredVideoModel);
+        setSyncVolcengineAssets(normalizedVideoSettings.syncAssetsToPrivateLibrary);
+        setVolcengineAssetGroupId(normalizedVideoSettings.assetGroupId || '');
+        setVolcengineProjectName(normalizedVideoSettings.projectName);
         setIdeaInput('');
       } else {
         // Only clear if not editing (or if we want to reset on new create)
@@ -92,10 +98,10 @@ export function ProjectDialog({ children, project, open: controlledOpen, onOpenC
           setVisualStylePreset(DEFAULT_PROJECT_VISUAL_STYLE_PRESET);
           setCharacterArtStyle('');
           setSceneArtStyle('');
-          setVideoModel('legacy');
+          setVideoModel(DEFAULT_PROJECT_VIDEO_MODEL);
           setSyncVolcengineAssets(false);
           setVolcengineAssetGroupId('');
-          setVolcengineProjectName('default');
+          setVolcengineProjectName(DEFAULT_VOLCENGINE_PROJECT_NAME);
           setIdeaInput('');
         }
       }
@@ -161,7 +167,7 @@ export function ProjectDialog({ children, project, open: controlledOpen, onOpenC
             preferredVideoModel: videoModel,
             syncAssetsToPrivateLibrary: syncVolcengineAssets,
             assetGroupId: volcengineAssetGroupId.trim() || undefined,
-            projectName: volcengineProjectName.trim() || 'default',
+            projectName: volcengineProjectName.trim() || DEFAULT_VOLCENGINE_PROJECT_NAME,
           },
           updatedAt: Date.now(),
         });
@@ -208,7 +214,7 @@ export function ProjectDialog({ children, project, open: controlledOpen, onOpenC
             preferredVideoModel: videoModel,
             syncAssetsToPrivateLibrary: syncVolcengineAssets,
             assetGroupId: volcengineAssetGroupId.trim() || undefined,
-            projectName: volcengineProjectName.trim() || 'default',
+            projectName: volcengineProjectName.trim() || DEFAULT_VOLCENGINE_PROJECT_NAME,
           },
           genre: [],
           createdAt: Date.now(),
@@ -229,10 +235,10 @@ export function ProjectDialog({ children, project, open: controlledOpen, onOpenC
         setVisualStylePreset(DEFAULT_PROJECT_VISUAL_STYLE_PRESET);
         setCharacterArtStyle('');
         setSceneArtStyle('');
-        setVideoModel('legacy');
+        setVideoModel(DEFAULT_PROJECT_VIDEO_MODEL);
         setSyncVolcengineAssets(false);
         setVolcengineAssetGroupId('');
-        setVolcengineProjectName('default');
+        setVolcengineProjectName(DEFAULT_VOLCENGINE_PROJECT_NAME);
       }
       if (onSuccess) onSuccess();
     } catch (error) {

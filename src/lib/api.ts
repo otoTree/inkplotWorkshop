@@ -6,11 +6,15 @@ import {
   serializeProjectVisualStyle,
 } from '@/lib/project-visual-style';
 import { normalizeShotDurationSeconds } from '@/lib/duration';
+import { normalizeProjectVideoSettings } from '@/lib/volcengine/video-compat';
 
 const supabase = createClient();
 
 const toProject = (row: Record<string, unknown>): Project => {
   const resolvedStyle = resolveProjectVisualStyleSelection(row.art_style);
+  const normalizedVideoSettings = normalizeProjectVideoSettings(
+    row.volcengine_video_settings as Project['volcengineVideoSettings'] | undefined
+  );
   return {
     id: row.id as string,
     title: row.title as string,
@@ -29,7 +33,7 @@ const toProject = (row: Record<string, unknown>): Project => {
     coverTitle: row.cover_title as string | undefined,
     coverSlogan: row.cover_slogan as string | undefined,
     coverPrompt: row.cover_prompt as string | undefined,
-    volcengineVideoSettings: row.volcengine_video_settings as Project['volcengineVideoSettings'] | undefined,
+    volcengineVideoSettings: normalizedVideoSettings,
     createdAt: new Date(row.created_at as string).getTime(),
     updatedAt: new Date(row.updated_at as string).getTime(),
   };

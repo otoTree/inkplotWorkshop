@@ -10,6 +10,7 @@ test('buildSeedance2VideoPayload prefers active asset URIs', () => {
       {
         usableUrl: 'asset://asset-20260424120352-8lkvp',
         mode: 'asset_uri',
+        volcengineAssetStatus: 'Active',
         contentType: 'image_url',
         role: 'reference_image',
       },
@@ -50,5 +51,28 @@ test('buildSeedance2VideoPayload uses URLs when references are not synced', () =
   assert.equal(reference.type, 'image_url');
   if (reference.type === 'image_url') {
     assert.equal(reference.image_url.url, 'https://example.com/a.png');
+  }
+});
+
+test('buildSeedance2VideoPayload falls back to source URL for non-active asset URIs', () => {
+  const payload = buildSeedance2VideoPayload({
+    model: 'doubao-seedance-2-0-pro',
+    prompt: '图片1保持场景一致。',
+    references: [
+      {
+        usableUrl: 'asset://asset-processing-1',
+        sourceUrl: 'https://example.com/pending.png',
+        mode: 'asset_uri',
+        volcengineAssetStatus: 'Processing',
+        contentType: 'image_url',
+        role: 'reference_image',
+      },
+    ],
+  });
+
+  const reference = payload.content[1];
+  assert.equal(reference.type, 'image_url');
+  if (reference.type === 'image_url') {
+    assert.equal(reference.image_url.url, 'https://example.com/pending.png');
   }
 });

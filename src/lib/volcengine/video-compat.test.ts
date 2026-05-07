@@ -1,0 +1,56 @@
+import assert from 'node:assert/strict';
+import test from 'node:test';
+import {
+  DEFAULT_PROJECT_VIDEO_MODEL,
+  inferVideoTaskProvider,
+  normalizeProjectVideoModel,
+  normalizeProjectVideoSettings,
+  shouldUseSeedance2ForProject,
+} from './video-compat.ts';
+
+test('normalizeProjectVideoModel defaults old projects to legacy', () => {
+  assert.equal(normalizeProjectVideoModel(undefined), DEFAULT_PROJECT_VIDEO_MODEL);
+  assert.equal(normalizeProjectVideoModel(''), DEFAULT_PROJECT_VIDEO_MODEL);
+  assert.equal(normalizeProjectVideoModel('doubao-video'), DEFAULT_PROJECT_VIDEO_MODEL);
+});
+
+test('normalizeProjectVideoModel maps legacy seedance strings to seedance-2.0', () => {
+  assert.equal(normalizeProjectVideoModel('doubao-seedance-2-0-pro'), 'seedance-2.0');
+});
+
+test('normalizeProjectVideoSettings applies explicit safe defaults', () => {
+  assert.deepEqual(normalizeProjectVideoSettings(null), {
+    syncAssetsToPrivateLibrary: false,
+    assetGroupId: undefined,
+    projectName: 'default',
+    preferredVideoModel: 'legacy',
+  });
+});
+
+test('shouldUseSeedance2ForProject respects explicit project choice', () => {
+  assert.equal(shouldUseSeedance2ForProject({ preferredVideoModel: 'seedance-2.0' }), true);
+  assert.equal(shouldUseSeedance2ForProject({ preferredVideoModel: 'legacy' }), false);
+});
+
+test('inferVideoTaskProvider recognizes old volcengine metadata without provider', () => {
+  assert.equal(
+    inferVideoTaskProvider('task-anything', {
+      model: 'doubao-seedance-2-0-pro',
+    }),
+    'volcengine'
+  );
+  assert.equal(
+    inferVideoTaskProvider('task-anything', {
+      requestContentMode: 'asset_uri',
+    }),
+    'volcengine'
+  );
+});
+
+test('inferVideoTaskProvider falls back to legacy for old legacy tasks', () => {
+  assert.equal(inferVideoTaskProvider('job_legacy_123', {}), 'legacy');
+});
+
+test('inferVideoTaskProvider recognizes legacy volcengine task ids', () => {
+  assert.equal(inferVideoTaskProvider('cgt-20260507-demo', {}), 'volcengine');
+});

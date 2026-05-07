@@ -10,12 +10,35 @@ export type VolcengineVideoConfig = {
 
 export type VolcengineMappedTaskStatus = 'processing' | 'completed' | 'failed';
 type JsonRecord = Record<string, unknown>;
+export type VolcengineVideoGenerationMetadata = {
+  provider?: 'volcengine' | string;
+  model?: string;
+  requestContentMode?: 'asset_uri' | 'url';
+  referenceAssetIds?: string[];
+  rawStatus?: string;
+  usage?: Record<string, unknown>;
+  error?: Record<string, unknown> | string | null;
+};
+export type VolcengineTaskSnapshot = {
+  rawStatus: string;
+  videoStatus: VolcengineMappedTaskStatus;
+  videoUrl: string | null;
+  usage?: Record<string, unknown>;
+  error?: Record<string, unknown> | string | null;
+};
 
 const getFirstDefinedEnv = (...values: Array<string | undefined>) => {
   for (const value of values) {
     if (typeof value === 'string' && value.trim()) return value.trim();
   }
   return '';
+};
+
+const normalizeVideoBaseUrl = (value: string) => {
+  const trimmed = value.replace(/\/+$/, '');
+  if (/\/api\/v\d+$/i.test(trimmed)) return trimmed;
+  if (/\/api$/i.test(trimmed)) return `${trimmed}/v3`;
+  return `${trimmed}/api/v3`;
 };
 
 const toTimeoutMs = (value: string | undefined) => {
@@ -27,18 +50,16 @@ const toTimeoutMs = (value: string | undefined) => {
 };
 
 export const getVolcengineVideoConfig = (): VolcengineVideoConfig => {
-  const baseUrl = (
-    getFirstDefinedEnv(process.env.VOLCENGINE_ARK_VIDEO_BASE_URL) ||
-    'https://ark.cn-beijing.volces.com/api/v3'
-  ).replace(/\/+$/, '');
+  const baseUrl = normalizeVideoBaseUrl(
+    getFirstDefinedEnv(process.env.ARTS_API_BASE_URL, process.env.VOLCENGINE_ARK_VIDEO_BASE_URL) ||
+      'https://ark.cn-beijing.volces.com/api/v3'
+  );
   const apiKey = getFirstDefinedEnv(
+    process.env.ARTS_API_KEY,
     process.env.VOLCENGINE_ARK_VIDEO_API_KEY,
     process.env.ARK_API_KEY
   );
-  const model = getFirstDefinedEnv(
-    process.env.VOLCENGINE_ARK_VIDEO_MODEL,
-    process.env.AI_API_VIDEO_MODEL
-  );
+  const model = getConfiguredVolcengineVideoModel();
   const timeoutMs = toTimeoutMs(
     getFirstDefinedEnv(process.env.VOLCENGINE_ARK_VIDEO_TIMEOUT_MS, process.env.AI_API_TIMEOUT_MS)
   );
@@ -49,6 +70,13 @@ export const getVolcengineVideoConfig = (): VolcengineVideoConfig => {
 
   return { baseUrl, apiKey, model, timeoutMs };
 };
+
+export const getConfiguredVolcengineVideoModel = () =>
+  getFirstDefinedEnv(
+    process.env.ARTS_VIDEO_MODEL,
+    process.env.VOLCENGINE_ARK_VIDEO_MODEL,
+    process.env.AI_API_VIDEO_MODEL
+  );
 
 export const isSeedance2Model = (model?: string | null) =>
   typeof model === 'string' && /seedance[-_]?2|seedance-2|2-0/i.test(model);
@@ -62,6 +90,11 @@ export const mapVolcengineTaskStatus = (status: string): VolcengineMappedTaskSta
 
 const asRecord = (value: unknown): JsonRecord =>
   value && typeof value === 'object' ? (value as JsonRecord) : {};
+
+const getOptionalRecord = (value: unknown): JsonRecord | undefined => {
+  const record = asRecord(value);
+  return Object.keys(record).length > 0 ? record : undefined;
+};
 
 const getString = (record: JsonRecord, key: string) =>
   typeof record[key] === 'string' ? record[key] : null;
@@ -80,6 +113,64 @@ export const extractVolcengineVideoUrl = (result: unknown): string | null => {
     getString(data, 'video_url') ||
     getString(data, 'url')
   );
+};
+
+export const getVolcengineTaskSnapshot = (result: unknown): VolcengineTaskSnapshot => {
+  const root = asRecord(result);
+  const data = asRecord(root.data);
+  const statusInfo = getString(data, 'status') ? data : root;
+  const rawStatus = (getString(statusInfo, 'status') || '').toLowerCase();
+
+  return {
+    rawStatus,
+    videoStatus: mapVolcengineTaskStatus(rawStatus),
+    videoUrl: extractVolcengineVideoUrl(result),
+    usage: getOptionalRecord(statusInfo.usage) || getOptionalRecord(root.usage),
+    error: getOptionalRecord(statusInfo.error) || getOptionalRecord(root.error) || null,
+  };
+};
+
+export const buildVolcengineSubmissionMetadata = ({
+  model,
+  requestContentMode,
+  referenceAssetIds,
+  result,
+}: {
+  model: string;
+  requestContentMode: 'asset_uri' | 'url';
+  referenceAssetIds: string[];
+  result: unknown;
+}): VolcengineVideoGenerationMetadata => {
+  const snapshot = getVolcengineTaskSnapshot(result);
+
+  return {
+    provider: 'volcengine',
+    model,
+    requestContentMode,
+    referenceAssetIds,
+    rawStatus: snapshot.rawStatus || 'processing',
+    usage: snapshot.usage,
+    ...(snapshot.error ? { error: snapshot.error } : {}),
+  };
+};
+
+export const mergeVolcengineTaskMetadata = (
+  metadata: VolcengineVideoGenerationMetadata | null | undefined,
+  result: unknown
+): VolcengineVideoGenerationMetadata => {
+  const snapshot = getVolcengineTaskSnapshot(result);
+
+  return {
+    ...(metadata || {}),
+    provider: 'volcengine',
+    rawStatus: snapshot.rawStatus || metadata?.rawStatus || 'processing',
+    usage: snapshot.usage || metadata?.usage,
+    ...(snapshot.videoStatus === 'failed'
+      ? { error: snapshot.error || metadata?.error || null }
+      : snapshot.videoStatus === 'completed'
+        ? { error: null }
+        : {}),
+  };
 };
 
 const fetchWithTimeout = async (input: RequestInfo, init: RequestInit, timeoutMs: number) => {
