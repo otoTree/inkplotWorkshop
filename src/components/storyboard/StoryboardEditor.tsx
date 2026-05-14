@@ -17,6 +17,11 @@ import {
   normalizeShotDurationSeconds,
 } from '@/lib/duration';
 import {
+  chunkStoryboardScript,
+  compactStoryboardAssets,
+  extractStoryboardScriptText,
+} from '@/lib/storyboard-generation';
+import {
   DEFAULT_PROJECT_VIDEO_ASPECT_RATIO,
   normalizeProjectVideoSettings,
 } from '@/lib/volcengine/video-compat';
@@ -101,36 +106,25 @@ export function StoryboardEditor({ projectId }: StoryboardEditorProps) {
   const generateShotsForEpisode = async (episode: Episode) => {
     await api.shots.deleteByEpisode(episode.id);
     
-    const scriptContent = episode.content || '';
+    const scriptContent = extractStoryboardScriptText(episode.content || '');
     if (!scriptContent.trim()) return [];
-    
-    const chunks: string[] = [];
-    let currentChunk = '';
-    const paragraphs = scriptContent.split(/\n\s*\n/);
-    
-    for (const p of paragraphs) {
-      if ((currentChunk + p).length > 600) {
-          if (currentChunk) chunks.push(currentChunk);
-          currentChunk = p;
-      } else {
-          currentChunk += (currentChunk ? '\n\n' : '') + p;
-      }
-    }
-    if (currentChunk) chunks.push(currentChunk);
+
+    const chunks = chunkStoryboardScript(scriptContent);
+    const storyboardAssets = compactStoryboardAssets(assets || []);
+    const stylePayload = buildVisualStyleRequestPayload(project);
 
     let allShots: GeneratedShot[] = [];
     let lastShotContext = '';
 
     for (let i = 0; i < chunks.length; i++) {
        const chunkScript = (i > 0 ? `[Context: Previous shot ended with: ${lastShotContext}]\n\n` : '') + chunks[i];
-       const stylePayload = buildVisualStyleRequestPayload(project);
 
        const res = await fetch('/api/ai/generate-storyboard', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             script: chunkScript,
-            assets: assets || [],
+            assets: storyboardAssets,
             language: project?.language,
             ...stylePayload,
           })

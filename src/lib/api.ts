@@ -92,7 +92,9 @@ const toShot = (row: Record<string, unknown>): Shot => ({
   videoUrl: row.video_url ? String(row.video_url) : undefined,
   videoGenerationId: row.video_generation_id ? String(row.video_generation_id) : undefined,
   videoStatus: row.video_status ? (row.video_status as Shot['videoStatus']) : undefined,
-  videoGenerationMetadata: row.video_generation_metadata as Shot['videoGenerationMetadata'] | undefined,
+  videoGenerationMetadata: row.video_generation_metadata
+    ? (row.video_generation_metadata as Shot['videoGenerationMetadata'])
+    : undefined,
   characters: row.characters as Shot['characters'] | undefined,
 });
 

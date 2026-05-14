@@ -21,6 +21,11 @@ import {
   normalizeEpisodeDurationSeconds,
   normalizeShotDurationSeconds,
 } from '@/lib/duration';
+import {
+  chunkStoryboardScript,
+  compactStoryboardAssets,
+  extractStoryboardScriptText,
+} from '@/lib/storyboard-generation';
 
 interface OneClickWorkflowDialogProps {
   projectId: string;
@@ -276,20 +281,10 @@ export function OneClickWorkflowDialog({ projectId, open, onOpenChange }: OneCli
             return;
           }
 
-          const scriptContent = ep.content || '';
-          const chunks: string[] = [];
-          let currentChunk = '';
-          const paragraphs = scriptContent.split(/\n\s*\n/);
-          
-          for (const p of paragraphs) {
-            if ((currentChunk + p).length > 600) {
-                if (currentChunk) chunks.push(currentChunk);
-                currentChunk = p;
-            } else {
-                currentChunk += (currentChunk ? '\n\n' : '') + p;
-            }
-          }
-          if (currentChunk) chunks.push(currentChunk);
+          const scriptContent = extractStoryboardScriptText(ep.content || '');
+          const chunks = chunkStoryboardScript(scriptContent);
+          const storyboardAssets = compactStoryboardAssets(assets || []);
+          const stylePayload = buildVisualStyleRequestPayload(project);
 
           const newShots: Shot[] = [];
           let lastShotContext = '';
@@ -297,13 +292,12 @@ export function OneClickWorkflowDialog({ projectId, open, onOpenChange }: OneCli
           // 注意：单集内的分段(chunks)必须按顺序生成，因为有上下文依赖(lastShotContext)
           for (let j = 0; j < chunks.length; j++) {
             const chunkScript = (j > 0 ? `[Context: Previous shot ended with: ${lastShotContext}]\n\n` : '') + chunks[j];
-            const stylePayload = buildVisualStyleRequestPayload(project);
             const res = await fetch('/api/ai/generate-storyboard', {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({
                 script: chunkScript,
-                assets: assets || [],
+                assets: storyboardAssets,
                 language: project?.language,
                 ...stylePayload,
               })

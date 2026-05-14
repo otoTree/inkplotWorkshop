@@ -161,7 +161,7 @@ export interface Shot {
     referenceAssetIds?: string[];
     rawStatus?: string;
     usage?: Record<string, unknown>;
-    error?: Record<string, unknown> | string;
+    error?: Record<string, unknown> | string | null;
   };
   
   // 支持单镜头多角色描述 (最多3个)

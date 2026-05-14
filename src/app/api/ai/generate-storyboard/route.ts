@@ -6,6 +6,7 @@ import {
   EPISODE_DURATION_MIN_SECONDS,
   normalizeStoryboardShots,
 } from '@/lib/duration';
+import { compactStoryboardAssets } from '@/lib/storyboard-generation';
 import { createClient } from '@/lib/supabase/server';
 import { AIAPIError, callAIChatCompletion, extractFirstMessageContent } from '@/lib/ai-server';
 import { resolveArtStyleConfig } from '@/lib/project-visual-style';
@@ -38,7 +39,12 @@ export async function POST(req: Request) {
       sceneArtStyle,
     };
     const resolvedStyle = resolveArtStyleConfig(styleInput);
-    const prompt = getStoryboardGenerationPrompt(script, assets, resolvedStyle, language);
+    const prompt = getStoryboardGenerationPrompt(
+      script,
+      compactStoryboardAssets(Array.isArray(assets) ? assets : []),
+      resolvedStyle,
+      language
+    );
     const data = await callAIChatCompletion({
       messages: [
         {
