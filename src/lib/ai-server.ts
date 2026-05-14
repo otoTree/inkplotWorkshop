@@ -1,4 +1,9 @@
 import { Redis } from '@upstash/redis';
+import {
+  DEFAULT_IMAGE_GENERATION_MODEL,
+  isSupportedImageGenerationModel,
+  normalizeImageGenerationModel,
+} from '@/lib/image-generation-models';
 
 type AIAPIConfig = {
   baseUrl: string;
@@ -22,6 +27,7 @@ export class AIAPIError extends Error {
 
 const llmConfigCache: { value: AIAPIConfig | null } = { value: null };
 const mediaConfigCache: { value: AIAPIConfig | null } = { value: null };
+const imageConfigCache: { value: AIAPIConfig | null } = { value: null };
 const semaphoreByKey = new Map<string, AsyncSemaphore>();
 const lastRequestAtByKey = new Map<string, number>();
 
@@ -167,6 +173,48 @@ export const getAIAPIConfig = () => {
   });
 
   mediaConfigCache.value = config;
+  return config;
+};
+
+export const getAIImageAPIConfig = () => {
+  if (imageConfigCache.value) return imageConfigCache.value;
+
+  const config = buildAIAPIConfig({
+    baseUrlValues: [
+      process.env.AI_IMAGE_API_BASE_URL,
+      process.env.AI_API_BASE_URL,
+      process.env.OPENAI_BASE_URL,
+    ],
+    apiKeyValues: [
+      process.env.AI_IMAGE_API_KEY,
+      process.env.AI_API_KEY,
+      process.env.OPENAI_API_KEY,
+    ],
+    modelValues: [
+      process.env.AI_IMAGE_API_MODEL,
+      process.env.AI_API_IMAGE_MODEL,
+      process.env.OPENAI_IMAGE_MODEL,
+      process.env.AI_API_MODEL,
+      process.env.OPENAI_MODEL,
+    ],
+    timeoutValues: [
+      process.env.AI_IMAGE_API_TIMEOUT_MS,
+      process.env.AI_IMAGE_API_TIMEOUT,
+      process.env.AI_API_TIMEOUT_MS,
+      process.env.AI_API_TIMEOUT,
+      process.env.OPENAI_TIMEOUT_MS,
+    ],
+    maxConcurrencyValues: [
+      process.env.AI_IMAGE_API_MAX_CONCURRENCY,
+      process.env.AI_API_MAX_CONCURRENCY,
+    ],
+    minIntervalValues: [
+      process.env.AI_IMAGE_API_MIN_INTERVAL_MS,
+      process.env.AI_API_MIN_INTERVAL_MS,
+    ],
+  });
+
+  imageConfigCache.value = config;
   return config;
 };
 
@@ -608,9 +656,186 @@ export const extractFirstMessageContent = (result: unknown) => {
   return content;
 };
 
-export const callAIImageGeneration = async (prompt: string, aspectRatio: string = '1:1', n: number = 1, referenceImageUrl?: string) => {
+const GPT_IMAGE_2_1K_SIZES = new Set(['1:1', '3:2', '2:3']);
+const GPT_IMAGE_2_4K_SIZES = new Set(['16:9', '9:16', '2:1', '1:2', '21:9', '9:21']);
+
+const getImageModelFromEnv = () =>
+  normalizeImageGenerationModel(
+    process.env.AI_IMAGE_API_MODEL ||
+      process.env.AI_API_IMAGE_MODEL ||
+      process.env.OPENAI_IMAGE_MODEL ||
+      DEFAULT_IMAGE_GENERATION_MODEL
+  );
+
+const normalizeReferenceImageUrls = (referenceImageUrl?: string | string[]) => {
+  if (!referenceImageUrl) return [];
+  const urls = Array.isArray(referenceImageUrl)
+    ? referenceImageUrl
+    : [referenceImageUrl];
+  return urls.filter(
+    (url): url is string => typeof url === 'string' && url.trim().length > 0
+  );
+};
+
+const getOrientationForAspectRatio = (aspectRatio: string) => {
+  const [width, height] = aspectRatio.split(':').map((part) => Number(part));
+  if (!Number.isFinite(width) || !Number.isFinite(height) || width === height) {
+    return undefined;
+  }
+  return width > height ? 'landscape' : 'portrait';
+};
+
+const getGPTImage2Resolution = (aspectRatio: string) => {
+  if (GPT_IMAGE_2_1K_SIZES.has(aspectRatio)) return '1K';
+  if (GPT_IMAGE_2_4K_SIZES.has(aspectRatio)) return '2K';
+  return '2K';
+};
+
+type CreateImageTaskParams = {
+  prompt: string;
+  aspectRatio?: string;
+  n?: number;
+  model?: string;
+  referenceImageUrl?: string | string[];
+  clientBusinessId?: string;
+};
+
+const createAsyncImageTask = async ({
+  prompt,
+  aspectRatio = '1:1',
+  n = 1,
+  model,
+  referenceImageUrl,
+  clientBusinessId,
+}: CreateImageTaskParams) => {
+  const config = getAIImageAPIConfig();
+  const resolvedModel = isSupportedImageGenerationModel(model)
+    ? model
+    : getImageModelFromEnv();
+  const referenceImageUrls = normalizeReferenceImageUrls(referenceImageUrl);
+
+  const payload: Record<string, unknown> = {
+    model: resolvedModel,
+    prompt,
+    size: aspectRatio,
+    n,
+  };
+
+  if (clientBusinessId) {
+    payload.client_business_id = clientBusinessId;
+  }
+
+  if (resolvedModel === 'gpt-image-2') {
+    payload.resolution = getGPTImage2Resolution(aspectRatio);
+    payload.response_format = 'url';
+    if (referenceImageUrls.length > 0) {
+      payload.reference_images = referenceImageUrls;
+    }
+  } else {
+    const metadata: Record<string, unknown> = {
+      resolution: '1K',
+    };
+    const orientation = getOrientationForAspectRatio(aspectRatio);
+    if (orientation) metadata.orientation = orientation;
+    payload.metadata = metadata;
+    if (referenceImageUrls.length > 0) {
+      payload.image_urls = referenceImageUrls.map((url) => ({ url }));
+    }
+  }
+
+  return await withThrottle(config, async () => {
+    const response = await fetchWithTimeout(
+      `${config.baseUrl}/images/generations`,
+      {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${config.apiKey}`,
+        },
+        body: JSON.stringify(payload),
+      },
+      config.timeoutMs
+    );
+
+    if (!response.ok) {
+      const detail = await response.text().catch(() => '');
+      throw new AIAPIError('AI 图片生成请求失败', response.status, detail);
+    }
+
+    return await response.json();
+  });
+};
+
+const getAsyncImageTaskStatus = async (taskId: string) => {
+  const config = getAIImageAPIConfig();
+
+  const response = await fetchWithTimeout(
+    `${config.baseUrl}/images/generations/${encodeURIComponent(taskId)}`,
+    {
+      method: 'GET',
+      headers: {
+        Authorization: `Bearer ${config.apiKey}`,
+      },
+    },
+    config.timeoutMs
+  );
+
+  if (!response.ok) {
+    const detail = await response.text().catch(() => '');
+    throw new AIAPIError('查询图片生成状态失败', response.status, detail);
+  }
+
+  return await response.json();
+};
+
+const waitForAsyncImageTask = async (
+  taskId: string,
+  {
+    initialDelayMs = 2000,
+    pollIntervalMs = 3000,
+    maxWaitMs = 120000,
+  }: {
+    initialDelayMs?: number;
+    pollIntervalMs?: number;
+    maxWaitMs?: number;
+  } = {}
+) => {
+  const startedAt = Date.now();
+
+  if (initialDelayMs > 0) {
+    await sleep(initialDelayMs);
+  }
+
+  while (Date.now() - startedAt <= maxWaitMs) {
+    const task = await getAsyncImageTaskStatus(taskId);
+    const status = String((task as { status?: unknown })?.status || '').toLowerCase();
+
+    if (status === 'completed') {
+      return task;
+    }
+
+    if (status === 'failed') {
+      const error = (task as { error?: { message?: string; code?: string } }).error;
+      const detail =
+        error?.message || error?.code || JSON.stringify(task);
+      throw new AIAPIError('AI 图片生成失败', 502, detail);
+    }
+
+    await sleep(pollIntervalMs);
+  }
+
+  throw new AIAPIError('AI 图片生成超时', 504, `task_id=${taskId}`);
+};
+
+const callLegacyAIImageGeneration = async (
+  prompt: string,
+  aspectRatio: string = '1:1',
+  n: number = 1,
+  referenceImageUrl?: string
+) => {
   const config = getAIAPIConfig();
-  const imageModel = process.env.AI_API_IMAGE_MODEL || process.env.OPENAI_IMAGE_MODEL || config.model;
+  const imageModel =
+    process.env.AI_API_IMAGE_MODEL || process.env.OPENAI_IMAGE_MODEL || config.model;
 
   const finalPrompt = aspectRatio !== '1:1' ? `${prompt}, aspect ratio ${aspectRatio}` : prompt;
 
@@ -634,6 +859,43 @@ export const callAIImageGeneration = async (prompt: string, aspectRatio: string 
     config,
     extraPayload: { model: imageModel, n },
   });
+};
+
+export const callAIImageGeneration = async (
+  prompt: string,
+  aspectRatio: string = '1:1',
+  n: number = 1,
+  referenceImageUrl?: string | string[],
+  model?: string
+) => {
+  const resolvedModel = isSupportedImageGenerationModel(model)
+    ? model
+    : getImageModelFromEnv();
+
+  if (!isSupportedImageGenerationModel(resolvedModel)) {
+    return await callLegacyAIImageGeneration(
+      prompt,
+      aspectRatio,
+      n,
+      Array.isArray(referenceImageUrl) ? referenceImageUrl[0] : referenceImageUrl
+    );
+  }
+
+  const task = await createAsyncImageTask({
+    prompt,
+    aspectRatio,
+    n,
+    model: resolvedModel,
+    referenceImageUrl,
+  });
+  const taskId = (task as { id?: unknown; task_id?: unknown })?.id ||
+    (task as { id?: unknown; task_id?: unknown })?.task_id;
+
+  if (typeof taskId !== 'string' || !taskId) {
+    throw new AIAPIError('AI 图片生成任务返回缺少 task id', 502);
+  }
+
+  return await waitForAsyncImageTask(taskId);
 };
 
 export const callAIVideoGeneration = async (
@@ -768,6 +1030,13 @@ export const extractImageUrls = (result: unknown) => {
   const dataItems = (result as { data?: unknown })?.data;
   if (Array.isArray(dataItems)) {
     for (const item of dataItems as Array<{ url?: unknown; b64_json?: unknown }>) {
+      if (typeof item?.url === 'string') urls.push(item.url);
+      if (typeof item?.b64_json === 'string') urls.push(`data:image/png;base64,${item.b64_json}`);
+    }
+  }
+  const resultDataItems = (result as { result?: { data?: unknown[] } })?.result?.data;
+  if (Array.isArray(resultDataItems)) {
+    for (const item of resultDataItems as Array<{ url?: unknown; b64_json?: unknown }>) {
       if (typeof item?.url === 'string') urls.push(item.url);
       if (typeof item?.b64_json === 'string') urls.push(`data:image/png;base64,${item.b64_json}`);
     }

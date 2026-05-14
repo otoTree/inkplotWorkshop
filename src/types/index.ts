@@ -1,3 +1,5 @@
+import type { SupportedImageGenerationModel } from '@/lib/image-generation-models';
+
 export type ProjectVisualStylePreset =
   | 'overseas-live-action'
   | 'domestic-live-action'
@@ -14,6 +16,7 @@ export interface Project {
   logline: string;        // 核心梗概
   genre: string[];        // 类型标签
   language?: string;      // 剧本语言
+  imageGenerationModel?: SupportedImageGenerationModel; // 项目默认图像模型
   visualStylePreset?: ProjectVisualStylePreset; // 剧集画面风格预设
   visualStylePresetSource?: ProjectVisualStylePresetSource; // 预设来源: 显式选择 / 旧字段推断 / 默认兜底
   artStyle?: string;      // 美术风格 (e.g. 赛博朋克, 水墨, 皮克斯)

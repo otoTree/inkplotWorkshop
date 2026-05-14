@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import { useState } from 'react';
 import { Project, Asset } from '@/types';
 import { api } from '@/lib/api';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/button';
 import { Loader2, Image as ImageIcon, Wand2, RefreshCw, Edit2 } from 'lucide-react';
 import Image from 'next/image';
 import { buildVisualStyleRequestPayload } from '@/lib/project-visual-style';
+import { DEFAULT_IMAGE_GENERATION_MODEL, IMAGE_GENERATION_MODEL_LABELS } from '@/lib/image-generation-models';
 
 interface ProjectCoverCardProps {
   project: Project;
@@ -20,6 +21,7 @@ export function ProjectCoverCard({ project, assets = [], onUpdate }: ProjectCove
   const [editPrompt, setEditPrompt] = useState('');
   const [isEditMode, setIsEditMode] = useState(false);
   const [error, setError] = useState('');
+  const imageModel = project.imageGenerationModel || DEFAULT_IMAGE_GENERATION_MODEL;
 
   const handleGenerateCover = async () => {
     setIsGeneratingCover(true);
@@ -89,6 +91,7 @@ export function ProjectCoverCard({ project, assets = [], onUpdate }: ProjectCove
           aspectRatio: '3:4',
           n: 4, // 请求生成4张图片
           referenceImageUrl,
+          model: imageModel,
           ...stylePayload,
         }),
       });
@@ -103,25 +106,9 @@ export function ProjectCoverCard({ project, assets = [], onUpdate }: ProjectCove
         
         // 当我们有了4张图后，先将它们展示出来，但默认选第一张（也可以都不选让用户选，这里保持逻辑一致）
         const updates: Partial<Project> = { 
-          coverImageCandidates: urls
+          coverImageCandidates: urls,
+          coverImageUrl: urls[0],
         };
-        
-        // 尝试上传第一张作为默认选中项
-        try {
-          const uploadRes = await fetch('/api/upload-base64', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ dataUrl: urls[0], folder: 'cover-images' }),
-          });
-          if (uploadRes.ok) {
-            const { url: uploadedUrl } = await uploadRes.json();
-            updates.coverImageUrl = uploadedUrl;
-          } else {
-            updates.coverImageUrl = urls[0];
-          }
-        } catch (e) {
-          updates.coverImageUrl = urls[0];
-        }
 
         await api.projects.update(project.id, updates);
         onUpdate({ ...project, ...updates });
@@ -138,22 +125,9 @@ export function ProjectCoverCard({ project, assets = [], onUpdate }: ProjectCove
 
   const handleSelectCandidate = async (url: string) => {
     try {
-      const response = await fetch('/api/upload-base64', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ dataUrl: url, folder: 'cover-images' }),
-      });
-      if (response.ok) {
-        const { url: uploadedUrl } = await response.json();
-        const updates = { coverImageUrl: uploadedUrl };
-        await api.projects.update(project.id, updates);
-        onUpdate({ ...project, ...updates });
-      } else {
-        // Fallback to updating directly if upload fails or is not base64
-        const updates = { coverImageUrl: url };
-        await api.projects.update(project.id, updates);
-        onUpdate({ ...project, ...updates });
-      }
+      const updates = { coverImageUrl: url };
+      await api.projects.update(project.id, updates);
+      onUpdate({ ...project, ...updates });
     } catch (err) {
       console.error('Failed to select image', err);
     }
@@ -171,7 +145,8 @@ export function ProjectCoverCard({ project, assets = [], onUpdate }: ProjectCove
           imageUrl: project.coverImageUrl,
           prompt: editPrompt,
           n: 4,
-          upload: false
+          upload: true,
+          model: imageModel,
         }),
       });
 
@@ -183,24 +158,9 @@ export function ProjectCoverCard({ project, assets = [], onUpdate }: ProjectCove
       if (data.data && data.data.length > 0) {
         const urls = data.data.map((item: any) => item.url);
         const updates: Partial<Project> = { 
-          coverImageCandidates: urls
+          coverImageCandidates: urls,
+          coverImageUrl: urls[0],
         };
-
-        try {
-          const uploadRes = await fetch('/api/upload-base64', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ dataUrl: urls[0], folder: 'cover-images' }),
-          });
-          if (uploadRes.ok) {
-            const { url: uploadedUrl } = await uploadRes.json();
-            updates.coverImageUrl = uploadedUrl;
-          } else {
-            updates.coverImageUrl = urls[0];
-          }
-        } catch (e) {
-          updates.coverImageUrl = urls[0];
-        }
 
         await api.projects.update(project.id, updates);
         onUpdate({ ...project, ...updates });
@@ -260,6 +220,12 @@ export function ProjectCoverCard({ project, assets = [], onUpdate }: ProjectCove
               <h4 className="text-xs font-semibold text-black/40 uppercase tracking-wider mb-1">图片 Prompt (3:4)</h4>
               <p className="text-xs bg-slate-50 p-2 rounded text-black/70 max-h-32 overflow-y-auto">
                 {project.coverPrompt || '生成设计后将在这里显示用于 AI 绘画的工业级提示词'}
+              </p>
+            </div>
+            <div>
+              <h4 className="text-xs font-semibold text-black/40 uppercase tracking-wider mb-1">图像模型</h4>
+              <p className="text-sm text-black/70">
+                {IMAGE_GENERATION_MODEL_LABELS[imageModel]}
               </p>
             </div>
             {project.coverPrompt && (

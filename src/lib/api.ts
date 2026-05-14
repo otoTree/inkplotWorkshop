@@ -7,6 +7,7 @@ import {
 } from '@/lib/project-visual-style';
 import { normalizeShotDurationSeconds } from '@/lib/duration';
 import { normalizeProjectVideoSettings } from '@/lib/volcengine/video-compat';
+import { normalizeImageGenerationModel } from '@/lib/image-generation-models';
 
 const supabase = createClient();
 
@@ -21,6 +22,7 @@ const toProject = (row: Record<string, unknown>): Project => {
     logline: (row.logline as string) || '',
     genre: (row.genre as string[]) || [],
     language: (row.language as string) || 'zh',
+    imageGenerationModel: normalizeImageGenerationModel(row.image_generation_model),
     visualStylePreset: resolvedStyle.visualStylePreset,
     visualStylePresetSource: resolvedStyle.source,
     artStyle: resolvedStyle.artStyle,
@@ -129,6 +131,7 @@ export const api = {
         logline: project.logline,
         genre: project.genre,
         language: project.language || 'zh',
+        image_generation_model: project.imageGenerationModel,
         art_style: serializeProjectVisualStyle(project),
         sensitivity_prompt: project.sensitivityPrompt || '',
         series_plan: project.seriesPlan,
@@ -145,6 +148,9 @@ export const api = {
       if (updates.logline) dbUpdates.logline = updates.logline;
       if (updates.genre) dbUpdates.genre = updates.genre;
       if (updates.language !== undefined) dbUpdates.language = updates.language || 'zh';
+      if (updates.imageGenerationModel !== undefined) {
+        dbUpdates.image_generation_model = updates.imageGenerationModel;
+      }
       if ('visualStylePreset' in updates || 'artStyle' in updates || 'characterArtStyle' in updates || 'sceneArtStyle' in updates) {
         const { data: existingStyleRow, error: existingStyleError } = await supabase
           .from('projects')

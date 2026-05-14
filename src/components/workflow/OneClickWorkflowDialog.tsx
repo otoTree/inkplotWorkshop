@@ -16,6 +16,7 @@ import { Progress } from '@/components/ui/progress';
 import { Loader2, Rocket, CheckCircle2 } from 'lucide-react';
 import { getImageGenerationPrompt } from '@/lib/prompts';
 import { buildVisualStyleRequestPayload, resolveArtStyleConfig } from '@/lib/project-visual-style';
+import { DEFAULT_IMAGE_GENERATION_MODEL } from '@/lib/image-generation-models';
 import {
   normalizeEpisodeDurationSeconds,
   normalizeShotDurationSeconds,
@@ -47,6 +48,8 @@ export function OneClickWorkflowDialog({ projectId, open, onOpenChange }: OneCli
       log('获取项目数据...');
       const project = await api.projects.get(projectId);
       if (!project) throw new Error('项目不存在');
+      const imageModel =
+        project.imageGenerationModel || DEFAULT_IMAGE_GENERATION_MODEL;
 
       let episodes = await api.episodes.list(projectId);
       let hasSummary = episodes.some(ep => ep.structure?.summary);
@@ -228,7 +231,12 @@ export function OneClickWorkflowDialog({ projectId, open, onOpenChange }: OneCli
             const res = await fetch('/api/ai/generate-image', {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ prompt: fullPrompt, aspectRatio, ...stylePayload }),
+              body: JSON.stringify({
+                prompt: fullPrompt,
+                aspectRatio,
+                model: imageModel,
+                ...stylePayload,
+              }),
             });
             if (res.ok) {
               const data = await res.json();

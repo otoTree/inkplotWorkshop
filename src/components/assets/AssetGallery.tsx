@@ -12,6 +12,7 @@ import { AssetDialog } from './AssetDialog';
 import { ExtractionPreviewDialog } from './ExtractionPreviewDialog';
 import { getImageGenerationPrompt } from '@/lib/prompts';
 import { buildVisualStyleRequestPayload, resolveArtStyleConfig } from '@/lib/project-visual-style';
+import { DEFAULT_IMAGE_GENERATION_MODEL, IMAGE_GENERATION_MODEL_LABELS } from '@/lib/image-generation-models';
 
 export function AssetGallery({ projectId }: { projectId: string }) {
   const [assets, setAssets] = useState<Asset[]>([]);
@@ -54,6 +55,7 @@ export function AssetGallery({ projectId }: { projectId: string }) {
   }, [fetchData]);
 
   const artStyleConfig: ArtStyleConfig = resolveArtStyleConfig(project);
+  const imageModel = project?.imageGenerationModel || DEFAULT_IMAGE_GENERATION_MODEL;
 
   const getAssetsByType = (type: AssetType) => assets?.filter((a) => a.type === type) || [];
 
@@ -249,6 +251,7 @@ export function AssetGallery({ projectId }: { projectId: string }) {
             body: JSON.stringify({ 
                 prompt: fullPrompt,
                 aspectRatio,
+                model: imageModel,
                 ...stylePayload
             }),
         });
@@ -315,6 +318,7 @@ export function AssetGallery({ projectId }: { projectId: string }) {
                 body: JSON.stringify({ 
                     prompt: fullPrompt,
                     aspectRatio,
+                    model: imageModel,
                     ...stylePayload
                 }),
             });
@@ -380,6 +384,9 @@ export function AssetGallery({ projectId }: { projectId: string }) {
             </div>
         </div>
         <div className="flex gap-2 items-center">
+            <div className="rounded-md border border-black/[0.08] bg-white px-3 py-2 text-sm text-black/60">
+                图像模型: {IMAGE_GENERATION_MODEL_LABELS[imageModel]}
+            </div>
             {assets.length > 0 && (
                 <Button 
                     variant="ghost" 
@@ -516,6 +523,7 @@ export function AssetGallery({ projectId }: { projectId: string }) {
         onSave={handleSaveAsset}
         onDelete={(id) => api.assets.delete(id).then(() => setAssets(prev => prev.filter(a => a.id !== id)))}
         artStyle={artStyleConfig}
+        imageGenerationModel={imageModel}
       />
 
       <ExtractionPreviewDialog
@@ -524,6 +532,7 @@ export function AssetGallery({ projectId }: { projectId: string }) {
         foundAssets={foundAssets}
         onConfirm={handleImportAssets}
         artStyle={artStyleConfig}
+        imageGenerationModel={imageModel}
         isImporting={isImporting}
       />
     </div>

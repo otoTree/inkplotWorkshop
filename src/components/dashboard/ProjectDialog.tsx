@@ -35,6 +35,12 @@ import {
   normalizeProjectVideoSettings,
 } from '@/lib/volcengine/video-compat';
 import { ProjectVisualStylePresetSelector } from './ProjectVisualStylePresetSelector';
+import {
+  DEFAULT_IMAGE_GENERATION_MODEL,
+  IMAGE_GENERATION_MODEL_DESCRIPTIONS,
+  IMAGE_GENERATION_MODEL_LABELS,
+  type SupportedImageGenerationModel,
+} from '@/lib/image-generation-models';
 
 interface ProjectDialogProps {
   children?: React.ReactNode;
@@ -55,6 +61,8 @@ export function ProjectDialog({ children, project, open: controlledOpen, onOpenC
   const [title, setTitle] = useState('');
   const [logline, setLogline] = useState('');
   const [language, setLanguage] = useState('zh');
+  const [imageGenerationModel, setImageGenerationModel] =
+    useState<SupportedImageGenerationModel>(DEFAULT_IMAGE_GENERATION_MODEL);
   const [visualStylePreset, setVisualStylePreset] = useState<ProjectVisualStylePreset>(DEFAULT_PROJECT_VISUAL_STYLE_PRESET);
   const [characterArtStyle, setCharacterArtStyle] = useState('');
   const [sceneArtStyle, setSceneArtStyle] = useState('');
@@ -82,6 +90,9 @@ export function ProjectDialog({ children, project, open: controlledOpen, onOpenC
         setTitle(project.title);
         setLogline(project.logline);
         setLanguage(project.language || 'zh');
+        setImageGenerationModel(
+          project.imageGenerationModel || DEFAULT_IMAGE_GENERATION_MODEL
+        );
         setVisualStylePreset(parsedStyle.visualStylePreset || DEFAULT_PROJECT_VISUAL_STYLE_PRESET);
         setCharacterArtStyle(project.characterArtStyle || project.artStyle || '');
         setSceneArtStyle(project.sceneArtStyle || project.artStyle || '');
@@ -98,6 +109,7 @@ export function ProjectDialog({ children, project, open: controlledOpen, onOpenC
           setTitle('');
           setLogline('');
           setLanguage('zh');
+          setImageGenerationModel(DEFAULT_IMAGE_GENERATION_MODEL);
           setVisualStylePreset(DEFAULT_PROJECT_VISUAL_STYLE_PRESET);
           setCharacterArtStyle('');
           setSceneArtStyle('');
@@ -164,6 +176,7 @@ export function ProjectDialog({ children, project, open: controlledOpen, onOpenC
           title,
           logline,
           language: normalizedLanguage,
+          imageGenerationModel,
           visualStylePreset,
           characterArtStyle,
           sceneArtStyle,
@@ -212,6 +225,7 @@ export function ProjectDialog({ children, project, open: controlledOpen, onOpenC
           title,
           logline,
           language: normalizedLanguage,
+          imageGenerationModel,
           visualStylePreset,
           characterArtStyle,
           sceneArtStyle,
@@ -238,6 +252,7 @@ export function ProjectDialog({ children, project, open: controlledOpen, onOpenC
         setTitle('');
         setLogline('');
         setLanguage('zh');
+        setImageGenerationModel(DEFAULT_IMAGE_GENERATION_MODEL);
         setVisualStylePreset(DEFAULT_PROJECT_VISUAL_STYLE_PRESET);
         setCharacterArtStyle('');
         setSceneArtStyle('');
@@ -333,6 +348,44 @@ export function ProjectDialog({ children, project, open: controlledOpen, onOpenC
                     <SelectItem value="kr">韩文</SelectItem>
                   </SelectContent>
                 </Select>
+              </div>
+            </div>
+            <div className="grid grid-cols-1 gap-2 sm:grid-cols-4 sm:items-start sm:gap-4">
+              <Label htmlFor="imageGenerationModel" className="sm:pt-2 sm:text-right">
+                图像模型
+              </Label>
+              <div className="sm:col-span-3">
+                <Select
+                  value={imageGenerationModel}
+                  onValueChange={(value) =>
+                    setImageGenerationModel(value as SupportedImageGenerationModel)
+                  }
+                >
+                  <SelectTrigger id="imageGenerationModel">
+                    <SelectValue placeholder="选择图像模型" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="gemini-3-pro-image-preview">
+                      <div className="flex flex-col items-start">
+                        <span>{IMAGE_GENERATION_MODEL_LABELS['gemini-3-pro-image-preview']}</span>
+                        <span className="text-xs text-black/50">
+                          {IMAGE_GENERATION_MODEL_DESCRIPTIONS['gemini-3-pro-image-preview']}
+                        </span>
+                      </div>
+                    </SelectItem>
+                    <SelectItem value="gpt-image-2">
+                      <div className="flex flex-col items-start">
+                        <span>{IMAGE_GENERATION_MODEL_LABELS['gpt-image-2']}</span>
+                        <span className="text-xs text-black/50">
+                          {IMAGE_GENERATION_MODEL_DESCRIPTIONS['gpt-image-2']}
+                        </span>
+                      </div>
+                    </SelectItem>
+                  </SelectContent>
+                </Select>
+                <p className="mt-2 text-xs text-black/45">
+                  这是当前项目的默认生图模型，封面、资产和一键工作流都会优先使用这里的选择。
+                </p>
               </div>
             </div>
             <div className="grid grid-cols-1 gap-2 sm:grid-cols-4 sm:items-start sm:gap-4">

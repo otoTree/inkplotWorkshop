@@ -29,6 +29,7 @@ import { useStore } from '@/store/useStore';
 import { MoreVertical, Pencil, Trash2, Loader2, Plus } from 'lucide-react';
 import { ProjectDialog } from './ProjectDialog';
 import { SyncButton } from './SyncButton';
+import { IMAGE_GENERATION_MODEL_LABELS } from '@/lib/image-generation-models';
 
 export function ProjectList({ initialProjects }: { initialProjects?: Project[] }) {
   const [projects, setProjects] = useState<Project[] | null>(initialProjects ?? null);
@@ -160,6 +161,9 @@ export function ProjectList({ initialProjects }: { initialProjects?: Project[] }
               </CardHeader>
               <CardContent>
                 <div className="flex gap-2 flex-wrap">
+                  <Badge variant="secondary" className="text-xs font-normal">
+                    {IMAGE_GENERATION_MODEL_LABELS[project.imageGenerationModel || 'gemini-3-pro-image-preview']}
+                  </Badge>
                   {project.genre.map((g) => (
                     <Badge key={g} variant="secondary" className="text-xs font-normal">
                       {g}

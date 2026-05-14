@@ -2,9 +2,10 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogD
 import { Button } from '@/components/ui/button';
 import { ArtStyleConfig, Asset, AssetType } from '@/types';
 import { useState, useEffect } from 'react';
-import { User, MapPin, Box, Wand2, Loader2, Image as ImageIcon } from 'lucide-react';
+import { User, MapPin, Wand2, Loader2, Image as ImageIcon } from 'lucide-react';
 import { getImageGenerationPrompt } from '@/lib/prompts';
 import { buildVisualStyleRequestPayload } from '@/lib/project-visual-style';
+import { DEFAULT_IMAGE_GENERATION_MODEL, type SupportedImageGenerationModel } from '@/lib/image-generation-models';
 
 interface ExtractionPreviewDialogProps {
   open: boolean;
@@ -12,6 +13,7 @@ interface ExtractionPreviewDialogProps {
   foundAssets: Partial<Asset>[];
   onConfirm: (selectedAssets: Partial<Asset>[]) => void;
   artStyle?: ArtStyleConfig;
+  imageGenerationModel?: SupportedImageGenerationModel;
   isImporting?: boolean;
 }
 
@@ -21,6 +23,7 @@ export function ExtractionPreviewDialog({
   foundAssets: initialFoundAssets,
   onConfirm,
   artStyle,
+  imageGenerationModel = DEFAULT_IMAGE_GENERATION_MODEL,
   isImporting = false
 }: ExtractionPreviewDialogProps) {
   const [localAssets, setLocalAssets] = useState<Partial<Asset>[]>([]);
@@ -67,6 +70,7 @@ export function ExtractionPreviewDialog({
         body: JSON.stringify({ 
             prompt: fullPrompt,
             aspectRatio,
+            model: imageGenerationModel,
             ...stylePayload,
         }),
       });

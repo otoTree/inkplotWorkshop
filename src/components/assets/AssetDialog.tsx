@@ -8,6 +8,7 @@ import { ArtStyleConfig, Asset, AssetType } from '@/types';
 import { Trash2, Wand2, Loader2, ImageIcon, ZoomIn, Upload } from 'lucide-react';
 import { getImageGenerationPrompt } from '@/lib/prompts';
 import { buildVisualStyleRequestPayload } from '@/lib/project-visual-style';
+import { DEFAULT_IMAGE_GENERATION_MODEL, type SupportedImageGenerationModel } from '@/lib/image-generation-models';
 
 interface AssetDialogProps {
   open: boolean;
@@ -19,6 +20,7 @@ interface AssetDialogProps {
   onSave: (data: Partial<Asset>) => Promise<void>;
   onDelete?: (id: string) => Promise<void>;
   artStyle?: ArtStyleConfig;
+  imageGenerationModel?: SupportedImageGenerationModel;
 }
 
 export function AssetDialog({ 
@@ -30,7 +32,8 @@ export function AssetDialog({
   projectId,
   onSave,
   onDelete,
-  artStyle
+  artStyle,
+  imageGenerationModel = DEFAULT_IMAGE_GENERATION_MODEL,
 }: AssetDialogProps) {
   const [formData, setFormData] = useState<Partial<Asset>>({
     name: '',
@@ -185,6 +188,7 @@ export function AssetDialog({
         body: JSON.stringify({ 
             prompt: fullPrompt,
             aspectRatio,
+            model: imageGenerationModel,
             ...stylePayload,
         }),
       });
