@@ -4,6 +4,50 @@ export type StoryboardAssetContext = {
   type?: string;
 };
 
+export type StoryboardCharacterContext = {
+  name: string;
+  description: string;
+  imageUrl?: string;
+};
+
+export type StoryboardSuggestedAssets =
+  | {
+      characters?: string[];
+      locations?: string[];
+    }
+  | Array<{ name?: string | null }>;
+
+export type StoryboardPlanShot = {
+  sequence?: number;
+  sceneLabel?: string;
+  beat?: string;
+  camera?: string;
+  size?: string;
+  duration?: number;
+  dialogue?: string;
+  suggestedAssetNames?: string[];
+  suggestedAssets?: StoryboardSuggestedAssets;
+  characters?: StoryboardCharacterContext[];
+};
+
+export type StoryboardGeneratedShot = {
+  description?: string;
+  sceneLabel?: string;
+  characterAction?: string;
+  emotion?: string;
+  lightingAtmosphere?: string;
+  soundEffect?: string;
+  dialogue?: string;
+  camera?: string;
+  size?: string;
+  duration?: number;
+  sensitivityReduction?: number;
+  videoPrompt?: string;
+  characters?: StoryboardCharacterContext[];
+  suggestedAssetNames?: string[];
+  suggestedAssets?: StoryboardSuggestedAssets;
+};
+
 const STORYBOARD_TARGET_CHUNK_LENGTH = 2200;
 const STORYBOARD_MAX_CHUNK_LENGTH = 3000;
 
@@ -143,4 +187,57 @@ export const compactStoryboardAssets = (
   }
 
   return result;
+};
+
+export const collectStoryboardSuggestedNames = (
+  shot: Pick<StoryboardGeneratedShot | StoryboardPlanShot, 'suggestedAssetNames' | 'suggestedAssets'>
+) => {
+  const suggestedNames: string[] = [];
+
+  if (Array.isArray(shot.suggestedAssetNames)) {
+    suggestedNames.push(
+      ...shot.suggestedAssetNames.filter((name): name is string => typeof name === 'string')
+    );
+  }
+
+  if (shot.suggestedAssets) {
+    if (Array.isArray(shot.suggestedAssets)) {
+      suggestedNames.push(
+        ...shot.suggestedAssets
+          .map((item) => item?.name)
+          .filter((name): name is string => typeof name === 'string')
+      );
+    } else {
+      const { characters, locations } = shot.suggestedAssets;
+      if (Array.isArray(characters)) suggestedNames.push(...characters);
+      if (Array.isArray(locations)) suggestedNames.push(...locations);
+    }
+  }
+
+  return Array.from(new Set(suggestedNames.map((name) => name.trim()).filter(Boolean)));
+};
+
+export const resolveStoryboardRelatedAssetIds = (
+  shot: Pick<StoryboardGeneratedShot | StoryboardPlanShot, 'suggestedAssetNames' | 'suggestedAssets'>,
+  assets: Array<{ id: string; name: string }>
+) => {
+  const relatedIds: string[] = [];
+  const suggestedNames = collectStoryboardSuggestedNames(shot);
+  const normalize = (value: string) => value.trim().toLowerCase();
+
+  for (const name of suggestedNames) {
+    const normalizedName = normalize(name);
+    const exact = assets.find((asset) => normalize(asset.name) === normalizedName);
+    const fuzzy = assets.find(
+      (asset) =>
+        normalize(asset.name).includes(normalizedName) ||
+        normalizedName.includes(normalize(asset.name))
+    );
+    const matchedAsset = exact || fuzzy;
+    if (matchedAsset && !relatedIds.includes(matchedAsset.id)) {
+      relatedIds.push(matchedAsset.id);
+    }
+  }
+
+  return relatedIds;
 };

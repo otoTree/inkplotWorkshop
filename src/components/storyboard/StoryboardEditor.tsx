@@ -17,9 +17,11 @@ import {
   normalizeShotDurationSeconds,
 } from '@/lib/duration';
 import {
-  chunkStoryboardScript,
   compactStoryboardAssets,
   extractStoryboardScriptText,
+  resolveStoryboardRelatedAssetIds,
+  StoryboardGeneratedShot,
+  StoryboardPlanShot,
 } from '@/lib/storyboard-generation';
 import {
   DEFAULT_PROJECT_VIDEO_ASPECT_RATIO,
@@ -29,31 +31,6 @@ import {
 interface StoryboardEditorProps {
   projectId: string;
 }
-
-type GeneratedShot = {
-  description?: string;
-  sceneLabel?: string;
-  characterAction?: string;
-  emotion?: string;
-  lightingAtmosphere?: string;
-  soundEffect?: string;
-  dialogue?: string;
-  camera?: string;
-  size?: string;
-  duration?: number;
-  sensitivityReduction?: number;
-  videoPrompt?: string;
-  characters?: Array<{
-    name: string;
-    description: string;
-    imageUrl?: string;
-  }>;
-  suggestedAssetNames?: string[];
-  suggestedAssets?: {
-    characters?: string[];
-    locations?: string[];
-  } | Array<{ name?: string | null }>;
-};
 
 export function StoryboardEditor({ projectId }: StoryboardEditorProps) {
   const [selectedEpisodeId, setSelectedEpisodeId] = useState<string | null>(null);
@@ -109,42 +86,60 @@ export function StoryboardEditor({ projectId }: StoryboardEditorProps) {
     const scriptContent = extractStoryboardScriptText(episode.content || '');
     if (!scriptContent.trim()) return [];
 
-    const chunks = chunkStoryboardScript(scriptContent);
     const storyboardAssets = compactStoryboardAssets(assets || []);
     const stylePayload = buildVisualStyleRequestPayload(project);
+    const planRes = await fetch('/api/ai/generate-storyboard', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        mode: 'plan',
+        script: scriptContent,
+        assets: storyboardAssets,
+        language: project?.language,
+        ...stylePayload,
+      }),
+    });
 
-    let allShots: GeneratedShot[] = [];
-    let lastShotContext = '';
+    if (!planRes.ok) throw new Error(await planRes.text());
 
-    for (let i = 0; i < chunks.length; i++) {
-       const chunkScript = (i > 0 ? `[Context: Previous shot ended with: ${lastShotContext}]\n\n` : '') + chunks[i];
+    const planData = await planRes.json() as { shots?: StoryboardPlanShot[] };
+    const plannedShots = Array.isArray(planData.shots) ? planData.shots : [];
+    if (plannedShots.length === 0) return [];
 
-       const res = await fetch('/api/ai/generate-storyboard', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            script: chunkScript,
-            assets: storyboardAssets,
-            language: project?.language,
-            ...stylePayload,
-          })
-        });
+    const allShots: StoryboardGeneratedShot[] = [];
 
-        if (!res.ok) throw new Error(await res.text());
-        const data = await res.json() as { shots?: GeneratedShot[] };
-        
-        if (data.shots && Array.isArray(data.shots)) {
-           if (data.shots.length === 0) {
-               console.warn('AI 返回的 shots 数组为空', data);
-           }
-           allShots = [...allShots, ...data.shots];
-           const lastShot = data.shots[data.shots.length - 1];
-           if (lastShot) {
-               lastShotContext = lastShot.description || '';
-           }
-        } else {
-           console.error('AI 返回的数据格式不正确，缺少 shots 数组:', data);
-        }
+    for (let index = 0; index < plannedShots.length; index += 1) {
+      const shotPlan = plannedShots[index];
+      const previousShot = allShots.length > 0 ? allShots[allShots.length - 1] : null;
+      const nextShotPlan = index < plannedShots.length - 1 ? plannedShots[index + 1] : null;
+
+      const res = await fetch('/api/ai/generate-storyboard', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          mode: 'shot',
+          script: scriptContent,
+          assets: storyboardAssets,
+          language: project?.language,
+          shotPlan,
+          previousShot,
+          nextShotPlan,
+          totalShots: plannedShots.length,
+          ...stylePayload,
+        }),
+      });
+
+      if (!res.ok) throw new Error(await res.text());
+      const data = await res.json() as { shot?: StoryboardGeneratedShot };
+
+      if (!data.shot || typeof data.shot !== 'object') {
+        throw new Error('AI 返回的数据格式不正确，缺少 shot 对象');
+      }
+
+      allShots.push({
+        ...data.shot,
+        duration: shotPlan.duration ?? data.shot.duration,
+      });
     }
 
     if (allShots.length === 0) {
@@ -152,34 +147,7 @@ export function StoryboardEditor({ projectId }: StoryboardEditorProps) {
     }
 
     const newShots: Shot[] = allShots.map((s, index: number) => {
-      const relatedIds: string[] = [];
-      const suggestedNames: string[] = [];
-
-      if (Array.isArray(s.suggestedAssetNames)) {
-        suggestedNames.push(...s.suggestedAssetNames.filter((name) => typeof name === 'string'));
-      }
-
-      if (s.suggestedAssets) {
-        if (Array.isArray(s.suggestedAssets)) {
-          suggestedNames.push(...s.suggestedAssets.map((item) => item?.name).filter((name): name is string => typeof name === 'string'));
-        } else {
-          const { characters, locations } = s.suggestedAssets;
-          if (Array.isArray(characters)) suggestedNames.push(...characters);
-          if (Array.isArray(locations)) suggestedNames.push(...locations);
-        }
-      }
-
-      if (assets && suggestedNames.length > 0) {
-        const normalize = (value: string) => value.trim().toLowerCase();
-        const uniqueNames = Array.from(new Set(suggestedNames.map((name: string) => name.trim()).filter(Boolean)));
-        uniqueNames.forEach((name: string) => {
-          const normalizedName = normalize(name);
-          const exact = assets.find(a => normalize(a.name) === normalizedName);
-          const fuzzy = assets.find(a => normalize(a.name).includes(normalizedName) || normalizedName.includes(normalize(a.name)));
-          const asset = exact || fuzzy;
-          if (asset && !relatedIds.includes(asset.id)) relatedIds.push(asset.id);
-        });
-      }
+      const relatedIds = resolveStoryboardRelatedAssetIds(s, assets || []);
 
       return {
         id: crypto.randomUUID(),

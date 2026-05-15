@@ -22,9 +22,11 @@ import {
   normalizeShotDurationSeconds,
 } from '@/lib/duration';
 import {
-  chunkStoryboardScript,
   compactStoryboardAssets,
   extractStoryboardScriptText,
+  resolveStoryboardRelatedAssetIds,
+  StoryboardGeneratedShot,
+  StoryboardPlanShot,
 } from '@/lib/storyboard-generation';
 
 interface OneClickWorkflowDialogProps {
@@ -282,66 +284,90 @@ export function OneClickWorkflowDialog({ projectId, open, onOpenChange }: OneCli
           }
 
           const scriptContent = extractStoryboardScriptText(ep.content || '');
-          const chunks = chunkStoryboardScript(scriptContent);
+          if (!scriptContent.trim()) {
+            return;
+          }
+
           const storyboardAssets = compactStoryboardAssets(assets || []);
           const stylePayload = buildVisualStyleRequestPayload(project);
+          const planRes = await fetch('/api/ai/generate-storyboard', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              mode: 'plan',
+              script: scriptContent,
+              assets: storyboardAssets,
+              language: project?.language,
+              ...stylePayload,
+            })
+          });
+
+          if (!planRes.ok) {
+            throw new Error(await planRes.text());
+          }
+
+          const planData = await planRes.json() as { shots?: StoryboardPlanShot[] };
+          const plannedShots = Array.isArray(planData.shots) ? planData.shots : [];
+          if (plannedShots.length === 0) {
+            return;
+          }
 
           const newShots: Shot[] = [];
-          let lastShotContext = '';
+          const detailedShots: StoryboardGeneratedShot[] = [];
 
-          // 注意：单集内的分段(chunks)必须按顺序生成，因为有上下文依赖(lastShotContext)
-          for (let j = 0; j < chunks.length; j++) {
-            const chunkScript = (j > 0 ? `[Context: Previous shot ended with: ${lastShotContext}]\n\n` : '') + chunks[j];
+          for (let j = 0; j < plannedShots.length; j++) {
+            const shotPlan = plannedShots[j];
+            const previousShot = detailedShots.length > 0 ? detailedShots[detailedShots.length - 1] : null;
+            const nextShotPlan = j < plannedShots.length - 1 ? plannedShots[j + 1] : null;
             const res = await fetch('/api/ai/generate-storyboard', {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({
-                script: chunkScript,
+                mode: 'shot',
+                script: scriptContent,
                 assets: storyboardAssets,
                 language: project?.language,
+                shotPlan,
+                previousShot,
+                nextShotPlan,
+                totalShots: plannedShots.length,
                 ...stylePayload,
               })
             });
 
-            if (res.ok) {
-              const data = await res.json();
-              if (data.shots && Array.isArray(data.shots)) {
-                const mappedShots = data.shots.map((s: any, sIdx: number) => {
-                  const relatedIds: string[] = [];
-                  if (Array.isArray(s.suggestedAssetNames)) {
-                    s.suggestedAssetNames.forEach((name: string) => {
-                      const normalizedName = name.trim().toLowerCase();
-                      const asset = assets.find(a => a.name.toLowerCase() === normalizedName);
-                      if (asset && !relatedIds.includes(asset.id)) relatedIds.push(asset.id);
-                    });
-                  }
-                  return {
-                    id: crypto.randomUUID(),
-                    episodeId: ep.id,
-                    sequence: newShots.length + sIdx + 1,
-                    description: s.description || '',
-                    sceneLabel: s.sceneLabel || '',
-                    characterAction: s.characterAction || '',
-                    emotion: s.emotion || '',
-                    lightingAtmosphere: s.lightingAtmosphere || '',
-                    soundEffect: s.soundEffect || '',
-                    dialogue: s.dialogue || '',
-                    camera: s.camera || '',
-                    size: s.size || '',
-                    duration: normalizeShotDurationSeconds(s.duration),
-                    sensitivityReduction: s.sensitivityReduction ?? 0,
-                    videoPrompt: s.videoPrompt || '',
-                    characters: Array.isArray(s.characters) ? s.characters : [],
-                    relatedAssetIds: relatedIds
-                  } as Shot;
-                });
-                newShots.push(...mappedShots);
-                if (mappedShots.length > 0) {
-                  const last = mappedShots[mappedShots.length - 1];
-                  lastShotContext = last.description || '';
-                }
-              }
+            if (!res.ok) {
+              throw new Error(await res.text());
             }
+
+            const data = await res.json() as { shot?: StoryboardGeneratedShot };
+            if (!data.shot || typeof data.shot !== 'object') {
+              throw new Error('AI 返回的数据格式不正确，缺少 shot 对象');
+            }
+
+            const detailedShot: StoryboardGeneratedShot = {
+              ...data.shot,
+              duration: shotPlan.duration ?? data.shot.duration,
+            };
+            detailedShots.push(detailedShot);
+            newShots.push({
+              id: crypto.randomUUID(),
+              episodeId: ep.id,
+              sequence: newShots.length + 1,
+              description: detailedShot.description || '',
+              sceneLabel: detailedShot.sceneLabel || shotPlan.sceneLabel || '',
+              characterAction: detailedShot.characterAction || '',
+              emotion: detailedShot.emotion || '',
+              lightingAtmosphere: detailedShot.lightingAtmosphere || '',
+              soundEffect: detailedShot.soundEffect || '',
+              dialogue: detailedShot.dialogue || shotPlan.dialogue || '',
+              camera: detailedShot.camera || shotPlan.camera || '',
+              size: detailedShot.size || shotPlan.size || '',
+              duration: normalizeShotDurationSeconds(detailedShot.duration),
+              sensitivityReduction: detailedShot.sensitivityReduction ?? 0,
+              videoPrompt: detailedShot.videoPrompt || '',
+              characters: Array.isArray(detailedShot.characters) ? detailedShot.characters : [],
+              relatedAssetIds: resolveStoryboardRelatedAssetIds(detailedShot, assets || []),
+            } as Shot);
           }
           
           if (newShots.length > 0) {

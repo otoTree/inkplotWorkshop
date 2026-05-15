@@ -1,9 +1,15 @@
 
 import { NextResponse } from 'next/server';
-import { getStoryboardGenerationPrompt, getStoryboardSystemPrompt } from '@/lib/prompts';
+import {
+  getStoryboardGenerationPrompt,
+  getStoryboardPlanPrompt,
+  getStoryboardShotPrompt,
+  getStoryboardSystemPrompt,
+} from '@/lib/prompts';
 import {
   EPISODE_DURATION_MAX_SECONDS,
   EPISODE_DURATION_MIN_SECONDS,
+  normalizeShotDurationSeconds,
   normalizeStoryboardShots,
 } from '@/lib/duration';
 import { compactStoryboardAssets } from '@/lib/storyboard-generation';
@@ -12,6 +18,75 @@ import { AIAPIError, callAIChatCompletion, extractFirstMessageContent } from '@/
 import { resolveArtStyleConfig } from '@/lib/project-visual-style';
 
 export const maxDuration = 300; // Longer timeout for storyboard generation
+
+const parseJSONContent = (content: string) => {
+  let cleanContent = content;
+  cleanContent = cleanContent.replace(/<think>[\s\S]*?<\/think>/g, '').trim();
+  cleanContent = cleanContent
+    .replace(/^```json\n?/, '')
+    .replace(/^```\n?/, '')
+    .replace(/\n?```$/, '')
+    .trim();
+
+  const jsonStart = cleanContent.indexOf('{');
+  const jsonEnd = cleanContent.lastIndexOf('}');
+  if (jsonStart !== -1 && jsonEnd !== -1 && jsonEnd >= jsonStart) {
+    cleanContent = cleanContent.substring(jsonStart, jsonEnd + 1);
+  }
+
+  return JSON.parse(cleanContent);
+};
+
+const normalizeStoryboardListPayload = (parsed: unknown) => {
+  let jsonContent: any = {};
+  if (Array.isArray(parsed)) {
+    jsonContent.shots = parsed;
+  } else {
+    jsonContent = parsed;
+  }
+
+  if (!jsonContent.shots && jsonContent.shot_list) {
+    jsonContent.shots = jsonContent.shot_list;
+  }
+
+  if (!Array.isArray(jsonContent.shots)) {
+    throw new Error('Invalid storyboard output: missing shots array');
+  }
+
+  const normalizedShots = normalizeStoryboardShots(jsonContent.shots);
+  if (!normalizedShots) {
+    throw new Error(
+      `Invalid storyboard output: total duration must be normalizable to ${EPISODE_DURATION_MIN_SECONDS}-${EPISODE_DURATION_MAX_SECONDS} seconds`
+    );
+  }
+
+  jsonContent.shots = normalizedShots.map((shot, index) => ({
+    ...shot,
+    sequence: index + 1,
+  }));
+
+  return jsonContent;
+};
+
+const normalizeSingleShotPayload = (parsed: unknown) => {
+  const rawShot = Array.isArray(parsed)
+    ? parsed[0]
+    : (parsed as { shot?: unknown; data?: unknown })?.shot ||
+      (parsed as { shot?: unknown; data?: unknown })?.data ||
+      parsed;
+
+  if (!rawShot || typeof rawShot !== 'object' || Array.isArray(rawShot)) {
+    throw new Error('Invalid storyboard shot output');
+  }
+
+  const shot = rawShot as Record<string, unknown>;
+
+  return {
+    ...shot,
+    sequence: Number(shot.sequence) || 1,
+    duration: normalizeShotDurationSeconds(shot.duration),
+  };
+};
 
 export async function POST(req: Request) {
   try {
@@ -31,6 +106,11 @@ export async function POST(req: Request) {
       visualStylePreset,
       characterArtStyle,
       sceneArtStyle,
+      mode,
+      shotPlan,
+      previousShot,
+      nextShotPlan,
+      totalShots,
     } = body;
     const styleInput = artStyle ?? {
       visualStylePreset,
@@ -39,12 +119,34 @@ export async function POST(req: Request) {
       sceneArtStyle,
     };
     const resolvedStyle = resolveArtStyleConfig(styleInput);
-    const prompt = getStoryboardGenerationPrompt(
-      script,
-      compactStoryboardAssets(Array.isArray(assets) ? assets : []),
-      resolvedStyle,
-      language
-    );
+    const compactAssets = compactStoryboardAssets(Array.isArray(assets) ? assets : []);
+    const generationMode =
+      mode === 'plan' || mode === 'shot' ? mode : 'full';
+
+    const prompt =
+      generationMode === 'plan'
+        ? getStoryboardPlanPrompt(script, compactAssets, resolvedStyle, language)
+        : generationMode === 'shot'
+          ? getStoryboardShotPrompt(
+              {
+                scriptContent: typeof script === 'string' ? script : '',
+                shotPlan: shotPlan && typeof shotPlan === 'object' ? shotPlan : {},
+                previousShot:
+                  previousShot && typeof previousShot === 'object' ? previousShot : null,
+                nextShotPlan:
+                  nextShotPlan && typeof nextShotPlan === 'object' ? nextShotPlan : null,
+                totalShots: Number(totalShots) || undefined,
+              },
+              compactAssets,
+              resolvedStyle,
+              language
+            )
+          : getStoryboardGenerationPrompt(
+              script,
+              compactAssets,
+              resolvedStyle,
+              language
+            );
     const data = await callAIChatCompletion({
       messages: [
         {
@@ -59,51 +161,13 @@ export async function POST(req: Request) {
     const content = extractFirstMessageContent(data);
 
     try {
-      // Safely parse JSON even if it's wrapped in markdown code blocks or has <think> tags
-      let cleanContent = content;
-      // Remove <think>...</think> blocks
-      cleanContent = cleanContent.replace(/<think>[\s\S]*?<\/think>/g, '').trim();
-      // Remove markdown JSON formatting
-      cleanContent = cleanContent.replace(/^```json\n?/, '').replace(/^```\n?/, '').replace(/\n?```$/, '').trim();
-      
-      // Sometimes AI might output some text before or after the JSON, try to extract the JSON object
-      const jsonStart = cleanContent.indexOf('{');
-      const jsonEnd = cleanContent.lastIndexOf('}');
-      if (jsonStart !== -1 && jsonEnd !== -1 && jsonEnd >= jsonStart) {
-        cleanContent = cleanContent.substring(jsonStart, jsonEnd + 1);
-      }
-      
-      const parsed = JSON.parse(cleanContent);
-      
-      let jsonContent: any = {};
-      if (Array.isArray(parsed)) {
-          jsonContent.shots = parsed;
-      } else {
-          jsonContent = parsed;
-      }
-      
-      // Ensure the return structure always has a 'shots' array
-      if (!jsonContent.shots && jsonContent.shot_list) {
-          jsonContent.shots = jsonContent.shot_list;
+      const parsed = parseJSONContent(content);
+
+      if (generationMode === 'shot') {
+        return NextResponse.json({ shot: normalizeSingleShotPayload(parsed) });
       }
 
-      if (!Array.isArray(jsonContent.shots)) {
-        return NextResponse.json({ error: 'Invalid storyboard output: missing shots array' }, { status: 502 });
-      }
-
-      const normalizedShots = normalizeStoryboardShots(jsonContent.shots);
-      if (!normalizedShots) {
-        return NextResponse.json(
-          {
-            error: `Invalid storyboard output: total duration must be normalizable to ${EPISODE_DURATION_MIN_SECONDS}-${EPISODE_DURATION_MAX_SECONDS} seconds`,
-          },
-          { status: 502 }
-        );
-      }
-
-      jsonContent.shots = normalizedShots;
-
-      return NextResponse.json(jsonContent);
+      return NextResponse.json(normalizeStoryboardListPayload(parsed));
     } catch (e) {
       console.error('JSON Parse Error:', e);
       return NextResponse.json({ error: 'Invalid JSON response', raw: content }, { status: 500 });

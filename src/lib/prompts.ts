@@ -492,6 +492,113 @@ type ExistingAsset = {
   type?: string;
 };
 
+type StoryboardPlanPromptInput = {
+  sequence?: number;
+  sceneLabel?: string;
+  beat?: string;
+  camera?: string;
+  size?: string;
+  duration?: number;
+  dialogue?: string;
+  suggestedAssetNames?: string[];
+  suggestedAssets?: {
+    characters?: string[];
+    locations?: string[];
+  } | Array<{ name?: string | null }>;
+  characters?: Array<{
+    name?: string;
+    description?: string;
+  }>;
+};
+
+type StoryboardShotPromptInput = {
+  scriptContent: string;
+  shotPlan: StoryboardPlanPromptInput;
+  previousShot?: Record<string, unknown> | null;
+  nextShotPlan?: StoryboardPlanPromptInput | null;
+  totalShots?: number;
+};
+
+export const getStoryboardPlanPrompt = (
+  scriptContent: string,
+  existingAssets: ExistingAsset[],
+  artStyle?: ArtStyleInput,
+  language: string = 'zh'
+) => {
+  const { resolvedStyle, strategy } = resolvePromptStrategy(artStyle);
+  const { artStyle: baseStyle, sceneArtStyle } = resolvedStyle;
+  const resolvedSceneStyle = sceneArtStyle || baseStyle || 'Cinematic realism, Photorealistic';
+  const dialogueLanguageLabel = getStoryboardDialogueLanguageLabel(language);
+
+  return `
+# 任务：为整集剧本先生成“镜头规划表”
+
+目标：只规划镜头数量与每个镜头的叙事功能，不写超长细节，不写导演级长描述。后续系统会逐镜头再次生成详细分镜。
+
+## 硬性规则
+1. 输出必须是 JSON 对象，且只包含 \`shots\` 数组。
+2. 总镜头数必须在 ${STORYBOARD_SHOT_COUNT_MIN}-${STORYBOARD_SHOT_COUNT_MAX} 之间。
+3. 每个镜头时长必须在 ${SHOT_DURATION_MIN_SECONDS}-${SHOT_DURATION_MAX_SECONDS} 秒之间。
+4. 全部镜头总时长必须可落在 ${EPISODE_DURATION_MIN_SECONDS}-${EPISODE_DURATION_MAX_SECONDS} 秒之间。
+5. 除 \`dialogue\` 外，所有字段都必须使用中文。
+6. \`dialogue\` 如有内容，必须使用 ${dialogueLanguageLabel}。
+7. 每个镜头都必须有非空 \`sceneLabel\`，并且 \`suggestedAssets.locations\` 至少包含一个场景。
+8. 第一个镜头必须是全集最有悬念或最有冲击力的冷开场。
+9. 优先复用已有资产名称；如果命中已有资产，名称尽量完全一致。
+10. 只输出规划，不要写长段落，不要写 \`videoPrompt\`，不要写复杂连续动作。
+
+## 风格约束
+- 分镜整体风格：${strategy.storyboard.styleDirective}
+- 负面限制：${strategy.storyboard.negativeDirective}
+- 场景风格：${resolvedSceneStyle}
+
+## 字段要求
+每个镜头对象包含：
+- \`sequence\`
+- \`sceneLabel\`
+- \`beat\`：一句话说明这一镜的叙事目标
+- \`camera\`：一句简短镜头运动概述
+- \`size\`
+- \`duration\`
+- \`dialogue\`：没有则空字符串
+- \`suggestedAssetNames\`
+- \`characters\`
+- \`suggestedAssets\`
+
+## Script Content
+${scriptContent.slice(0, 15000)}
+
+## Existing Assets
+${JSON.stringify(existingAssets.map((asset) => ({ id: asset.id, name: asset.name, type: asset.type })))}
+
+## Output Format
+{
+  "shots": [
+    {
+      "sequence": 1,
+      "sceneLabel": "场景名",
+      "beat": "这一镜要完成的叙事功能",
+      "camera": "简短运镜概述",
+      "size": "特写/中景/远景",
+      "duration": ${DEFAULT_SHOT_DURATION_SECONDS},
+      "dialogue": "",
+      "suggestedAssetNames": ["角色名", "场景名"],
+      "characters": [
+        {
+          "name": "角色名",
+          "description": "简短状态描述"
+        }
+      ],
+      "suggestedAssets": {
+        "characters": ["角色名"],
+        "locations": ["场景名"]
+      }
+    }
+  ]
+}
+`;
+};
+
 export const getStoryboardGenerationPrompt = (scriptContent: string, existingAssets: ExistingAsset[], artStyle?: ArtStyleInput, language: string = 'zh') => {
   const { resolvedStyle, strategy } = resolvePromptStrategy(artStyle);
   const { artStyle: baseStyle, sceneArtStyle } = resolvedStyle;
@@ -627,6 +734,124 @@ ${JSON.stringify(existingAssets.map(a => ({ id: a.id, name: a.name, type: a.type
 export const getStoryboardSystemPrompt = (artStyle?: ArtStyleInput) => {
   const { strategy } = resolvePromptStrategy(artStyle);
   return `${strategy.storyboard.systemRole} Output rule: all storyboard fields except dialogue must be written in Chinese; dialogue follows the project language. Never output English in non-dialogue fields.`;
+};
+
+export const getStoryboardShotPrompt = (
+  {
+    scriptContent,
+    shotPlan,
+    previousShot,
+    nextShotPlan,
+    totalShots,
+  }: StoryboardShotPromptInput,
+  existingAssets: ExistingAsset[],
+  artStyle?: ArtStyleInput,
+  language: string = 'zh'
+) => {
+  const { resolvedStyle, strategy } = resolvePromptStrategy(artStyle);
+  const { artStyle: baseStyle, sceneArtStyle } = resolvedStyle;
+  const resolvedSceneStyle = sceneArtStyle || baseStyle || 'Cinematic realism, Photorealistic';
+  const dialogueLanguageLabel = getStoryboardDialogueLanguageLabel(language);
+
+  return `
+# 任务：只生成一个镜头的详细分镜 JSON
+
+目标：基于给定的“镜头规划项”，只产出当前这一个镜头的详细导演级分镜，不要生成其他镜头。
+
+## 硬性规则
+1. 输出必须是一个 JSON 对象，不要输出数组，不要输出解释文字。
+2. 只能生成当前镜头：sequence=${shotPlan.sequence ?? 1}，全集共 ${totalShots || '未知'} 个镜头。
+3. 除 \`dialogue\` 外，所有字段必须使用中文。
+4. \`dialogue\` 必须使用 ${dialogueLanguageLabel}。
+5. \`sceneLabel\` 必须非空，并与当前镜头规划一致或高度一致。
+6. \`duration\` 必须优先遵循当前镜头规划值 ${shotPlan.duration ?? DEFAULT_SHOT_DURATION_SECONDS}。
+7. 必须优先复用已有资产名称。
+8. \`videoPrompt\` 必须是可直接用于视频模型的中文连续镜头提示词。
+9. 只生成一个镜头，不要扩写成整集。
+
+## 当前镜头规划
+${JSON.stringify(shotPlan)}
+
+## 上一镜最终结果
+${previousShot ? JSON.stringify(previousShot) : '无'}
+
+## 下一镜规划
+${nextShotPlan ? JSON.stringify(nextShotPlan) : '无'}
+
+## 已有资产
+${JSON.stringify(existingAssets.map((asset) => ({ id: asset.id, name: asset.name, type: asset.type })))}
+
+## 剧本全文
+${scriptContent.slice(0, 15000)}
+
+## 风格约束
+- 分镜整体风格：${strategy.storyboard.styleDirective}
+- 视频提示词重点：${strategy.storyboard.videoDirective}
+- 负面限制：${strategy.storyboard.negativeDirective}
+- 场景风格：${resolvedSceneStyle}
+
+## 输出字段
+- \`description\`：连续镜头描述
+- \`sceneLabel\`
+- \`transition\`
+- \`eyeline\`
+- \`lightingEvolution\`
+- \`cameraMotivation\`
+- \`timeline\`
+- \`environmentalState\`
+- \`generationConstraints\`
+- \`characterAction\`
+- \`emotion\`
+- \`lightingAtmosphere\`
+- \`soundEffect\`
+- \`dialogue\`
+- \`camera\`
+- \`size\`
+- \`duration\`
+- \`videoPrompt\`
+- \`suggestedAssetNames\`
+- \`characters\`
+- \`suggestedAssets\`
+
+## Output Format
+{
+  "sequence": ${shotPlan.sequence ?? 1},
+  "description": "详细连续镜头描述",
+  "sceneLabel": "${shotPlan.sceneLabel || '场景名'}",
+  "transition": {
+    "incomingAction": "承接动作",
+    "continuityMatch": "视觉衔接点",
+    "spatialRelationship": "空间关系",
+    "timeGap": "连续/几秒后/回溯"
+  },
+  "eyeline": "视线关系",
+  "lightingEvolution": "光线变化",
+  "cameraMotivation": "镜头移动动机",
+  "timeline": "时间锚点",
+  "environmentalState": "环境状态",
+  "generationConstraints": ["约束1", "约束2"],
+  "characterAction": "角色动作路径",
+  "emotion": "主导情绪",
+  "lightingAtmosphere": "光影氛围",
+  "soundEffect": "关键音效",
+  "dialogue": "${shotPlan.dialogue || ''}",
+  "camera": "${shotPlan.camera || ''}",
+  "size": "${shotPlan.size || ''}",
+  "duration": ${shotPlan.duration ?? DEFAULT_SHOT_DURATION_SECONDS},
+  "videoPrompt": "用于视频生成的中文连续镜头提示词",
+  "suggestedAssetNames": ["角色名", "场景名"],
+  "characters": [
+    {
+      "name": "角色名",
+      "description": "角色外貌和状态"
+    }
+  ],
+  "suggestedAssets": {
+    "characters": ["角色名"],
+    "locations": ["场景名"]
+  }
+}
+`;
 };
 
 export const getCoverDesignPrompt = (title: string, logline: string, characters: string[] = [], language: string = 'zh') => {
