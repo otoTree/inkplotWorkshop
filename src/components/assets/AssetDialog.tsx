@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
+import { upload } from '@vercel/blob/client';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -22,6 +23,9 @@ interface AssetDialogProps {
   artStyle?: ArtStyleConfig;
   imageGenerationModel?: SupportedImageGenerationModel;
 }
+
+const MAX_IMAGE_UPLOAD_SIZE_BYTES = 50 * 1024 * 1024;
+const MAX_IMAGE_UPLOAD_SIZE_LABEL = '50MB';
 
 export function AssetDialog({ 
   open, 
@@ -91,8 +95,8 @@ export function AssetDialog({
       return;
     }
 
-    if (file.size > 10 * 1024 * 1024) {
-      setUploadError('图片大小不能超过 10MB');
+    if (file.size > MAX_IMAGE_UPLOAD_SIZE_BYTES) {
+      setUploadError(`图片大小不能超过 ${MAX_IMAGE_UPLOAD_SIZE_LABEL}`);
       return;
     }
 
@@ -102,23 +106,14 @@ export function AssetDialog({
     try {
       const extension = file.name.includes('.') ? file.name.split('.').pop() : '';
       const safeName = `${crypto.randomUUID()}${extension ? `.${extension}` : ''}`;
-      const response = await fetch(
-        `/api/upload?filename=${encodeURIComponent(safeName)}&folder=${encodeURIComponent(`assets/${projectId}/${assetType}`)}`,
-        {
-          method: 'POST',
-          headers: {
-            'Content-Type': file.type,
-          },
-          body: file,
-        }
-      );
+      const pathname = `assets/${projectId}/${assetType}/${safeName}`;
+      const data = await upload(pathname, file, {
+        access: 'public',
+        contentType: file.type,
+        handleUploadUrl: '/api/upload/client',
+        multipart: file.size > 20 * 1024 * 1024,
+      });
 
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => null);
-        throw new Error(errorData?.error || '上传失败');
-      }
-
-      const data = await response.json();
       if (!data?.url) {
         throw new Error('上传成功但未返回图片地址');
       }
@@ -371,6 +366,9 @@ export function AssetDialog({
                 {uploadError && (
                     <p className="text-xs text-red-500">{uploadError}</p>
                 )}
+                <p className="text-[10px] text-muted-foreground">
+                    支持上传图片文件，单张最大 {MAX_IMAGE_UPLOAD_SIZE_LABEL}
+                </p>
                 <Input 
                     placeholder="或输入图片 URL" 
                     value={formData.imageUrl} 

@@ -38,6 +38,9 @@ export function StoryboardEditor({ projectId }: StoryboardEditorProps) {
   const [isGeneratingAll, setIsGeneratingAll] = useState(false);
   const [generationCurrent, setGenerationCurrent] = useState(0);
   const [generationTotal, setGenerationTotal] = useState(0);
+  const [shotGenerationPhase, setShotGenerationPhase] = useState<string>('');
+  const [shotGenerationCurrent, setShotGenerationCurrent] = useState(0);
+  const [shotGenerationTotal, setShotGenerationTotal] = useState(0);
   
   const [isGeneratingVideos, setIsGeneratingVideos] = useState(false);
   const [videoGenerationCurrent, setVideoGenerationCurrent] = useState(0);
@@ -80,7 +83,14 @@ export function StoryboardEditor({ projectId }: StoryboardEditorProps) {
     }
   }, [episodes, selectedEpisodeId]);
 
-  const generateShotsForEpisode = async (episode: Episode) => {
+  const generateShotsForEpisode = async (
+    episode: Episode,
+    onProgress?: (progress: {
+      phase: string;
+      current: number;
+      total: number;
+    }) => void
+  ) => {
     await api.shots.deleteByEpisode(episode.id);
     
     const scriptContent = extractStoryboardScriptText(episode.content || '');
@@ -88,6 +98,7 @@ export function StoryboardEditor({ projectId }: StoryboardEditorProps) {
 
     const storyboardAssets = compactStoryboardAssets(assets || []);
     const stylePayload = buildVisualStyleRequestPayload(project);
+    onProgress?.({ phase: '正在规划镜头数量', current: 0, total: 0 });
     const planRes = await fetch('/api/ai/generate-storyboard', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -105,6 +116,7 @@ export function StoryboardEditor({ projectId }: StoryboardEditorProps) {
     const planData = await planRes.json() as { shots?: StoryboardPlanShot[] };
     const plannedShots = Array.isArray(planData.shots) ? planData.shots : [];
     if (plannedShots.length === 0) return [];
+    onProgress?.({ phase: '正在逐镜头生成', current: 0, total: plannedShots.length });
 
     const allShots: StoryboardGeneratedShot[] = [];
 
@@ -139,6 +151,11 @@ export function StoryboardEditor({ projectId }: StoryboardEditorProps) {
       allShots.push({
         ...data.shot,
         duration: shotPlan.duration ?? data.shot.duration,
+      });
+      onProgress?.({
+        phase: '正在逐镜头生成',
+        current: index + 1,
+        total: plannedShots.length,
       });
     }
 
@@ -181,8 +198,15 @@ export function StoryboardEditor({ projectId }: StoryboardEditorProps) {
     if (!episode) return;
 
     setIsGenerating(true);
+    setShotGenerationPhase('正在规划镜头数量');
+    setShotGenerationCurrent(0);
+    setShotGenerationTotal(0);
     try {
-      const newShots = await generateShotsForEpisode(episode);
+      const newShots = await generateShotsForEpisode(episode, ({ phase, current, total }) => {
+        setShotGenerationPhase(phase);
+        setShotGenerationCurrent(current);
+        setShotGenerationTotal(total);
+      });
       if (newShots.length === 0) {
         alert('未能生成任何镜头，请检查剧本内容或重试。');
         return;
@@ -195,6 +219,9 @@ export function StoryboardEditor({ projectId }: StoryboardEditorProps) {
       alert('生成失败，请查看控制台详情。');
     } finally {
       setIsGenerating(false);
+      setShotGenerationPhase('');
+      setShotGenerationCurrent(0);
+      setShotGenerationTotal(0);
     }
   };
 
@@ -560,6 +587,27 @@ export function StoryboardEditor({ projectId }: StoryboardEditorProps) {
               <span>{Math.round((generationCurrent / generationTotal) * 100)}%</span>
             </div>
             <Progress value={(generationCurrent / generationTotal) * 100} className="h-2" />
+          </div>
+        )}
+
+        {isGenerating && (
+          <div className="px-6 py-3 border-b border-black/[0.04] bg-black/[0.01] shrink-0">
+            <div className="flex items-center justify-between text-xs text-black/60 mb-2">
+              <span>
+                {shotGenerationTotal > 0
+                  ? `${shotGenerationPhase} ${shotGenerationCurrent}/${shotGenerationTotal}`
+                  : shotGenerationPhase || '正在准备分镜生成'}
+              </span>
+              <span>
+                {shotGenerationTotal > 0
+                  ? `${Math.round((shotGenerationCurrent / shotGenerationTotal) * 100)}%`
+                  : '...'}
+              </span>
+            </div>
+            <Progress
+              value={shotGenerationTotal > 0 ? (shotGenerationCurrent / shotGenerationTotal) * 100 : 8}
+              className="h-2"
+            />
           </div>
         )}
 

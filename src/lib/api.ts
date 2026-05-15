@@ -94,9 +94,13 @@ const toShot = (row: Record<string, unknown>): Shot => ({
   videoStatus: row.video_status ? (row.video_status as Shot['videoStatus']) : undefined,
   videoGenerationMetadata: row.video_generation_metadata
     ? (row.video_generation_metadata as Shot['videoGenerationMetadata'])
-    : undefined,
+    : {},
   characters: row.characters as Shot['characters'] | undefined,
 });
+
+const normalizeShotVideoGenerationMetadata = (
+  metadata: Shot['videoGenerationMetadata'] | null | undefined
+) => metadata ?? {};
 
 export const api = {
   // Projects
@@ -417,7 +421,7 @@ export const api = {
          video_url: shot.videoUrl,
          video_generation_id: shot.videoGenerationId,
          video_status: shot.videoStatus,
-         video_generation_metadata: shot.videoGenerationMetadata,
+         video_generation_metadata: normalizeShotVideoGenerationMetadata(shot.videoGenerationMetadata),
          characters: shot.characters
        });
        if (error) throw error;
@@ -450,7 +454,7 @@ export const api = {
             video_url: s.videoUrl,
             video_generation_id: s.videoGenerationId,
             video_status: s.videoStatus,
-            video_generation_metadata: s.videoGenerationMetadata,
+            video_generation_metadata: normalizeShotVideoGenerationMetadata(s.videoGenerationMetadata),
             characters: s.characters
         }));
         
@@ -478,7 +482,11 @@ export const api = {
         if (updates.videoUrl !== undefined) dbUpdates.video_url = updates.videoUrl;
         if (updates.videoGenerationId !== undefined) dbUpdates.video_generation_id = updates.videoGenerationId;
         if (updates.videoStatus !== undefined) dbUpdates.video_status = updates.videoStatus;
-        if (updates.videoGenerationMetadata !== undefined) dbUpdates.video_generation_metadata = updates.videoGenerationMetadata;
+        if (updates.videoGenerationMetadata !== undefined) {
+          dbUpdates.video_generation_metadata = normalizeShotVideoGenerationMetadata(
+            updates.videoGenerationMetadata
+          );
+        }
         if (updates.characters !== undefined) dbUpdates.characters = updates.characters;
 
         const { error } = await supabase.from('shots').update(dbUpdates).eq('id', id);

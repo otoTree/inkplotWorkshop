@@ -290,6 +290,7 @@ export function OneClickWorkflowDialog({ projectId, open, onOpenChange }: OneCli
 
           const storyboardAssets = compactStoryboardAssets(assets || []);
           const stylePayload = buildVisualStyleRequestPayload(project);
+          log(`第 ${ep.episodeNumber} 集：正在规划镜头数量...`);
           const planRes = await fetch('/api/ai/generate-storyboard', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -309,8 +310,10 @@ export function OneClickWorkflowDialog({ projectId, open, onOpenChange }: OneCli
           const planData = await planRes.json() as { shots?: StoryboardPlanShot[] };
           const plannedShots = Array.isArray(planData.shots) ? planData.shots : [];
           if (plannedShots.length === 0) {
+            log(`第 ${ep.episodeNumber} 集：未生成任何镜头规划。`);
             return;
           }
+          log(`第 ${ep.episodeNumber} 集：镜头规划完成，共 ${plannedShots.length} 个镜头，开始逐镜头生成...`);
 
           const newShots: Shot[] = [];
           const detailedShots: StoryboardGeneratedShot[] = [];
@@ -349,6 +352,9 @@ export function OneClickWorkflowDialog({ projectId, open, onOpenChange }: OneCli
               duration: shotPlan.duration ?? data.shot.duration,
             };
             detailedShots.push(detailedShot);
+            if (j === 0 || j === plannedShots.length - 1 || (j + 1) % 3 === 0) {
+              log(`第 ${ep.episodeNumber} 集：正在生成第 ${j + 1}/${plannedShots.length} 个镜头...`);
+            }
             newShots.push({
               id: crypto.randomUUID(),
               episodeId: ep.id,
@@ -373,9 +379,11 @@ export function OneClickWorkflowDialog({ projectId, open, onOpenChange }: OneCli
           if (newShots.length > 0) {
             await api.shots.bulkCreate(newShots);
             storyboardCount += newShots.length;
+            log(`第 ${ep.episodeNumber} 集：分镜生成完成，已保存 ${newShots.length} 个镜头。`);
           }
         } catch (e) {
           console.error('Storyboard error for ep', ep.episodeNumber, e);
+          log(`第 ${ep.episodeNumber} 集：分镜生成失败。`);
         } finally {
           completedStoryboards++;
           setProgress(60 + ((completedStoryboards / validEpisodes.length) * 20)); // Up to 80%
