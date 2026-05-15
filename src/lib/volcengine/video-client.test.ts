@@ -90,6 +90,8 @@ test('getVolcengineVideoConfig prefers ARTS env and normalizes base url', () => 
     VOLCENGINE_ARK_VIDEO_BASE_URL: process.env.VOLCENGINE_ARK_VIDEO_BASE_URL,
     VOLCENGINE_ARK_VIDEO_API_KEY: process.env.VOLCENGINE_ARK_VIDEO_API_KEY,
     VOLCENGINE_ARK_VIDEO_MODEL: process.env.VOLCENGINE_ARK_VIDEO_MODEL,
+    ARK_BASE_URL: process.env.ARK_BASE_URL,
+    ARK_VIDEO_MODEL: process.env.ARK_VIDEO_MODEL,
   };
 
   process.env.ARTS_API_BASE_URL = 'https://apis.artsapi.com/api';
@@ -119,6 +121,7 @@ test('getConfiguredVolcengineVideoModel falls back to legacy envs', () => {
   const previous = {
     ARTS_VIDEO_MODEL: process.env.ARTS_VIDEO_MODEL,
     VOLCENGINE_ARK_VIDEO_MODEL: process.env.VOLCENGINE_ARK_VIDEO_MODEL,
+    ARK_VIDEO_MODEL: process.env.ARK_VIDEO_MODEL,
     AI_API_VIDEO_MODEL: process.env.AI_API_VIDEO_MODEL,
   };
 
@@ -128,6 +131,71 @@ test('getConfiguredVolcengineVideoModel falls back to legacy envs', () => {
 
   try {
     assert.equal(getConfiguredVolcengineVideoModel(), 'legacy-seedance-2-model');
+  } finally {
+    for (const [key, value] of Object.entries(previous)) {
+      if (value === undefined) {
+        delete process.env[key];
+      } else {
+        process.env[key] = value;
+      }
+    }
+  }
+});
+
+test('getVolcengineVideoConfig falls back to ARK base url and model envs', () => {
+  const previous = {
+    ARTS_API_BASE_URL: process.env.ARTS_API_BASE_URL,
+    ARTS_API_KEY: process.env.ARTS_API_KEY,
+    ARTS_VIDEO_MODEL: process.env.ARTS_VIDEO_MODEL,
+    VOLCENGINE_ARK_VIDEO_BASE_URL: process.env.VOLCENGINE_ARK_VIDEO_BASE_URL,
+    VOLCENGINE_ARK_VIDEO_API_KEY: process.env.VOLCENGINE_ARK_VIDEO_API_KEY,
+    VOLCENGINE_ARK_VIDEO_MODEL: process.env.VOLCENGINE_ARK_VIDEO_MODEL,
+    ARK_BASE_URL: process.env.ARK_BASE_URL,
+    ARK_API_KEY: process.env.ARK_API_KEY,
+    ARK_VIDEO_MODEL: process.env.ARK_VIDEO_MODEL,
+  };
+
+  delete process.env.ARTS_API_BASE_URL;
+  delete process.env.ARTS_API_KEY;
+  delete process.env.ARTS_VIDEO_MODEL;
+  delete process.env.VOLCENGINE_ARK_VIDEO_BASE_URL;
+  delete process.env.VOLCENGINE_ARK_VIDEO_API_KEY;
+  delete process.env.VOLCENGINE_ARK_VIDEO_MODEL;
+  process.env.ARK_BASE_URL = 'https://ark.example.com/api';
+  process.env.ARK_API_KEY = 'ark-key';
+  process.env.ARK_VIDEO_MODEL = 'doubao-seedance-2-0-260128';
+
+  try {
+    const config = getVolcengineVideoConfig();
+    assert.equal(config.baseUrl, 'https://ark.example.com/api/v3');
+    assert.equal(config.apiKey, 'ark-key');
+    assert.equal(config.model, 'doubao-seedance-2-0-260128');
+  } finally {
+    for (const [key, value] of Object.entries(previous)) {
+      if (value === undefined) {
+        delete process.env[key];
+      } else {
+        process.env[key] = value;
+      }
+    }
+  }
+});
+
+test('getConfiguredVolcengineVideoModel ignores non-seedance generic fallback', () => {
+  const previous = {
+    ARTS_VIDEO_MODEL: process.env.ARTS_VIDEO_MODEL,
+    VOLCENGINE_ARK_VIDEO_MODEL: process.env.VOLCENGINE_ARK_VIDEO_MODEL,
+    ARK_VIDEO_MODEL: process.env.ARK_VIDEO_MODEL,
+    AI_API_VIDEO_MODEL: process.env.AI_API_VIDEO_MODEL,
+  };
+
+  delete process.env.ARTS_VIDEO_MODEL;
+  delete process.env.VOLCENGINE_ARK_VIDEO_MODEL;
+  delete process.env.ARK_VIDEO_MODEL;
+  process.env.AI_API_VIDEO_MODEL = 'kling-v3-omni-pro';
+
+  try {
+    assert.equal(getConfiguredVolcengineVideoModel(), '');
   } finally {
     for (const [key, value] of Object.entries(previous)) {
       if (value === undefined) {

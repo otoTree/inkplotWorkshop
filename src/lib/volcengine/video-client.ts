@@ -53,7 +53,11 @@ const toTimeoutMs = (value: string | undefined) => {
 
 export const getVolcengineVideoConfig = (): VolcengineVideoConfig => {
   const baseUrl = normalizeVideoBaseUrl(
-    getFirstDefinedEnv(process.env.ARTS_API_BASE_URL, process.env.VOLCENGINE_ARK_VIDEO_BASE_URL) ||
+    getFirstDefinedEnv(
+      process.env.ARTS_API_BASE_URL,
+      process.env.VOLCENGINE_ARK_VIDEO_BASE_URL,
+      process.env.ARK_BASE_URL
+    ) ||
       'https://ark.cn-beijing.volces.com/api/v3'
   );
   const apiKey = getFirstDefinedEnv(
@@ -77,8 +81,12 @@ export const getConfiguredVolcengineVideoModel = () =>
   getFirstDefinedEnv(
     process.env.ARTS_VIDEO_MODEL,
     process.env.VOLCENGINE_ARK_VIDEO_MODEL,
-    process.env.AI_API_VIDEO_MODEL
-  );
+    process.env.ARK_VIDEO_MODEL
+  ) ||
+  (() => {
+    const fallbackModel = getFirstDefinedEnv(process.env.AI_API_VIDEO_MODEL);
+    return isSeedance2Model(fallbackModel) ? fallbackModel : '';
+  })();
 
 export const isSeedance2Model = (model?: string | null) =>
   typeof model === 'string' && /seedance[-_]?2|seedance-2|2-0/i.test(model);
