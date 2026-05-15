@@ -182,6 +182,7 @@ export function StoryboardEditor({ projectId }: StoryboardEditorProps) {
         duration: normalizeShotDurationSeconds(s.duration),
         sensitivityReduction: s.sensitivityReduction ?? 0,
         videoPrompt: s.videoPrompt || '',
+        videoGenerationMetadata: {},
         characters: Array.isArray(s.characters) ? s.characters : [],
         relatedAssetIds: relatedIds
       };
@@ -433,6 +434,7 @@ export function StoryboardEditor({ projectId }: StoryboardEditorProps) {
       duration: DEFAULT_SHOT_DURATION_SECONDS,
       sensitivityReduction: 0,
       videoPrompt: '',
+      videoGenerationMetadata: {},
       characters: [],
       relatedAssetIds: []
     };

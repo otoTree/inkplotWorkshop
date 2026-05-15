@@ -371,6 +371,7 @@ export function OneClickWorkflowDialog({ projectId, open, onOpenChange }: OneCli
               duration: normalizeShotDurationSeconds(detailedShot.duration),
               sensitivityReduction: detailedShot.sensitivityReduction ?? 0,
               videoPrompt: detailedShot.videoPrompt || '',
+              videoGenerationMetadata: {},
               characters: Array.isArray(detailedShot.characters) ? detailedShot.characters : [],
               relatedAssetIds: resolveStoryboardRelatedAssetIds(detailedShot, assets || []),
             } as Shot);
