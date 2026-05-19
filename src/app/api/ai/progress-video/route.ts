@@ -22,6 +22,7 @@ import {
 import {
   normalizeProjectVideoAspectRatio,
   normalizeProjectVideoSettings,
+  resolveProjectVideoGenerationModel,
   type ProjectVideoSettingsLike,
 } from '@/lib/volcengine/video-compat';
 import {
@@ -209,6 +210,9 @@ export async function POST(req: Request) {
       const projectVideoSettings = await getProjectVideoSettings(supabase, claimedShot.episode_id);
       const projectId = await getProjectIdForEpisode(supabase, claimedShot.episode_id, user.id);
       const useSeedance2 = shouldUseSeedance2(projectVideoSettings);
+      const resolvedSeedanceModel =
+        resolveProjectVideoGenerationModel(projectVideoSettings) ||
+        getConfiguredVolcengineVideoModel();
       const aspectRatio = resolveVideoAspectRatio(claimedShot, projectVideoSettings);
       const fullPrompt = buildVideoGenerationPrompt(
         [
@@ -231,7 +235,7 @@ export async function POST(req: Request) {
       try {
         const result: VideoTaskResult = useSeedance2
           ? await (async () => {
-              const videoConfig = getVolcengineVideoConfig();
+              const videoConfig = getVolcengineVideoConfig(resolvedSeedanceModel);
               const resolvedReferences = await resolveVolcengineReferenceAssets({
                 references: referenceAssets,
                 settings: projectVideoSettings,
@@ -351,7 +355,7 @@ export async function POST(req: Request) {
                 ? {
                     video_generation_metadata: {
                       provider: 'volcengine',
-                      model: getConfiguredVolcengineVideoModel() || undefined,
+                      model: resolvedSeedanceModel || undefined,
                       aspectRatio,
                       resolution: '1080p',
                       rawStatus: 'waiting_for_assets',
@@ -379,8 +383,8 @@ export async function POST(req: Request) {
             video_status: 'failed',
             video_generation_metadata: {
               provider: useSeedance2 ? 'volcengine' : 'legacy',
-              ...(useSeedance2 && getConfiguredVolcengineVideoModel()
-                ? { model: getConfiguredVolcengineVideoModel() }
+              ...(useSeedance2 && resolvedSeedanceModel
+                ? { model: resolvedSeedanceModel }
                 : {}),
               ...(useSeedance2 ? { aspectRatio, resolution: '1080p' } : {}),
               ...(useSeedance2 ? { rawStatus: 'failed' } : {}),

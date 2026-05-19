@@ -4,6 +4,8 @@ import { Button } from "@/components/ui/button";
 import { Plus, LogOut } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
 import { resolveProjectVisualStyleSelection } from "@/lib/project-visual-style";
+import { normalizeProjectVideoSettings } from "@/lib/volcengine/video-compat";
+import { normalizeImageGenerationModel } from "@/lib/image-generation-models";
 import { redirect } from "next/navigation";
 import { signOut } from "./actions";
 import { Project } from "@/types";
@@ -23,17 +25,22 @@ export default async function Home() {
   const projects: Project[] = (projectRows ?? []).map((row) => {
     const record = row as Record<string, unknown>;
     const resolvedStyle = resolveProjectVisualStyleSelection(record.art_style);
+    const normalizedVideoSettings = normalizeProjectVideoSettings(
+      record.volcengine_video_settings as Project["volcengineVideoSettings"] | undefined
+    );
     return {
       id: record.id as string,
       title: record.title as string,
       logline: (record.logline as string) || "",
       genre: (record.genre as string[]) || [],
       language: (record.language as string) || "zh",
+      imageGenerationModel: normalizeImageGenerationModel(record.image_generation_model),
       visualStylePreset: resolvedStyle.visualStylePreset,
       visualStylePresetSource: resolvedStyle.source,
       artStyle: resolvedStyle.artStyle,
       characterArtStyle: resolvedStyle.characterArtStyle,
       sceneArtStyle: resolvedStyle.sceneArtStyle,
+      volcengineVideoSettings: normalizedVideoSettings,
       seriesPlan: record.series_plan,
       createdAt: new Date(record.created_at as string).getTime(),
       updatedAt: new Date(record.updated_at as string).getTime(),

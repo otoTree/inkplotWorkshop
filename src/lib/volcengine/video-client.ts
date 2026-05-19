@@ -51,7 +51,9 @@ const toTimeoutMs = (value: string | undefined) => {
   return Math.round(parsed);
 };
 
-export const getVolcengineVideoConfig = (): VolcengineVideoConfig => {
+export const getVolcengineVideoConfig = (
+  modelOverride?: string | null
+): VolcengineVideoConfig => {
   const baseUrl = normalizeVideoBaseUrl(
     getFirstDefinedEnv(
       process.env.ARTS_API_BASE_URL,
@@ -65,7 +67,7 @@ export const getVolcengineVideoConfig = (): VolcengineVideoConfig => {
     process.env.VOLCENGINE_ARK_VIDEO_API_KEY,
     process.env.ARK_API_KEY
   );
-  const model = getConfiguredVolcengineVideoModel();
+  const model = getConfiguredVolcengineVideoModel(modelOverride);
   const timeoutMs = toTimeoutMs(
     getFirstDefinedEnv(process.env.VOLCENGINE_ARK_VIDEO_TIMEOUT_MS, process.env.AI_API_TIMEOUT_MS)
   );
@@ -77,19 +79,26 @@ export const getVolcengineVideoConfig = (): VolcengineVideoConfig => {
   return { baseUrl, apiKey, model, timeoutMs };
 };
 
-export const getConfiguredVolcengineVideoModel = () =>
-  getFirstDefinedEnv(
-    process.env.ARTS_VIDEO_MODEL,
-    process.env.VOLCENGINE_ARK_VIDEO_MODEL,
-    process.env.ARK_VIDEO_MODEL
-  ) ||
-  (() => {
-    const fallbackModel = getFirstDefinedEnv(process.env.AI_API_VIDEO_MODEL);
-    return isSeedance2Model(fallbackModel) ? fallbackModel : '';
-  })();
-
 export const isSeedance2Model = (model?: string | null) =>
   typeof model === 'string' && /seedance[-_]?2|seedance-2|2-0/i.test(model);
+
+export const getConfiguredVolcengineVideoModel = (modelOverride?: string | null) => {
+  const normalizedOverride =
+    typeof modelOverride === 'string' && modelOverride.trim() ? modelOverride.trim() : '';
+  if (isSeedance2Model(normalizedOverride)) return normalizedOverride;
+
+  return (
+    getFirstDefinedEnv(
+      process.env.ARTS_VIDEO_MODEL,
+      process.env.VOLCENGINE_ARK_VIDEO_MODEL,
+      process.env.ARK_VIDEO_MODEL
+    ) ||
+    (() => {
+      const fallbackModel = getFirstDefinedEnv(process.env.AI_API_VIDEO_MODEL);
+      return isSeedance2Model(fallbackModel) ? fallbackModel : '';
+    })()
+  );
+};
 
 export const mapVolcengineTaskStatus = (status: string): VolcengineMappedTaskStatus => {
   const normalized = status.toLowerCase();

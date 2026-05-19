@@ -1,10 +1,12 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import {
+  DEFAULT_SEEDANCE_2_VIDEO_MODEL,
   DEFAULT_PROJECT_VIDEO_ASPECT_RATIO,
   DEFAULT_PROJECT_VIDEO_MODEL,
   inferVideoTaskProvider,
   normalizeProjectVideoAspectRatio,
+  normalizeProjectVideoGenerationModel,
   normalizeProjectVideoModel,
   normalizeProjectVideoSettings,
   shouldUseSeedance2ForProject,
@@ -25,9 +27,22 @@ test('normalizeProjectVideoSettings applies explicit safe defaults', () => {
     syncAssetsToPrivateLibrary: false,
     assetGroupId: undefined,
     projectName: 'default',
+    model: 'legacy',
     preferredVideoModel: 'legacy',
     aspectRatio: '9:16',
   });
+});
+
+test('normalizeProjectVideoGenerationModel upgrades old seedance preference to concrete model id', () => {
+  assert.equal(
+    normalizeProjectVideoGenerationModel(undefined, 'seedance-2.0'),
+    DEFAULT_SEEDANCE_2_VIDEO_MODEL
+  );
+  assert.equal(
+    normalizeProjectVideoGenerationModel('doubao-seedance-2-0-pro'),
+    DEFAULT_SEEDANCE_2_VIDEO_MODEL
+  );
+  assert.equal(normalizeProjectVideoGenerationModel('legacy'), 'legacy');
 });
 
 test('normalizeProjectVideoAspectRatio keeps supported values and falls back safely', () => {

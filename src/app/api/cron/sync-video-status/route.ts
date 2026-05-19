@@ -21,6 +21,7 @@ import {
 import {
   normalizeProjectVideoAspectRatio,
   normalizeProjectVideoSettings,
+  resolveProjectVideoGenerationModel,
   type ProjectVideoSettingsLike,
 } from '@/lib/volcengine/video-compat';
 import {
@@ -216,6 +217,7 @@ export async function GET(req: Request) {
       for (const shot of queuedShots) {
         let useSeedance2 = false;
         let aspectRatio = getShotAspectRatio(shot);
+        let resolvedSeedanceModel = '';
         try {
           const referenceAssets: LocalReferenceAsset[] = [];
           if (shot.reference_image) {
@@ -244,6 +246,9 @@ export async function GET(req: Request) {
           const projectVideoSettings = await getProjectVideoSettings(supabase, shot.episode_id);
           const projectId = await getProjectIdForEpisode(supabase, shot.episode_id);
           useSeedance2 = shouldUseSeedance2(projectVideoSettings);
+          resolvedSeedanceModel =
+            resolveProjectVideoGenerationModel(projectVideoSettings) ||
+            getConfiguredVolcengineVideoModel();
           aspectRatio = resolveVideoAspectRatio(shot, projectVideoSettings);
           const fullPrompt = buildVideoGenerationPrompt(
             [
@@ -265,7 +270,7 @@ export async function GET(req: Request) {
 
           const result: VideoTaskResult = useSeedance2
             ? await (async () => {
-                const videoConfig = getVolcengineVideoConfig();
+                const videoConfig = getVolcengineVideoConfig(resolvedSeedanceModel);
                 const resolvedReferences = await resolveVolcengineReferenceAssets({
                   references: referenceAssets,
                   settings: projectVideoSettings,
@@ -391,8 +396,8 @@ export async function GET(req: Request) {
                 video_generation_id: null,
                 video_generation_metadata: {
                   provider: 'volcengine',
-                  ...(useSeedance2 && getConfiguredVolcengineVideoModel()
-                    ? { model: getConfiguredVolcengineVideoModel() }
+                  ...(useSeedance2 && resolvedSeedanceModel
+                    ? { model: resolvedSeedanceModel }
                     : {}),
                   aspectRatio,
                   resolution: '1080p',
@@ -410,8 +415,8 @@ export async function GET(req: Request) {
                 video_status: 'failed',
                 video_generation_metadata: {
                   provider: useSeedance2 ? 'volcengine' : 'legacy',
-                  ...(useSeedance2 && getConfiguredVolcengineVideoModel()
-                    ? { model: getConfiguredVolcengineVideoModel() }
+                  ...(useSeedance2 && resolvedSeedanceModel
+                    ? { model: resolvedSeedanceModel }
                     : {}),
                   ...(useSeedance2 ? { aspectRatio, resolution: '1080p' } : {}),
                   ...(useSeedance2 ? { rawStatus: 'failed' } : {}),

@@ -30,9 +30,11 @@ import {
 } from '@/lib/project-visual-style';
 import {
   DEFAULT_PROJECT_VIDEO_ASPECT_RATIO,
-  DEFAULT_PROJECT_VIDEO_MODEL,
   DEFAULT_VOLCENGINE_PROJECT_NAME,
+  normalizeProjectVideoModel,
   normalizeProjectVideoSettings,
+  PROJECT_VIDEO_MODEL_OPTIONS,
+  type ProjectVideoModelSelection,
 } from '@/lib/volcengine/video-compat';
 import { ProjectVisualStylePresetSelector } from './ProjectVisualStylePresetSelector';
 import {
@@ -66,7 +68,7 @@ export function ProjectDialog({ children, project, open: controlledOpen, onOpenC
   const [visualStylePreset, setVisualStylePreset] = useState<ProjectVisualStylePreset>(DEFAULT_PROJECT_VISUAL_STYLE_PRESET);
   const [characterArtStyle, setCharacterArtStyle] = useState('');
   const [sceneArtStyle, setSceneArtStyle] = useState('');
-  const [videoModel, setVideoModel] = useState<'legacy' | 'seedance-2.0'>(DEFAULT_PROJECT_VIDEO_MODEL);
+  const [videoModel, setVideoModel] = useState<ProjectVideoModelSelection>('legacy');
   const [videoAspectRatio, setVideoAspectRatio] = useState<'9:16' | '16:9'>(DEFAULT_PROJECT_VIDEO_ASPECT_RATIO);
   const [syncVolcengineAssets, setSyncVolcengineAssets] = useState(false);
   const [volcengineAssetGroupId, setVolcengineAssetGroupId] = useState('');
@@ -96,7 +98,7 @@ export function ProjectDialog({ children, project, open: controlledOpen, onOpenC
         setVisualStylePreset(parsedStyle.visualStylePreset || DEFAULT_PROJECT_VISUAL_STYLE_PRESET);
         setCharacterArtStyle(project.characterArtStyle || project.artStyle || '');
         setSceneArtStyle(project.sceneArtStyle || project.artStyle || '');
-        setVideoModel(normalizedVideoSettings.preferredVideoModel);
+        setVideoModel(normalizedVideoSettings.model);
         setVideoAspectRatio(normalizedVideoSettings.aspectRatio);
         setSyncVolcengineAssets(normalizedVideoSettings.syncAssetsToPrivateLibrary);
         setVolcengineAssetGroupId(normalizedVideoSettings.assetGroupId || '');
@@ -113,7 +115,7 @@ export function ProjectDialog({ children, project, open: controlledOpen, onOpenC
           setVisualStylePreset(DEFAULT_PROJECT_VISUAL_STYLE_PRESET);
           setCharacterArtStyle('');
           setSceneArtStyle('');
-          setVideoModel(DEFAULT_PROJECT_VIDEO_MODEL);
+          setVideoModel('legacy');
           setVideoAspectRatio(DEFAULT_PROJECT_VIDEO_ASPECT_RATIO);
           setSyncVolcengineAssets(false);
           setVolcengineAssetGroupId('');
@@ -170,6 +172,7 @@ export function ProjectDialog({ children, project, open: controlledOpen, onOpenC
     setIsSubmitting(true);
     try {
       const normalizedLanguage = language || 'zh';
+      const normalizedPreferredVideoModel = normalizeProjectVideoModel(videoModel);
       if (project) {
         // Update existing project
         await api.projects.update(project.id, {
@@ -181,7 +184,8 @@ export function ProjectDialog({ children, project, open: controlledOpen, onOpenC
           characterArtStyle,
           sceneArtStyle,
           volcengineVideoSettings: {
-            preferredVideoModel: videoModel,
+            model: videoModel,
+            preferredVideoModel: normalizedPreferredVideoModel,
             aspectRatio: videoAspectRatio,
             syncAssetsToPrivateLibrary: syncVolcengineAssets,
             assetGroupId: volcengineAssetGroupId.trim() || undefined,
@@ -230,7 +234,8 @@ export function ProjectDialog({ children, project, open: controlledOpen, onOpenC
           characterArtStyle,
           sceneArtStyle,
           volcengineVideoSettings: {
-            preferredVideoModel: videoModel,
+            model: videoModel,
+            preferredVideoModel: normalizedPreferredVideoModel,
             aspectRatio: videoAspectRatio,
             syncAssetsToPrivateLibrary: syncVolcengineAssets,
             assetGroupId: volcengineAssetGroupId.trim() || undefined,
@@ -256,7 +261,7 @@ export function ProjectDialog({ children, project, open: controlledOpen, onOpenC
         setVisualStylePreset(DEFAULT_PROJECT_VISUAL_STYLE_PRESET);
         setCharacterArtStyle('');
         setSceneArtStyle('');
-        setVideoModel(DEFAULT_PROJECT_VIDEO_MODEL);
+        setVideoModel('legacy');
         setVideoAspectRatio(DEFAULT_PROJECT_VIDEO_ASPECT_RATIO);
         setSyncVolcengineAssets(false);
         setVolcengineAssetGroupId('');
@@ -432,13 +437,26 @@ export function ProjectDialog({ children, project, open: controlledOpen, onOpenC
                 视频模型
               </Label>
               <div className="sm:col-span-3">
-                <Select value={videoModel} onValueChange={(value) => setVideoModel(value as 'legacy' | 'seedance-2.0')}>
+                <Select
+                  value={videoModel}
+                  onValueChange={(value) =>
+                    setVideoModel(value as ProjectVideoModelSelection)
+                  }
+                >
                   <SelectTrigger id="videoModel">
                     <SelectValue placeholder="选择视频模型" />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="legacy">默认视频模型</SelectItem>
-                    <SelectItem value="seedance-2.0">Seedance 2.0</SelectItem>
+                    {PROJECT_VIDEO_MODEL_OPTIONS.map((option) => (
+                      <SelectItem key={option.value} value={option.value}>
+                        <div className="flex flex-col items-start">
+                          <span>{option.label}</span>
+                          <span className="text-xs text-black/50">
+                            {option.description}
+                          </span>
+                        </div>
+                      </SelectItem>
+                    ))}
                   </SelectContent>
                 </Select>
               </div>

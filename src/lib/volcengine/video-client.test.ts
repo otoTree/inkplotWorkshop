@@ -142,6 +142,29 @@ test('getConfiguredVolcengineVideoModel falls back to legacy envs', () => {
   }
 });
 
+test('getConfiguredVolcengineVideoModel prefers project override when provided', () => {
+  const previous = {
+    ARTS_VIDEO_MODEL: process.env.ARTS_VIDEO_MODEL,
+  };
+
+  process.env.ARTS_VIDEO_MODEL = 'doubao-seedance-2-0-260128';
+
+  try {
+    assert.equal(
+      getConfiguredVolcengineVideoModel('doubao-seedance-2-0-999999'),
+      'doubao-seedance-2-0-999999'
+    );
+  } finally {
+    for (const [key, value] of Object.entries(previous)) {
+      if (value === undefined) {
+        delete process.env[key];
+      } else {
+        process.env[key] = value;
+      }
+    }
+  }
+});
+
 test('getVolcengineVideoConfig falls back to ARK base url and model envs', () => {
   const previous = {
     ARTS_API_BASE_URL: process.env.ARTS_API_BASE_URL,
@@ -170,6 +193,31 @@ test('getVolcengineVideoConfig falls back to ARK base url and model envs', () =>
     assert.equal(config.baseUrl, 'https://ark.example.com/api/v3');
     assert.equal(config.apiKey, 'ark-key');
     assert.equal(config.model, 'doubao-seedance-2-0-260128');
+  } finally {
+    for (const [key, value] of Object.entries(previous)) {
+      if (value === undefined) {
+        delete process.env[key];
+      } else {
+        process.env[key] = value;
+      }
+    }
+  }
+});
+
+test('getVolcengineVideoConfig uses project model override', () => {
+  const previous = {
+    ARTS_API_BASE_URL: process.env.ARTS_API_BASE_URL,
+    ARTS_API_KEY: process.env.ARTS_API_KEY,
+    ARTS_VIDEO_MODEL: process.env.ARTS_VIDEO_MODEL,
+  };
+
+  process.env.ARTS_API_BASE_URL = 'https://apis.artsapi.com/api';
+  process.env.ARTS_API_KEY = 'arts-video-key';
+  process.env.ARTS_VIDEO_MODEL = 'doubao-seedance-2-0-260128';
+
+  try {
+    const config = getVolcengineVideoConfig('doubao-seedance-2-0-999999');
+    assert.equal(config.model, 'doubao-seedance-2-0-999999');
   } finally {
     for (const [key, value] of Object.entries(previous)) {
       if (value === undefined) {
