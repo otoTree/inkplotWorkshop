@@ -26,6 +26,7 @@ import {
 } from '@/lib/volcengine/video-compat';
 import {
   buildSeedance2VideoPayload,
+  DEFAULT_SEEDANCE_2_RESOLUTION,
   normalizeSeedance2AspectRatio,
 } from '@/lib/volcengine/video-payload';
 import {
@@ -310,7 +311,7 @@ export async function GET(req: Request) {
                   references: resolvedReferences.references,
                   duration: normalizeShotDurationSeconds(shot.duration),
                   ratio: aspectRatio,
-                  resolution: '1080p',
+                  resolution: DEFAULT_SEEDANCE_2_RESOLUTION,
                   generateAudio: true,
                   watermark: false,
                 });
@@ -322,7 +323,7 @@ export async function GET(req: Request) {
                     requestContentMode: resolvedReferences.requestContentMode,
                     referenceAssetIds: resolvedReferences.referenceAssetIds,
                     aspectRatio,
-                    resolution: '1080p',
+                    resolution: DEFAULT_SEEDANCE_2_RESOLUTION,
                     result: seedanceResult,
                   }),
                 };
@@ -400,7 +401,7 @@ export async function GET(req: Request) {
                     ? { model: resolvedSeedanceModel }
                     : {}),
                   aspectRatio,
-                  resolution: '1080p',
+                  resolution: DEFAULT_SEEDANCE_2_RESOLUTION,
                   rawStatus: 'waiting_for_assets',
                   error: message,
                 },
@@ -418,7 +419,9 @@ export async function GET(req: Request) {
                   ...(useSeedance2 && resolvedSeedanceModel
                     ? { model: resolvedSeedanceModel }
                     : {}),
-                  ...(useSeedance2 ? { aspectRatio, resolution: '1080p' } : {}),
+                  ...(useSeedance2
+                    ? { aspectRatio, resolution: DEFAULT_SEEDANCE_2_RESOLUTION }
+                    : {}),
                   ...(useSeedance2 ? { rawStatus: 'failed' } : {}),
                   error: message,
                 },

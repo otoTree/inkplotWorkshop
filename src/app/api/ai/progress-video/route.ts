@@ -26,8 +26,10 @@ import {
   type ProjectVideoSettingsLike,
 } from '@/lib/volcengine/video-compat';
 import {
+  DEFAULT_SEEDANCE_2_RESOLUTION,
   buildSeedance2VideoPayload,
   normalizeSeedance2AspectRatio,
+  type Seedance2Resolution,
 } from '@/lib/volcengine/video-payload';
 import {
   mapVolcengineAssetRow,
@@ -273,7 +275,7 @@ export async function POST(req: Request) {
                 references: resolvedReferences.references,
                 duration: normalizeShotDurationSeconds(claimedShot.duration),
                 ratio: aspectRatio,
-                resolution: '1080p',
+                resolution: DEFAULT_SEEDANCE_2_RESOLUTION,
                 generateAudio: true,
                 watermark: false,
               });
@@ -285,7 +287,7 @@ export async function POST(req: Request) {
                   requestContentMode: resolvedReferences.requestContentMode,
                   referenceAssetIds: resolvedReferences.referenceAssetIds,
                   aspectRatio,
-                  resolution: '1080p',
+                  resolution: DEFAULT_SEEDANCE_2_RESOLUTION,
                   result: seedanceResult,
                 }),
               };
@@ -357,7 +359,7 @@ export async function POST(req: Request) {
                       provider: 'volcengine',
                       model: resolvedSeedanceModel || undefined,
                       aspectRatio,
-                      resolution: '1080p',
+                      resolution: DEFAULT_SEEDANCE_2_RESOLUTION,
                       rawStatus: 'waiting_for_assets',
                       error: error.details || error.message,
                     },
@@ -386,7 +388,9 @@ export async function POST(req: Request) {
               ...(useSeedance2 && resolvedSeedanceModel
                 ? { model: resolvedSeedanceModel }
                 : {}),
-              ...(useSeedance2 ? { aspectRatio, resolution: '1080p' } : {}),
+              ...(useSeedance2
+                ? { aspectRatio, resolution: DEFAULT_SEEDANCE_2_RESOLUTION }
+                : {}),
               ...(useSeedance2 ? { rawStatus: 'failed' } : {}),
               error: error instanceof Error ? error.message : String(error),
             },
@@ -423,7 +427,7 @@ export async function POST(req: Request) {
       requestContentMode?: 'asset_uri' | 'url';
       referenceAssetIds?: string[];
       aspectRatio?: '9:16' | '16:9';
-      resolution?: '1080p';
+      resolution?: Seedance2Resolution;
       rawStatus?: string;
       usage?: Record<string, unknown>;
       error?: Record<string, unknown> | string | null;

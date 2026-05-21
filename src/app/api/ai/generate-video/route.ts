@@ -1,6 +1,9 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
-import { normalizeSeedance2AspectRatio } from '@/lib/volcengine/video-payload';
+import {
+  DEFAULT_SEEDANCE_2_RESOLUTION,
+  normalizeSeedance2AspectRatio,
+} from '@/lib/volcengine/video-payload';
 
 export const maxDuration = 300;
 
@@ -32,7 +35,7 @@ export async function POST(req: Request) {
           video_generation_id: null,
           video_generation_metadata: {
             aspectRatio,
-            resolution: '1080p',
+            resolution: DEFAULT_SEEDANCE_2_RESOLUTION,
           },
         })
         .eq('id', shotId)

@@ -1,6 +1,9 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { buildSeedance2VideoPayload } from './video-payload.ts';
+import {
+  buildSeedance2VideoPayload,
+  DEFAULT_SEEDANCE_2_RESOLUTION,
+} from './video-payload.ts';
 
 test('buildSeedance2VideoPayload prefers active asset URIs', () => {
   const payload = buildSeedance2VideoPayload({
@@ -22,7 +25,7 @@ test('buildSeedance2VideoPayload prefers active asset URIs', () => {
   });
 
   assert.equal(payload.ratio, '9:16');
-  assert.equal(payload.resolution, '1080p');
+  assert.equal(payload.resolution, DEFAULT_SEEDANCE_2_RESOLUTION);
   assert.equal(payload.content[1].type, 'image_url');
   const reference = payload.content[1];
   assert.equal(reference.type, 'image_url');
@@ -50,7 +53,7 @@ test('buildSeedance2VideoPayload uses URLs when references are not synced', () =
   });
 
   assert.equal(payload.ratio, '16:9');
-  assert.equal(payload.resolution, '1080p');
+  assert.equal(payload.resolution, DEFAULT_SEEDANCE_2_RESOLUTION);
   const reference = payload.content[1];
   assert.equal(reference.type, 'image_url');
   if (reference.type === 'image_url') {
@@ -79,4 +82,14 @@ test('buildSeedance2VideoPayload falls back to source URL for non-active asset U
   if (reference.type === 'image_url') {
     assert.equal(reference.image_url.url, 'https://example.com/pending.png');
   }
+});
+
+test('buildSeedance2VideoPayload allows explicit resolution override', () => {
+  const payload = buildSeedance2VideoPayload({
+    model: 'doubao-seedance-2-0-pro',
+    prompt: '测试显式分辨率覆盖。',
+    resolution: '1080p',
+  });
+
+  assert.equal(payload.resolution, '1080p');
 });

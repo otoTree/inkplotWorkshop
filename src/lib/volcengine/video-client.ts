@@ -1,5 +1,5 @@
 import { AIAPIError } from '../ai-server.ts';
-import type { Seedance2VideoPayload } from './video-payload.ts';
+import type { Seedance2Resolution, Seedance2VideoPayload } from './video-payload.ts';
 
 export type VolcengineVideoConfig = {
   baseUrl: string;
@@ -16,7 +16,7 @@ export type VolcengineVideoGenerationMetadata = {
   requestContentMode?: 'asset_uri' | 'url';
   referenceAssetIds?: string[];
   aspectRatio?: '9:16' | '16:9';
-  resolution?: '1080p';
+  resolution?: Seedance2Resolution;
   rawStatus?: string;
   usage?: Record<string, unknown>;
   error?: Record<string, unknown> | string | null;
@@ -161,7 +161,7 @@ export const buildVolcengineSubmissionMetadata = ({
   requestContentMode: 'asset_uri' | 'url';
   referenceAssetIds: string[];
   aspectRatio: '9:16' | '16:9';
-  resolution: '1080p';
+  resolution: Seedance2Resolution;
   result: unknown;
 }): VolcengineVideoGenerationMetadata => {
   const snapshot = getVolcengineTaskSnapshot(result);
