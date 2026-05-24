@@ -38,11 +38,11 @@ const parseJSONContent = (content: string) => {
 };
 
 const normalizeStoryboardListPayload = (parsed: unknown) => {
-  let jsonContent: any = {};
+  let jsonContent: Record<string, unknown> = {};
   if (Array.isArray(parsed)) {
     jsonContent.shots = parsed;
-  } else {
-    jsonContent = parsed;
+  } else if (parsed && typeof parsed === 'object') {
+    jsonContent = parsed as Record<string, unknown>;
   }
 
   if (!jsonContent.shots && jsonContent.shot_list) {
@@ -80,11 +80,22 @@ const normalizeSingleShotPayload = (parsed: unknown) => {
   }
 
   const shot = rawShot as Record<string, unknown>;
+  const suggestedAssetNames = Array.isArray(shot.suggestedAssetNames)
+    ? shot.suggestedAssetNames.filter((name): name is string => typeof name === 'string')
+    : [];
+  const characters = Array.isArray(shot.characters) ? shot.characters : [];
+  const suggestedAssets =
+    shot.suggestedAssets && typeof shot.suggestedAssets === 'object'
+      ? shot.suggestedAssets
+      : undefined;
 
   return {
-    ...shot,
     sequence: Number(shot.sequence) || 1,
     duration: normalizeShotDurationSeconds(shot.duration),
+    videoPrompt: typeof shot.videoPrompt === 'string' ? shot.videoPrompt : '',
+    suggestedAssetNames,
+    characters,
+    ...(suggestedAssets ? { suggestedAssets } : {}),
   };
 };
 

@@ -178,6 +178,32 @@ const joinPromptSegments = (...segments: Array<string | undefined>) => {
     .join(', ');
 };
 
+const STORYBOARD_VIDEO_PROMPT_DIMENSIONS = `
+## videoPrompt 五维结构（必须严格使用）
+\`videoPrompt\` 仍然是一个字符串，但字符串内部必须按以下 5 个维度组织，每个维度都要有明确内容，不能缺项，不能只写标题：
+1. **绝对主体与物理动势**：明确本镜头唯一或最主要的视觉主体；写清主体从什么姿态开始、如何发力、身体/道具/衣物/液体/烟尘如何产生可见运动，动作的重量、速度、方向和结束姿态是什么。
+2. **美学介质与底层渲染参数**：写清本项目风格下的媒介质感、材质表现、皮肤/布料/金属/墙面等细节、颗粒或渲染质感；必须结合项目风格，不要泛泛写“高级质感”。
+3. **环境场与情绪光影**：写清空间里的前中后景、环境物理状态、空气/烟雾/雨水/尘埃/反光等，以及情绪如何通过主光、辅光、逆光、色温、明暗对比变化体现。
+4. **时间轴与状态演变**：按镜头内时间顺序写：开场状态 -> 动作推进 -> 中途变化 -> 结束状态；必须说明它如何承接上一镜，并把什么状态交给下一镜。
+5. **光学与摄影机调度**：写清镜头焦段感、景深、机位高度、镜头运动路径、对焦变化、构图落点；如果是静镜头也要说明固定机位中人物/环境的微变化。
+
+\`videoPrompt\` 格式必须使用这 5 个中文小标题，并写成一段可直接给视频模型使用的提示词，例如：
+【绝对主体与物理动势】...
+【美学介质与底层渲染参数】...
+【环境场与情绪光影】...
+【时间轴与状态演变】...
+【光学与摄影机调度】...
+`.trim();
+
+const STORYBOARD_CONTINUITY_RULES = `
+## 分镜连续性规则（必须严格执行）
+1. 逐镜头不是各写各的独立画面，而是一条连续的剧情动作链：每一镜必须承接上一镜留下的动作、视线、情绪、环境物理状态或剧情信息。
+2. \`transition.incomingAction\` 和 \`videoPrompt\` 的“时间轴与状态演变”必须明确写出上一镜结束状态如何进入本镜；第一镜则写清冷开场起点。
+3. \`continuityOut\`、\`environmentalState\` 或 \`timeline\` 必须给下一镜留下可承接的状态，例如角色转头的方向、尚未落下的手、正在扩散的烟、门外逼近的脚步声、刚被揭示的信息。
+4. 相邻镜头之间必须共享至少一个连续元素：动作前后段、同一视线对象、同一环境物理状态、同一情绪递进、同一剧情因果。禁止无因硬切，禁止突然换成无关画面。
+5. 如果发生时间跳转、回溯、梦境或插叙，必须在 \`transition.timeGap\`、\`timeline\` 与 \`videoPrompt\` 的“时间轴与状态演变”中明示，不能让镜头关系含混。
+`.trim();
+
 export const getProjectDetailsPrompt = (userInput: string, artStyle?: ArtStyleInput) => {
   const { resolvedStyle, preset, strategy } = resolvePromptStrategy(artStyle);
   const characterStyleSeed = resolvedStyle.characterArtStyle || resolvedStyle.artStyle;
@@ -496,6 +522,9 @@ type StoryboardPlanPromptInput = {
   sequence?: number;
   sceneLabel?: string;
   beat?: string;
+  continuityIn?: string;
+  continuityOut?: string;
+  stateChange?: string;
   camera?: string;
   size?: string;
   duration?: number;
@@ -546,6 +575,8 @@ export const getStoryboardPlanPrompt = (
 8. 第一个镜头必须是全集最有悬念或最有冲击力的冷开场。
 9. 优先复用已有资产名称；如果命中已有资产，名称尽量完全一致。
 10. 只输出规划，不要写长段落，不要写 \`videoPrompt\`，不要写复杂连续动作。
+11. **连续性规划强制成立**：除第一镜外，每个镜头的 \`continuityIn\` 必须说明它如何承接上一镜；除最后一镜外，每个镜头的 \`continuityOut\` 必须说明它把什么动作、视线、情绪或空间状态交给下一镜。
+12. **剧情链条不可断裂**：相邻镜头之间必须共享至少一个连续元素：同一动作的前后段、同一视线对象、同一物理环境状态、同一情绪递进、或同一叙事因果。禁止把每个镜头写成互不相关的独立海报。
 
 ## 风格约束
 - 分镜整体风格：${strategy.storyboard.styleDirective}
@@ -557,6 +588,9 @@ export const getStoryboardPlanPrompt = (
 - \`sequence\`
 - \`sceneLabel\`
 - \`beat\`：一句话说明这一镜的叙事目标
+- \`continuityIn\`：从上一镜接入的动作、视线、环境状态或剧情因果；第一镜写“冷开场起点”
+- \`continuityOut\`：留给下一镜承接的动作、视线、环境状态或剧情钩子；最后一镜写“本段落落点”
+- \`stateChange\`：这一镜结束时人物、物体、环境或观众认知发生了什么变化
 - \`camera\`：一句简短镜头运动概述
 - \`size\`
 - \`duration\`
@@ -578,6 +612,9 @@ ${JSON.stringify(existingAssets.map((asset) => ({ id: asset.id, name: asset.name
       "sequence": 1,
       "sceneLabel": "场景名",
       "beat": "这一镜要完成的叙事功能",
+      "continuityIn": "冷开场起点 / 承接上一镜的动作、视线、环境状态或剧情因果",
+      "continuityOut": "交给下一镜的动作、视线、环境状态或剧情钩子",
+      "stateChange": "这一镜结束时发生的状态变化",
       "camera": "简短运镜概述",
       "size": "特写/中景/远景",
       "duration": ${DEFAULT_SHOT_DURATION_SECONDS},
@@ -647,6 +684,8 @@ export const getStoryboardGenerationPrompt = (scriptContent: string, existingAss
 7. **静镜头规则**：如果镜头固定，必须明确写出“镜头固定”，同时仍要描述人物呼吸、目光变化、衣物摆动、空气颗粒、光线变化与最终情绪落点，禁止只写“静止”。
 8. **避免抽象压缩**：不要用一句抽象总结代替完整镜头，必须把可见动作、可见运动、可见变化写出来。
 
+${STORYBOARD_VIDEO_PROMPT_DIMENSIONS}
+
 ## 2. 连续性与衔接层（视频生成关键）
 **定义**：这一层负责强制维持镜头之间的时空连续与动作逻辑。
 - **Transition**：用 \`transition\` 对象说明本镜头如何接上前一镜，包括承接动作、空间关系、时间间隔。
@@ -654,6 +693,8 @@ export const getStoryboardGenerationPrompt = (scriptContent: string, existingAss
 - **Action Arcs**：\`characterAction\` 必须明确动作的起始状态、运动过程和结束状态。
 - **Environmental State**：用 \`environmentalState\` 跟踪环境中的物理状态变化，例如碎玻璃、烟雾、湿痕、倾倒物。
 - **Time & Motivation**：用 \`timeline\` 标记时间锚点，用 \`cameraMotivation\` 说明镜头为什么移动。
+
+${STORYBOARD_CONTINUITY_RULES}
 
 ## 任务
 分析给定剧本并生成完整分镜序列。
@@ -671,7 +712,7 @@ export const getStoryboardGenerationPrompt = (scriptContent: string, existingAss
    - \`description\`：必须是一整段连续镜头描述，不能是静态摘要。
    - \`characterAction\`：必须包含起始状态、动作路径、微动作和结束状态。
    - \`camera\`：必须包含起始构图、运动路径、结束构图。
-   - \`videoPrompt\`：必须是可直接给视频模型使用的**中文**成片级提示词，写成导演在调度运动镜头，而不是关键词堆砌。
+   - \`videoPrompt\`：必须是可直接给视频模型使用的**中文**成片级提示词，写成导演在调度运动镜头，而不是关键词堆砌；内部必须严格包含五个小标题：【绝对主体与物理动势】【美学介质与底层渲染参数】【环境场与情绪光影】【时间轴与状态演变】【光学与摄影机调度】。
 
 **Script Content**:
 ${scriptContent.slice(0, 15000)}...
@@ -712,7 +753,7 @@ ${JSON.stringify(existingAssets.map(a => ({ id: a.id, name: a.name, type: a.type
       "camera": "起始构图 + 镜头路径 + 结束构图，例如：从明亮天光开始，缓慢下摇掠过塔尖，最后停在角色的低机位中景上",
       "size": "景别，例如：中景、特写、远景",
       "duration": ${DEFAULT_SHOT_DURATION_SECONDS}, // Estimated duration in seconds, must stay within ${SHOT_DURATION_MIN_SECONDS}-${SHOT_DURATION_MAX_SECONDS}
-      "videoPrompt": "用于视频生成的高细节中文提示词。必须遵守上方风格策略，写成连续运动镜头：先写开场画面，再写镜头运动、主体动作、物理反馈、动作力度、环境反应与最后停留的画面，禁止英文，禁止关键词堆砌。",
+      "videoPrompt": "【绝对主体与物理动势】明确主体、起始姿态、动作发力、可见物理反馈与结束姿态。【美学介质与底层渲染参数】结合项目风格写清媒介质感、材质、皮肤/布料/环境细节与渲染或摄影质感。【环境场与情绪光影】写清空间层次、环境状态、空气颗粒、色温、明暗对比与情绪光影。【时间轴与状态演变】按开场状态、动作推进、中途变化、结束状态书写，并承接上一镜、交代交给下一镜的状态。【光学与摄影机调度】写清焦段感、景深、机位、运动路径、对焦变化与构图落点。禁止英文，禁止关键词堆砌。",
       "suggestedAssetNames": ["角色名", "场景名"],
       "characters": [
         {
@@ -766,8 +807,9 @@ export const getStoryboardShotPrompt = (
 5. \`sceneLabel\` 必须非空，并与当前镜头规划一致或高度一致。
 6. \`duration\` 必须优先遵循当前镜头规划值 ${shotPlan.duration ?? DEFAULT_SHOT_DURATION_SECONDS}。
 7. 必须优先复用已有资产名称。
-8. \`videoPrompt\` 必须是可直接用于视频模型的中文连续镜头提示词。
+8. \`videoPrompt\` 必须是可直接用于视频模型的中文连续镜头提示词，并严格包含五个小标题：【绝对主体与物理动势】【美学介质与底层渲染参数】【环境场与情绪光影】【时间轴与状态演变】【光学与摄影机调度】。
 9. 只生成一个镜头，不要扩写成整集。
+10. 本镜头必须与上一镜、下一镜发生可追踪的剧情与视觉连接；不能只根据当前规划孤立生成。
 
 ## 当前镜头规划
 ${JSON.stringify(shotPlan)}
@@ -790,55 +832,31 @@ ${scriptContent.slice(0, 15000)}
 - 负面限制：${strategy.storyboard.negativeDirective}
 - 场景风格：${resolvedSceneStyle}
 
+${STORYBOARD_VIDEO_PROMPT_DIMENSIONS}
+
+${STORYBOARD_CONTINUITY_RULES}
+
+## 本镜头连续性执行要求
+- 如果有上一镜：\`videoPrompt\` 的“时间轴与状态演变”必须接住上一镜的结束动作、视线、情绪、环境状态或剧情信息。
+- 如果有下一镜规划：本镜头的结尾必须给下一镜留下明确承接点，不能把动作和情绪全部封死；可以留下未完成动作、转向视线、正在扩散的环境变化、刚出现的信息或即将发生的反应。
+- 如果当前镜头规划中的 \`continuityIn\`、\`continuityOut\`、\`stateChange\` 存在，必须优先落实到 \`videoPrompt\` 中。
+
 ## 输出字段
-- \`description\`：连续镜头描述
-- \`sceneLabel\`
-- \`transition\`
-- \`eyeline\`
-- \`lightingEvolution\`
-- \`cameraMotivation\`
-- \`timeline\`
-- \`environmentalState\`
-- \`generationConstraints\`
-- \`characterAction\`
-- \`emotion\`
-- \`lightingAtmosphere\`
-- \`soundEffect\`
-- \`dialogue\`
-- \`camera\`
-- \`size\`
+只允许输出以下字段：
+- \`sequence\`
 - \`duration\`
-- \`videoPrompt\`
-- \`suggestedAssetNames\`
-- \`characters\`
-- \`suggestedAssets\`
+- \`videoPrompt\`：唯一最终提示词字段；所有主体、物理动势、美学介质、环境光影、时间连续、摄影机调度、与前后镜头的衔接都必须写进这里。
+- \`suggestedAssetNames\`：仅用于系统自动关联资产，不要在这里写描述。
+- \`characters\`：仅用于系统自动关联角色，保持简短。
+- \`suggestedAssets\`：仅用于系统自动关联资产。
+
+不要输出以下字段：\`description\`、\`sceneLabel\`、\`transition\`、\`eyeline\`、\`lightingEvolution\`、\`cameraMotivation\`、\`timeline\`、\`environmentalState\`、\`generationConstraints\`、\`characterAction\`、\`emotion\`、\`lightingAtmosphere\`、\`soundEffect\`、\`dialogue\`、\`camera\`、\`size\`。
 
 ## Output Format
 {
   "sequence": ${shotPlan.sequence ?? 1},
-  "description": "详细连续镜头描述",
-  "sceneLabel": "${shotPlan.sceneLabel || '场景名'}",
-  "transition": {
-    "incomingAction": "承接动作",
-    "continuityMatch": "视觉衔接点",
-    "spatialRelationship": "空间关系",
-    "timeGap": "连续/几秒后/回溯"
-  },
-  "eyeline": "视线关系",
-  "lightingEvolution": "光线变化",
-  "cameraMotivation": "镜头移动动机",
-  "timeline": "时间锚点",
-  "environmentalState": "环境状态",
-  "generationConstraints": ["约束1", "约束2"],
-  "characterAction": "角色动作路径",
-  "emotion": "主导情绪",
-  "lightingAtmosphere": "光影氛围",
-  "soundEffect": "关键音效",
-  "dialogue": "${shotPlan.dialogue || ''}",
-  "camera": "${shotPlan.camera || ''}",
-  "size": "${shotPlan.size || ''}",
   "duration": ${shotPlan.duration ?? DEFAULT_SHOT_DURATION_SECONDS},
-  "videoPrompt": "用于视频生成的中文连续镜头提示词",
+  "videoPrompt": "【绝对主体与物理动势】明确主体、起始姿态、动作发力、可见物理反馈与结束姿态。【美学介质与底层渲染参数】结合项目风格写清媒介质感、材质、皮肤/布料/环境细节与渲染或摄影质感。【环境场与情绪光影】写清空间层次、环境状态、空气颗粒、色温、明暗对比与情绪光影。【时间轴与状态演变】按开场状态、动作推进、中途变化、结束状态书写，并承接上一镜、交代交给下一镜的状态。【光学与摄影机调度】写清焦段感、景深、机位、运动路径、对焦变化与构图落点。",
   "suggestedAssetNames": ["角色名", "场景名"],
   "characters": [
     {

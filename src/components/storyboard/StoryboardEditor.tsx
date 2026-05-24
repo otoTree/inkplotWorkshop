@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, type DragEvent } from 'react';
 import { api } from '@/lib/api';
 import { Episode, Asset, Shot, Project } from '@/types';
 import { Button } from '@/components/ui/button';
@@ -32,6 +32,15 @@ interface StoryboardEditorProps {
   projectId: string;
 }
 
+const sortShotsBySequence = (shotList: Shot[]) =>
+  [...shotList].sort((a, b) => a.sequence - b.sequence);
+
+const renumberShots = (shotList: Shot[]) =>
+  shotList.map((shot, index) => ({
+    ...shot,
+    sequence: index + 1,
+  }));
+
 export function StoryboardEditor({ projectId }: StoryboardEditorProps) {
   const [selectedEpisodeId, setSelectedEpisodeId] = useState<string | null>(null);
   const [isGenerating, setIsGenerating] = useState(false);
@@ -55,6 +64,7 @@ export function StoryboardEditor({ projectId }: StoryboardEditorProps) {
   const [episodes, setEpisodes] = useState<Episode[]>([]);
   const [assets, setAssets] = useState<Asset[]>([]);
   const [shots, setShots] = useState<Shot[]>([]);
+  const [draggedShotId, setDraggedShotId] = useState<string | null>(null);
   const projectVideoAspectRatio =
     project?.volcengineVideoSettings
       ? normalizeProjectVideoSettings(project.volcengineVideoSettings).aspectRatio
@@ -70,7 +80,9 @@ export function StoryboardEditor({ projectId }: StoryboardEditorProps) {
   // Fetch shots when episode changes
   useEffect(() => {
     if (selectedEpisodeId) {
-        api.shots.list(selectedEpisodeId).then(setShots);
+        api.shots.list(selectedEpisodeId).then((shotList) => {
+          setShots(sortShotsBySequence(shotList));
+        });
     } else {
         setShots([]);
     }
@@ -309,17 +321,7 @@ export function StoryboardEditor({ projectId }: StoryboardEditorProps) {
 
     try {
       const processShot = async (currentShot: Shot) => {
-        const fullPrompt = [
-          currentShot.videoPrompt ? `[Video Prompt] ${currentShot.videoPrompt}` : '',
-          currentShot.description ? `[Visual Description] ${currentShot.description}` : '',
-          currentShot.characterAction ? `[Action] ${currentShot.characterAction}` : '',
-          currentShot.lightingAtmosphere ? `[Lighting/Atmosphere] ${currentShot.lightingAtmosphere}` : '',
-          currentShot.sceneLabel ? `[Scene] ${currentShot.sceneLabel}` : '',
-          currentShot.emotion ? `[Emotion] ${currentShot.emotion}` : '',
-          (currentShot.camera || currentShot.size) ? `[Camera/Size] ${currentShot.camera || ''} ${currentShot.size || ''}`.trim() : '',
-          currentShot.dialogue ? `[Dialogue] ${currentShot.dialogue}` : '',
-          currentShot.soundEffect ? `[Sound Effect] ${currentShot.soundEffect}` : '',
-        ].filter(Boolean).join('\n');
+        const fullPrompt = (currentShot.videoPrompt || '').trim();
 
         if (!fullPrompt.trim()) {
           console.warn(`镜头 ${currentShot.sequence} 缺乏生成视频的提示词，跳过。`);
@@ -469,8 +471,70 @@ export function StoryboardEditor({ projectId }: StoryboardEditorProps) {
                 : existingShot.videoStatus),
       } : updatedShot;
 
+      if (existingShot && mergedShot.sequence !== existingShot.sequence) {
+        const targetIndex = Math.max(
+          0,
+          Math.min(shots.length - 1, Math.round(mergedShot.sequence || 1) - 1)
+        );
+        const orderedWithoutShot = sortShotsBySequence(shots)
+          .filter((shotItem) => shotItem.id !== mergedShot.id);
+        orderedWithoutShot.splice(targetIndex, 0, mergedShot);
+        const reorderedShots = renumberShots(orderedWithoutShot);
+
+        setShots(reorderedShots);
+        await Promise.all(
+          reorderedShots.map((shotItem) =>
+            api.shots.update(
+              shotItem.id,
+              shotItem.id === mergedShot.id ? shotItem : { sequence: shotItem.sequence }
+            )
+          )
+        );
+        return;
+      }
+
       await api.shots.update(mergedShot.id, mergedShot);
-      setShots(prev => prev.map(s => s.id === mergedShot.id ? mergedShot : s));
+      setShots(prev =>
+        sortShotsBySequence(prev.map(s => s.id === mergedShot.id ? mergedShot : s))
+      );
+  };
+
+  const persistShotOrder = async (orderedShots: Shot[]) => {
+    await Promise.all(
+      orderedShots.map((shotItem) =>
+        api.shots.update(shotItem.id, { sequence: shotItem.sequence })
+      )
+    );
+  };
+
+  const handleShotDragOver = (event: DragEvent<HTMLDivElement>) => {
+    event.preventDefault();
+  };
+
+  const handleShotDrop = (targetShotId: string) => {
+    if (!draggedShotId || draggedShotId === targetShotId) {
+      setDraggedShotId(null);
+      return;
+    }
+
+    const orderedShots = sortShotsBySequence(shots);
+    const fromIndex = orderedShots.findIndex((shotItem) => shotItem.id === draggedShotId);
+    const toIndex = orderedShots.findIndex((shotItem) => shotItem.id === targetShotId);
+
+    if (fromIndex === -1 || toIndex === -1) {
+      setDraggedShotId(null);
+      return;
+    }
+
+    const [movedShot] = orderedShots.splice(fromIndex, 1);
+    orderedShots.splice(toIndex, 0, movedShot);
+
+    const reorderedShots = renumberShots(orderedShots);
+    setShots(reorderedShots);
+    setDraggedShotId(null);
+    void persistShotOrder(reorderedShots).catch((error) => {
+      console.error('Failed to persist shot order:', error);
+    });
   };
   
   const handleDeleteShot = async (shotId: string) => {
@@ -629,6 +693,10 @@ export function StoryboardEditor({ projectId }: StoryboardEditorProps) {
                   sensitivityPrompt={project?.sensitivityPrompt || ''}
                   onUpdate={handleUpdateShot}
                   onDelete={handleDeleteShot}
+                  onDragStart={() => setDraggedShotId(shot.id)}
+                  onDragOver={handleShotDragOver}
+                  onDrop={() => handleShotDrop(shot.id)}
+                  isDragging={draggedShotId === shot.id}
                 />
               ))}
               

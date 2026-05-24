@@ -21,6 +21,9 @@ export type StoryboardPlanShot = {
   sequence?: number;
   sceneLabel?: string;
   beat?: string;
+  continuityIn?: string;
+  continuityOut?: string;
+  stateChange?: string;
   camera?: string;
   size?: string;
   duration?: number;
