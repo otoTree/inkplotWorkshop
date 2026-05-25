@@ -171,7 +171,7 @@ export async function POST(req: Request) {
         { role: 'user', content: prompt },
       ],
       temperature: 0.7,
-      maxTokens: generationMode === 'plan' ? 2000 : undefined,
+      maxTokens: generationMode === 'plan' ? 384000 : undefined,
       extraPayload: { response_format: { type: 'json_object' } },
     });
     const content = extractFirstMessageContent(data);

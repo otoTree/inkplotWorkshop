@@ -567,7 +567,7 @@ export const getStoryboardPlanPrompt = (
 目标：只做轻量镜头拆分，决定每个镜头拍哪一小段剧本、几秒、发生在哪个场景。后续系统会逐镜头再次生成详细分镜，所以这里不要做复杂导演推理。
 
 ## 硬性规则
-1. 输出必须是 JSON 对象，且只包含 \`shots\` 数组。
+1. 输出必须是合法 json 对象，且只包含 \`shots\` 数组；不要输出 markdown、解释文字或代码块。
 2. 总镜头数必须在 ${STORYBOARD_SHOT_COUNT_MIN}-${STORYBOARD_SHOT_COUNT_MAX} 之间。
 3. 每个镜头时长必须在 ${SHOT_DURATION_MIN_SECONDS}-${SHOT_DURATION_MAX_SECONDS} 秒之间。
 4. 全部镜头总时长必须可落在 ${EPISODE_DURATION_MIN_SECONDS}-${EPISODE_DURATION_MAX_SECONDS} 秒之间。

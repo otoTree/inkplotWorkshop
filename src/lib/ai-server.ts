@@ -760,10 +760,20 @@ export const extractFirstMessageContent = (result: unknown) => {
   if (!Array.isArray(choices) || choices.length === 0) {
     throw new AIAPIError('AI API 响应缺少 choices', 502);
   }
-  const message = (choices[0] as { message?: { content?: unknown } })?.message;
+  const firstChoice = choices[0] as {
+    finish_reason?: unknown;
+    message?: { content?: unknown };
+  };
+  if (firstChoice.finish_reason === 'length') {
+    throw new AIAPIError('AI API 输出被 max_tokens 截断，请调高输出 token 上限', 502);
+  }
+  const message = firstChoice.message;
   const content = message?.content;
   if (typeof content !== 'string') {
     throw new AIAPIError('AI API 响应缺少可用的 content', 502);
+  }
+  if (!content.trim()) {
+    throw new AIAPIError('AI API 返回空内容，请稍后重试或调整 JSON 提示词', 502);
   }
   return content;
 };
