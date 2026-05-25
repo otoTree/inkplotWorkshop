@@ -12,7 +12,7 @@ import {
   normalizeShotDurationSeconds,
   normalizeStoryboardShots,
 } from '@/lib/duration';
-import { compactStoryboardAssets } from '@/lib/storyboard-generation';
+import { appendNoSubtitleDirective, compactStoryboardAssets } from '@/lib/storyboard-generation';
 import { createClient } from '@/lib/supabase/server';
 import { AIAPIError, callAIChatCompletion, extractFirstMessageContent } from '@/lib/ai-server';
 import { resolveArtStyleConfig } from '@/lib/project-visual-style';
@@ -93,7 +93,10 @@ const normalizeSingleShotPayload = (parsed: unknown) => {
     sequence: Number(shot.sequence) || 1,
     duration: normalizeShotDurationSeconds(shot.duration),
     dialogue: typeof shot.dialogue === 'string' ? shot.dialogue : '',
-    videoPrompt: typeof shot.videoPrompt === 'string' ? shot.videoPrompt : '',
+    videoPrompt:
+      typeof shot.videoPrompt === 'string'
+        ? appendNoSubtitleDirective(shot.videoPrompt)
+        : '',
     suggestedAssetNames,
     characters,
     ...(suggestedAssets ? { suggestedAssets } : {}),

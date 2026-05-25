@@ -10,6 +10,18 @@ export type StoryboardCharacterContext = {
   imageUrl?: string;
 };
 
+export const NO_SUBTITLE_VIDEO_PROMPT_SUFFIX =
+  '不要生成字幕，不要生成任何屏幕文字、标题、标语、下三分之一字幕或对白字幕。';
+
+export const appendNoSubtitleDirective = (prompt: string) => {
+  const trimmedPrompt = prompt.trim();
+  if (!trimmedPrompt) return '';
+  if (trimmedPrompt.includes(NO_SUBTITLE_VIDEO_PROMPT_SUFFIX)) {
+    return trimmedPrompt;
+  }
+  return `${trimmedPrompt}\n${NO_SUBTITLE_VIDEO_PROMPT_SUFFIX}`;
+};
+
 export type StoryboardSuggestedAssets =
   | {
       characters?: string[];

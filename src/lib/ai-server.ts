@@ -4,6 +4,7 @@ import {
   isSupportedImageGenerationModel,
   normalizeImageGenerationModel,
 } from '@/lib/image-generation-models';
+import { appendNoSubtitleDirective } from '@/lib/storyboard-generation';
 
 type AIAPIConfig = {
   baseUrl: string;
@@ -361,12 +362,12 @@ export const buildVideoGenerationPrompt = (
 
   const promptText = promptLines.join('\n');
   if (promptText.includes('<<<image_')) {
-    return promptText;
+    return appendNoSubtitleDirective(promptText);
   }
 
   const normalizedAssets = normalizeVideoReferenceAssets(referenceAssets);
   if (normalizedAssets.length === 0) {
-    return promptText;
+    return appendNoSubtitleDirective(promptText);
   }
 
   const locationAssets = normalizedAssets
@@ -404,7 +405,7 @@ export const buildVideoGenerationPrompt = (
     'Continuity rules: Match the referenced images exactly for subject identity, wardrobe, environment, and lighting continuity.'
   );
 
-  return [...assetLines, ...promptLines].join('\n');
+  return appendNoSubtitleDirective([...assetLines, ...promptLines].join('\n'));
 };
 
 const acquireGlobalSemaphore = async (config: AIAPIConfig): Promise<() => void | Promise<void>> => {

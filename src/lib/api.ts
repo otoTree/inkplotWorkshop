@@ -8,6 +8,7 @@ import {
 import { normalizeShotDurationSeconds } from '@/lib/duration';
 import { normalizeProjectVideoSettings } from '@/lib/volcengine/video-compat';
 import { normalizeImageGenerationModel } from '@/lib/image-generation-models';
+import { appendNoSubtitleDirective } from '@/lib/storyboard-generation';
 
 const supabase = createClient();
 
@@ -417,7 +418,7 @@ export const api = {
          lighting_atmosphere: shot.lightingAtmosphere,
          sound_effect: shot.soundEffect,
          reference_image: shot.referenceImage,
-         video_prompt: shot.videoPrompt,
+         video_prompt: shot.videoPrompt ? appendNoSubtitleDirective(shot.videoPrompt) : shot.videoPrompt,
          video_url: shot.videoUrl,
          video_generation_id: shot.videoGenerationId,
          video_status: shot.videoStatus,
@@ -450,7 +451,7 @@ export const api = {
             lighting_atmosphere: s.lightingAtmosphere,
             sound_effect: s.soundEffect,
             reference_image: s.referenceImage,
-            video_prompt: s.videoPrompt,
+            video_prompt: s.videoPrompt ? appendNoSubtitleDirective(s.videoPrompt) : s.videoPrompt,
             video_url: s.videoUrl,
             video_generation_id: s.videoGenerationId,
             video_status: s.videoStatus,
@@ -478,7 +479,11 @@ export const api = {
         if (updates.lightingAtmosphere !== undefined) dbUpdates.lighting_atmosphere = updates.lightingAtmosphere;
         if (updates.soundEffect !== undefined) dbUpdates.sound_effect = updates.soundEffect;
         if (updates.referenceImage !== undefined) dbUpdates.reference_image = updates.referenceImage;
-        if (updates.videoPrompt !== undefined) dbUpdates.video_prompt = updates.videoPrompt;
+        if (updates.videoPrompt !== undefined) {
+          dbUpdates.video_prompt = updates.videoPrompt
+            ? appendNoSubtitleDirective(updates.videoPrompt)
+            : updates.videoPrompt;
+        }
         if (updates.videoUrl !== undefined) dbUpdates.video_url = updates.videoUrl;
         if (updates.videoGenerationId !== undefined) dbUpdates.video_generation_id = updates.videoGenerationId;
         if (updates.videoStatus !== undefined) dbUpdates.video_status = updates.videoStatus;
