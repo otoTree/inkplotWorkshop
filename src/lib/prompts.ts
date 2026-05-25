@@ -700,7 +700,7 @@ ${STORYBOARD_CONTINUITY_RULES}
 分析给定剧本并生成完整分镜序列。
 **重要要求**：
 1. **细节强度**：必须输出高度细化的镜头描述和 \`videoPrompt\`，不要总结，不要偷懒，不要写泛化短句。灯光、运动、物理反馈写得越具体越好。
-2. **镜头拆分策略**：总镜头数必须在 ${STORYBOARD_SHOT_COUNT_MIN} 到 ${STORYBOARD_SHOT_COUNT_MAX} 之间。把动作和对白拆成 ${SHOT_DURATION_MIN_SECONDS}-${SHOT_DURATION_MAX_SECONDS} 秒的短镜头，不要过度压缩。所有 \`duration\` 相加后必须落在 ${EPISODE_DURATION_MIN_SECONDS} 到 ${EPISODE_DURATION_MAX_SECONDS} 秒之间。
+2. **镜头拆分策略**：总镜头数必须在 ${STORYBOARD_SHOT_COUNT_MIN} 到 ${STORYBOARD_SHOT_COUNT_MAX} 之间。把动作和对白拆成 ${SHOT_DURATION_MIN_SECONDS}-${SHOT_DURATION_MAX_SECONDS} 秒的镜头段落，不要过度压缩。所有 \`duration\` 相加后必须落在 ${EPISODE_DURATION_MIN_SECONDS} 到 ${EPISODE_DURATION_MAX_SECONDS} 秒之间。
 3. **场景必填**：每个镜头都必须有非空的 \`sceneLabel\`，并且 \`suggestedAssets.locations\` 至少有一个场景项。无论是否承接上一镜，都不允许留空。
 4. **首镜优先级**：第一个镜头必须是本集最强戏剧点、最高情绪值或最大悬念回报点，先打击中用户，再展开剧情。
 5. **预告后的时序清晰度**：如果镜头 1 是后段高潮的冷开场，镜头 2 或后续镜头必须在 \`transition.timeGap\` 与 \`timeline\` 中明确标记回溯或时间跳转，保证叙事清楚。
@@ -805,7 +805,7 @@ export const getStoryboardShotPrompt = (
 3. 除 \`dialogue\` 外，所有字段必须使用中文。
 4. \`dialogue\` 必须使用 ${dialogueLanguageLabel}。
 5. \`sceneLabel\` 必须非空，并与当前镜头规划一致或高度一致。
-6. \`duration\` 必须优先遵循当前镜头规划值 ${shotPlan.duration ?? DEFAULT_SHOT_DURATION_SECONDS}。
+6. \`duration\` 必须优先遵循当前镜头规划值 ${shotPlan.duration ?? DEFAULT_SHOT_DURATION_SECONDS}，并且必须保持在 ${SHOT_DURATION_MIN_SECONDS}-${SHOT_DURATION_MAX_SECONDS} 秒之间。
 7. 必须优先复用已有资产名称。
 8. \`videoPrompt\` 必须是可直接用于视频模型的中文连续镜头提示词，并严格包含五个小标题：【绝对主体与物理动势】【美学介质与底层渲染参数】【环境场与情绪光影】【时间轴与状态演变】【光学与摄影机调度】。
 9. 只生成一个镜头，不要扩写成整集。
