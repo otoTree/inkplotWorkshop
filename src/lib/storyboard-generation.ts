@@ -20,6 +20,10 @@ export type StoryboardSuggestedAssets =
 export type StoryboardPlanShot = {
   sequence?: number;
   sceneLabel?: string;
+  scriptExcerpt?: string;
+  previousScriptExcerpt?: string;
+  nextScriptExcerpt?: string;
+  sourceBeatRange?: string;
   beat?: string;
   continuityIn?: string;
   continuityOut?: string;
@@ -36,6 +40,10 @@ export type StoryboardPlanShot = {
 export type StoryboardGeneratedShot = {
   description?: string;
   sceneLabel?: string;
+  scriptExcerpt?: string;
+  previousScriptExcerpt?: string;
+  nextScriptExcerpt?: string;
+  sourceBeatRange?: string;
   characterAction?: string;
   emotion?: string;
   lightingAtmosphere?: string;

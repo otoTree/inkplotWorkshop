@@ -320,7 +320,9 @@ export function OneClickWorkflowDialog({ projectId, open, onOpenChange }: OneCli
 
           for (let j = 0; j < plannedShots.length; j++) {
             const shotPlan = plannedShots[j];
-            const previousShot = detailedShots.length > 0 ? detailedShots[detailedShots.length - 1] : null;
+            const previousShot = detailedShots.length > 0
+              ? { ...plannedShots[j - 1], ...detailedShots[detailedShots.length - 1] }
+              : null;
             const nextShotPlan = j < plannedShots.length - 1 ? plannedShots[j + 1] : null;
             const res = await fetch('/api/ai/generate-storyboard', {
               method: 'POST',
@@ -348,6 +350,7 @@ export function OneClickWorkflowDialog({ projectId, open, onOpenChange }: OneCli
             }
 
             const detailedShot: StoryboardGeneratedShot = {
+              ...shotPlan,
               ...data.shot,
               duration: shotPlan.duration ?? data.shot.duration,
             };

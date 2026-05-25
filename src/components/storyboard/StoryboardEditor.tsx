@@ -134,7 +134,9 @@ export function StoryboardEditor({ projectId }: StoryboardEditorProps) {
 
     for (let index = 0; index < plannedShots.length; index += 1) {
       const shotPlan = plannedShots[index];
-      const previousShot = allShots.length > 0 ? allShots[allShots.length - 1] : null;
+      const previousShot = allShots.length > 0
+        ? { ...plannedShots[index - 1], ...allShots[allShots.length - 1] }
+        : null;
       const nextShotPlan = index < plannedShots.length - 1 ? plannedShots[index + 1] : null;
 
       const res = await fetch('/api/ai/generate-storyboard', {
@@ -161,6 +163,7 @@ export function StoryboardEditor({ projectId }: StoryboardEditorProps) {
       }
 
       allShots.push({
+        ...shotPlan,
         ...data.shot,
         duration: shotPlan.duration ?? data.shot.duration,
       });

@@ -92,6 +92,7 @@ const normalizeSingleShotPayload = (parsed: unknown) => {
   return {
     sequence: Number(shot.sequence) || 1,
     duration: normalizeShotDurationSeconds(shot.duration),
+    dialogue: typeof shot.dialogue === 'string' ? shot.dialogue : '',
     videoPrompt: typeof shot.videoPrompt === 'string' ? shot.videoPrompt : '',
     suggestedAssetNames,
     characters,
