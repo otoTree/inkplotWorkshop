@@ -236,6 +236,115 @@ const getSemaphore = (config: AIAPIConfig) => {
 
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
+const getAIRequestRetryCount = () =>
+  Math.max(
+    0,
+    Math.min(
+      5,
+      Math.round(
+        getNumberFromEnv(
+          getFirstDefinedEnv(
+            process.env.AI_LLM_API_RETRY_COUNT,
+            process.env.AI_TEXT_API_RETRY_COUNT,
+            process.env.AI_API_RETRY_COUNT
+          ),
+          2
+        )
+      )
+    )
+  );
+
+const getErrorChain = (error: unknown) => {
+  const chain: unknown[] = [];
+  let current: unknown = error;
+  while (current && chain.length < 6) {
+    chain.push(current);
+    current = (current as { cause?: unknown }).cause;
+  }
+  return chain;
+};
+
+const getErrorDetails = (error: unknown) =>
+  getErrorChain(error)
+    .map((entry) => {
+      if (entry instanceof Error) return `${entry.name}: ${entry.message}`;
+      if (entry && typeof entry === 'object') {
+        const code = (entry as { code?: unknown }).code;
+        const syscall = (entry as { syscall?: unknown }).syscall;
+        return [code, syscall].filter(Boolean).join(' ');
+      }
+      return String(entry);
+    })
+    .filter(Boolean)
+    .join(' | ');
+
+const isAbortError = (error: unknown) =>
+  getErrorChain(error).some((entry) => {
+    if (entry instanceof Error && entry.name === 'AbortError') return true;
+    return (
+      !!entry &&
+      typeof entry === 'object' &&
+      (entry as { name?: unknown }).name === 'AbortError'
+    );
+  });
+
+const isRetryableNetworkError = (error: unknown) => {
+  if (isAbortError(error)) return false;
+
+  const retryableCodes = new Set([
+    'ECONNRESET',
+    'ECONNREFUSED',
+    'EPIPE',
+    'ETIMEDOUT',
+    'EAI_AGAIN',
+    'ENOTFOUND',
+    'UND_ERR_SOCKET',
+    'UND_ERR_BODY_TIMEOUT',
+    'UND_ERR_HEADERS_TIMEOUT',
+  ]);
+
+  return getErrorChain(error).some((entry) => {
+    const code =
+      entry && typeof entry === 'object' ? (entry as { code?: unknown }).code : undefined;
+    if (typeof code === 'string' && retryableCodes.has(code)) return true;
+
+    const message = entry instanceof Error ? entry.message : String(entry);
+    return /terminated|fetch failed|socket|network|connection|ECONNRESET/i.test(message);
+  });
+};
+
+const isRetryableAIAPIError = (error: unknown) =>
+  error instanceof AIAPIError &&
+  [408, 409, 425, 429, 500, 502, 503, 504].includes(error.status);
+
+const retryTransientAIRequest = async <T>(fn: () => Promise<T>) => {
+  const maxAttempts = getAIRequestRetryCount() + 1;
+  let lastError: unknown;
+
+  for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+    try {
+      return await fn();
+    } catch (error) {
+      lastError = error;
+      const canRetry =
+        attempt < maxAttempts &&
+        (isRetryableAIAPIError(error) || isRetryableNetworkError(error));
+      if (!canRetry) break;
+
+      await sleep(Math.min(4000, 600 * 2 ** (attempt - 1)));
+    }
+  }
+
+  if (lastError instanceof AIAPIError) throw lastError;
+  if (isAbortError(lastError)) {
+    throw new AIAPIError('AI API 请求超时，请稍后重试', 504, getErrorDetails(lastError));
+  }
+  if (isRetryableNetworkError(lastError)) {
+    throw new AIAPIError('AI API 网络连接中断，请稍后重试', 502, getErrorDetails(lastError));
+  }
+  throw lastError;
+};
+
 type VideoReferenceAsset = {
   name?: string | null;
   type?: string | null;
@@ -621,27 +730,29 @@ export const callAIChatCompletion = async ({
   if (typeof maxTokens === 'number') payload.max_tokens = maxTokens;
   if (extraPayload) Object.assign(payload, extraPayload);
 
-  return await withThrottle(currentConfig, async () => {
-    const response = await fetchWithTimeout(
-      `${currentConfig.baseUrl}/chat/completions`,
-      {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${currentConfig.apiKey}`,
+  return await withThrottle(currentConfig, async () =>
+    retryTransientAIRequest(async () => {
+      const response = await fetchWithTimeout(
+        `${currentConfig.baseUrl}/chat/completions`,
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${currentConfig.apiKey}`,
+          },
+          body: JSON.stringify(payload),
         },
-        body: JSON.stringify(payload),
-      },
-      currentConfig.timeoutMs
-    );
+        currentConfig.timeoutMs
+      );
 
-    if (!response.ok) {
-      const detail = await response.text().catch(() => '');
-      throw new AIAPIError('AI API 请求失败', response.status, detail);
-    }
+      if (!response.ok) {
+        const detail = await response.text().catch(() => '');
+        throw new AIAPIError('AI API 请求失败', response.status, detail);
+      }
 
-    return await response.json();
-  });
+      return await response.json();
+    })
+  );
 };
 
 export const extractFirstMessageContent = (result: unknown) => {

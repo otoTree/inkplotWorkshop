@@ -558,65 +558,47 @@ export const getStoryboardPlanPrompt = (
   artStyle?: ArtStyleInput,
   language: string = 'zh'
 ) => {
-  const { resolvedStyle, strategy } = resolvePromptStrategy(artStyle);
-  const { artStyle: baseStyle, sceneArtStyle } = resolvedStyle;
-  const resolvedSceneStyle = sceneArtStyle || baseStyle || 'Cinematic realism, Photorealistic';
+  const { strategy } = resolvePromptStrategy(artStyle);
   const dialogueLanguageLabel = getStoryboardDialogueLanguageLabel(language);
 
   return `
 # 任务：为整集剧本先生成“镜头规划表”
 
-目标：规划镜头数量、每个镜头的叙事功能，并为每个镜头分配它直接对应的剧本片段和前后邻近剧本片段。后续系统会逐镜头再次生成详细分镜。
+目标：只做轻量镜头拆分，决定每个镜头拍哪一小段剧本、几秒、发生在哪个场景。后续系统会逐镜头再次生成详细分镜，所以这里不要做复杂导演推理。
 
 ## 硬性规则
 1. 输出必须是 JSON 对象，且只包含 \`shots\` 数组。
 2. 总镜头数必须在 ${STORYBOARD_SHOT_COUNT_MIN}-${STORYBOARD_SHOT_COUNT_MAX} 之间。
 3. 每个镜头时长必须在 ${SHOT_DURATION_MIN_SECONDS}-${SHOT_DURATION_MAX_SECONDS} 秒之间。
 4. 全部镜头总时长必须可落在 ${EPISODE_DURATION_MIN_SECONDS}-${EPISODE_DURATION_MAX_SECONDS} 秒之间。
-5. 除 \`dialogue\`、\`scriptExcerpt\`、\`previousScriptExcerpt\`、\`nextScriptExcerpt\` 外，所有字段都必须使用中文。
+5. 除 \`dialogue\`、\`scriptExcerpt\` 外，所有字段都必须使用中文。
 6. \`dialogue\` 如有内容，必须使用 ${dialogueLanguageLabel}。
-7. 每个镜头都必须有非空 \`sceneLabel\`，并且 \`suggestedAssets.locations\` 至少包含一个场景。
+7. 每个镜头都必须有非空 \`sceneLabel\`。
 8. 第一个镜头必须是全集最有悬念或最有冲击力的冷开场。
-9. 优先复用已有资产名称；如果命中已有资产，名称尽量完全一致。
-10. 只输出规划，不要写长段落，不要写 \`videoPrompt\`，不要写复杂连续动作。
-11. **连续性规划强制成立**：除第一镜外，每个镜头的 \`continuityIn\` 必须说明它如何承接上一镜；除最后一镜外，每个镜头的 \`continuityOut\` 必须说明它把什么动作、视线、情绪或空间状态交给下一镜。
-12. **剧情链条不可断裂**：相邻镜头之间必须共享至少一个连续元素：同一动作的前后段、同一视线对象、同一物理环境状态、同一情绪递进、或同一叙事因果。禁止把每个镜头写成互不相关的独立海报。
-13. **剧本片段定位必须明确**：每个镜头都必须包含 \`scriptExcerpt\`，它必须直接来自或忠实改写自该镜头对应的剧本段落，覆盖本镜头要拍的动作和对白；\`previousScriptExcerpt\` 与 \`nextScriptExcerpt\` 必须分别提供紧邻前后文，没有则写空字符串。
-14. **片段不可错配**：\`scriptExcerpt\` 只能包含当前镜头要拍的内容，不要把下一个镜头的动作提前放进当前镜头；相邻镜头的片段可以少量重叠，但必须保持剧本顺序清楚。
-15. **对白必须随片段分配**：如果 \`scriptExcerpt\` 中包含对白，\`dialogue\` 必须提取对应对白，并写清角色名；不要把相邻镜头对白放进当前镜头。
-16. **资产精确性强制成立**：\`suggestedAssets.characters\` 只能列出本镜头画面中真实可见的角色状态资产；同一角色只能选一个最贴近当前年龄、服装、伤势、身份阶段的资产。若已有 “young/old/工作服/作战服/ep编号/场次编号” 等状态资产，优先选状态最精确的那个，不要同时列出同一角色的通用资产、旧状态资产、服装资产和道具资产。
-17. **参考图数量克制**：每个镜头建议资产应控制在“最多 3 个角色资产 + 1 个场景资产”。不要为了保险而堆叠多个相似参考图；不在当前画面中承担主体识别的资产不要列入。
+9. \`scriptExcerpt\` 只写当前镜头要拍的剧本片段，尽量短，保留关键动作和对白即可。
+10. \`beat\` 只写一句话，说明这一镜的叙事功能，不要展开画面细节。
+11. \`dialogue\` 只提取当前镜头对应对白；没有则空字符串。
+12. \`suggestedAssetNames\` 只列最明显的角色名和场景名，最多 4 个；不做状态资产精确判断。
+13. 不要输出 \`videoPrompt\`、\`characters\`、\`suggestedAssets\`、\`continuityIn\`、\`continuityOut\`、\`stateChange\`、\`previousScriptExcerpt\`、\`nextScriptExcerpt\`。
 
 ## 风格约束
-- 分镜整体风格：${strategy.storyboard.styleDirective}
-- 负面限制：${strategy.storyboard.negativeDirective}
-- 场景风格：${resolvedSceneStyle}
+- 只用于判断冷开场和场景名称，不要在计划阶段展开风格细节：${strategy.storyboard.styleDirective}
 
 ## 字段要求
 每个镜头对象包含：
 - \`sequence\`
 - \`sceneLabel\`
-- \`scriptExcerpt\`：当前镜头直接对应的剧本文本，保留原剧本语言和关键台词
-- \`previousScriptExcerpt\`：当前镜头前一小段剧本文本，用于承接；第一镜可为空字符串
-- \`nextScriptExcerpt\`：当前镜头后一小段剧本文本，用于给下一镜留钩；最后一镜可为空字符串
-- \`sourceBeatRange\`：一句中文定位说明，例如“冷开场高光段 / 正文第2个动作段 / 结尾悬念段”
-- \`beat\`：一句话说明这一镜的叙事目标
-- \`continuityIn\`：从上一镜接入的动作、视线、环境状态或剧情因果；第一镜写“冷开场起点”
-- \`continuityOut\`：留给下一镜承接的动作、视线、环境状态或剧情钩子；最后一镜写“本段落落点”
-- \`stateChange\`：这一镜结束时人物、物体、环境或观众认知发生了什么变化
-- \`camera\`：一句简短镜头运动概述
-- \`size\`
+- \`scriptExcerpt\`
+- \`beat\`
 - \`duration\`
-- \`dialogue\`：当前 \`scriptExcerpt\` 中的对白；没有则空字符串。必须写成“角色名：台词”，多句对白用换行分隔
+- \`dialogue\`
 - \`suggestedAssetNames\`
-- \`characters\`
-- \`suggestedAssets\`
 
 ## Script Content
-${scriptContent.slice(0, 15000)}
+${scriptContent.slice(0, 9000)}
 
-## Existing Assets
-${JSON.stringify(existingAssets.map((asset) => ({ id: asset.id, name: asset.name, type: asset.type })))}
+## Existing Asset Names (optional quick reference)
+${JSON.stringify(existingAssets.slice(0, 80).map((asset) => ({ name: asset.name, type: asset.type })))}
 
 ## Output Format
 {
@@ -624,29 +606,11 @@ ${JSON.stringify(existingAssets.map((asset) => ({ id: asset.id, name: asset.name
     {
       "sequence": 1,
       "sceneLabel": "场景名",
-      "scriptExcerpt": "当前镜头直接对应的剧本文本，保留原剧本语言和关键台词",
-      "previousScriptExcerpt": "",
-      "nextScriptExcerpt": "下一镜相邻剧本文本",
-      "sourceBeatRange": "冷开场高光段",
-      "beat": "这一镜要完成的叙事功能",
-      "continuityIn": "冷开场起点 / 承接上一镜的动作、视线、环境状态或剧情因果",
-      "continuityOut": "交给下一镜的动作、视线、环境状态或剧情钩子",
-      "stateChange": "这一镜结束时发生的状态变化",
-      "camera": "简短运镜概述",
-      "size": "特写/中景/远景",
+      "scriptExcerpt": "当前镜头要拍的短剧本片段",
+      "beat": "一句话叙事功能",
       "duration": ${DEFAULT_SHOT_DURATION_SECONDS},
       "dialogue": "角色名：当前镜头对应台词",
-      "suggestedAssetNames": ["角色名", "场景名"],
-      "characters": [
-        {
-          "name": "角色名",
-          "description": "简短状态描述"
-        }
-      ],
-      "suggestedAssets": {
-        "characters": ["角色名"],
-        "locations": ["场景名"]
-      }
+      "suggestedAssetNames": ["角色名", "场景名"]
     }
   ]
 }
