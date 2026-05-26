@@ -9,6 +9,7 @@ import {
 import {
   EPISODE_DURATION_MAX_SECONDS,
   EPISODE_DURATION_MIN_SECONDS,
+  EPISODE_DURATION_TARGET_SECONDS,
   normalizeShotDurationSeconds,
   normalizeStoryboardShots,
 } from '@/lib/duration';
@@ -56,7 +57,9 @@ const normalizeStoryboardListPayload = (parsed: unknown) => {
   const normalizedShots = normalizeStoryboardShots(jsonContent.shots);
   if (!normalizedShots) {
     throw new Error(
-      `Invalid storyboard output: total duration must be normalizable to ${EPISODE_DURATION_MIN_SECONDS}-${EPISODE_DURATION_MAX_SECONDS} seconds`
+      EPISODE_DURATION_MIN_SECONDS === EPISODE_DURATION_MAX_SECONDS
+        ? `Invalid storyboard output: total duration must be normalizable to exactly ${EPISODE_DURATION_TARGET_SECONDS} seconds`
+        : `Invalid storyboard output: total duration must be normalizable to ${EPISODE_DURATION_MIN_SECONDS}-${EPISODE_DURATION_MAX_SECONDS} seconds`
     );
   }
 

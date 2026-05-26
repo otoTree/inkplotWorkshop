@@ -1,12 +1,13 @@
-export const EPISODE_DURATION_MIN_SECONDS = 60;
-export const EPISODE_DURATION_MAX_SECONDS = 70;
+export const EPISODE_DURATION_TARGET_SECONDS = 110;
+export const EPISODE_DURATION_MIN_SECONDS = EPISODE_DURATION_TARGET_SECONDS;
+export const EPISODE_DURATION_MAX_SECONDS = EPISODE_DURATION_TARGET_SECONDS;
 
-export const STORYBOARD_SHOT_COUNT_MIN = 5;
+export const STORYBOARD_SHOT_COUNT_MIN = 8;
 export const STORYBOARD_SHOT_COUNT_MAX = 8;
 
 export const SHOT_DURATION_MIN_SECONDS = 8;
 export const SHOT_DURATION_MAX_SECONDS = 15;
-export const DEFAULT_SHOT_DURATION_SECONDS = 8;
+export const DEFAULT_SHOT_DURATION_SECONDS = 14;
 
 export const clamp = (value: number, min: number, max: number) => {
   return Math.min(Math.max(value, min), max);
