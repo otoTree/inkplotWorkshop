@@ -6,6 +6,13 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Progress } from '@/components/ui/progress';
 import { Input } from '@/components/ui/input';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
 import { Plus, User, MapPin, Wand2, Loader2, Sparkles, Trash2, Package, Search } from 'lucide-react';
 import { ArtStyleConfig, Asset, AssetType, Episode, Project } from '@/types';
 import { useState, useEffect, useCallback } from 'react';
@@ -21,6 +28,7 @@ export function AssetGallery({ projectId }: { projectId: string }) {
   const [project, setProject] = useState<Project | null>(null);
   const [activeTab, setActiveTab] = useState<AssetType>('character');
   const [searchQuery, setSearchQuery] = useState('');
+  const [episodeFilter, setEpisodeFilter] = useState('all');
   
   // Dialog State
   const [dialogOpen, setDialogOpen] = useState(false);
@@ -97,9 +105,16 @@ export function AssetGallery({ projectId }: { projectId: string }) {
   const getFilteredAssetsByType = (type: AssetType) => {
     const query = normalizeText(searchQuery);
     return getAssetsByType(type).filter((asset) => {
+      const episodeIds = getEpisodeIds(asset);
+      const matchesEpisode =
+        episodeFilter === 'all' ||
+        (episodeFilter === 'unassigned' && episodeIds.length === 0) ||
+        episodeIds.includes(episodeFilter);
+      if (!matchesEpisode) return false;
+
       if (!query) return true;
       const episodeText = episodes
-        .filter((episode) => getEpisodeIds(asset).includes(episode.id))
+        .filter((episode) => episodeIds.includes(episode.id))
         .map((episode) => `第${episode.episodeNumber}集 ${episode.title}`)
         .join(' ');
       const haystack = normalizeText(
@@ -443,6 +458,15 @@ export function AssetGallery({ projectId }: { projectId: string }) {
   const missingImageCount = assets.filter(a => !a.imageUrl && a.visualPrompt).length;
   const visibleAssets = getFilteredAssetsByType(activeTab);
   const ActiveIcon = typeIconMap[activeTab];
+  const selectedEpisode = episodes.find((episode) => episode.id === episodeFilter);
+  const episodeFilterLabel =
+    episodeFilter === 'all'
+      ? '全部剧集'
+      : episodeFilter === 'unassigned'
+        ? '未关联剧集'
+        : selectedEpisode
+          ? `第 ${selectedEpisode.episodeNumber} 集`
+          : '剧集分类';
 
   return (
     <div className="p-8 max-w-6xl mx-auto">
@@ -502,20 +526,36 @@ export function AssetGallery({ projectId }: { projectId: string }) {
       </div>
 
       <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as AssetType)} className="w-full">
-        <div className="mb-8 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <div className="mb-8 flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
             <TabsList>
               <TabsTrigger value="character" className="px-8">角色</TabsTrigger>
               <TabsTrigger value="location" className="px-8">场景</TabsTrigger>
               <TabsTrigger value="prop" className="px-8">道具</TabsTrigger>
             </TabsList>
-            <div className="relative w-full sm:w-80">
-                <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-black/35" />
-                <Input
-                    value={searchQuery}
-                    onChange={(event) => setSearchQuery(event.target.value)}
-                    placeholder="搜索资产、描述或剧集"
-                    className="pl-9"
-                />
+            <div className="flex w-full flex-col gap-2 sm:flex-row lg:w-auto">
+                <Select value={episodeFilter} onValueChange={setEpisodeFilter}>
+                    <SelectTrigger className="w-full sm:w-44">
+                        <SelectValue>{episodeFilterLabel}</SelectValue>
+                    </SelectTrigger>
+                    <SelectContent>
+                        <SelectItem value="all">全部剧集</SelectItem>
+                        <SelectItem value="unassigned">未关联剧集</SelectItem>
+                        {episodes.map((episode) => (
+                            <SelectItem key={episode.id} value={episode.id}>
+                                第 {episode.episodeNumber} 集
+                            </SelectItem>
+                        ))}
+                    </SelectContent>
+                </Select>
+                <div className="relative w-full sm:w-80">
+                    <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-black/35" />
+                    <Input
+                        value={searchQuery}
+                        onChange={(event) => setSearchQuery(event.target.value)}
+                        placeholder="搜索资产、描述或剧集"
+                        className="pl-9"
+                    />
+                </div>
             </div>
         </div>
 
@@ -604,7 +644,7 @@ export function AssetGallery({ projectId }: { projectId: string }) {
                   );
                 })}
 
-                {visibleAssets.length === 0 && searchQuery.trim() && (
+                {visibleAssets.length === 0 && (searchQuery.trim() || episodeFilter !== 'all') && (
                     <div className="break-inside-avoid rounded-lg border border-black/[0.06] bg-black/[0.02] p-8 text-center text-sm text-black/45">
                         没有匹配的{typeMap[activeTab]}
                     </div>
