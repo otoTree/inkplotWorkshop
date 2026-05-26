@@ -54,7 +54,16 @@ const normalizeStoryboardListPayload = (parsed: unknown) => {
     throw new Error('Invalid storyboard output: missing shots array');
   }
 
-  const normalizedShots = normalizeStoryboardShots(jsonContent.shots);
+  const rawShots = jsonContent.shots as Array<Record<string, unknown>>;
+  const allSequences = rawShots
+    .map((shot) => Number(shot.sequence))
+    .filter((sequence) => Number.isFinite(sequence));
+  const sortableShots =
+    allSequences.length === rawShots.length && new Set(allSequences).size === rawShots.length
+      ? [...rawShots].sort((a, b) => Number(a.sequence) - Number(b.sequence))
+      : rawShots;
+
+  const normalizedShots = normalizeStoryboardShots(sortableShots);
   if (!normalizedShots) {
     throw new Error(
       EPISODE_DURATION_MIN_SECONDS === EPISODE_DURATION_MAX_SECONDS
@@ -129,6 +138,7 @@ export async function POST(req: Request) {
       previousShot,
       nextShotPlan,
       totalShots,
+      planFeedback,
     } = body;
     const styleInput = artStyle ?? {
       visualStylePreset,
@@ -143,7 +153,13 @@ export async function POST(req: Request) {
 
     const prompt =
       generationMode === 'plan'
-        ? getStoryboardPlanPrompt(script, compactAssets, resolvedStyle, language)
+        ? getStoryboardPlanPrompt(
+            script,
+            compactAssets,
+            resolvedStyle,
+            language,
+            typeof planFeedback === 'string' ? planFeedback : undefined
+          )
         : generationMode === 'shot'
           ? getStoryboardShotPrompt(
               {

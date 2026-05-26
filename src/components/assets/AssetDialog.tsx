@@ -5,8 +5,8 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
-import { ArtStyleConfig, Asset, AssetType } from '@/types';
-import { Trash2, Wand2, Loader2, ImageIcon, ZoomIn, Upload } from 'lucide-react';
+import { ArtStyleConfig, Asset, AssetType, Episode } from '@/types';
+import { Trash2, Wand2, Loader2, ImageIcon, ZoomIn, Upload, Check } from 'lucide-react';
 import { getImageGenerationPrompt } from '@/lib/prompts';
 import { buildVisualStyleRequestPayload } from '@/lib/project-visual-style';
 import { DEFAULT_IMAGE_GENERATION_MODEL, type SupportedImageGenerationModel } from '@/lib/image-generation-models';
@@ -22,6 +22,7 @@ interface AssetDialogProps {
   onDelete?: (id: string) => Promise<void>;
   artStyle?: ArtStyleConfig;
   imageGenerationModel?: SupportedImageGenerationModel;
+  episodes?: Episode[];
 }
 
 const MAX_IMAGE_UPLOAD_SIZE_BYTES = 50 * 1024 * 1024;
@@ -38,6 +39,7 @@ export function AssetDialog({
   onDelete,
   artStyle,
   imageGenerationModel = DEFAULT_IMAGE_GENERATION_MODEL,
+  episodes = [],
 }: AssetDialogProps) {
   const [formData, setFormData] = useState<Partial<Asset>>({
     name: '',
@@ -55,7 +57,15 @@ export function AssetDialog({
   const typeMap: Record<string, string> = {
     character: '角色',
     location: '场景',
+    prop: '道具',
   };
+
+  const getEpisodeIds = (metadata: Asset['metadata'] | undefined) =>
+    Array.isArray(metadata?.episodeIds)
+      ? metadata.episodeIds.filter((id): id is string => typeof id === 'string')
+      : [];
+
+  const selectedEpisodeIds = getEpisodeIds(formData.metadata as Asset['metadata'] | undefined);
 
   const getErrorMessage = (error: unknown) => {
     return error instanceof Error ? error.message : '未知错误';
@@ -70,6 +80,8 @@ export function AssetDialog({
             description: initialData.description || '',
             visualPrompt: initialData.visualPrompt || '',
             imageUrl: initialData.imageUrl || '',
+            metadata: initialData.metadata || {},
+            isMain: initialData.isMain,
             id: initialData.id,
         });
       } else {
@@ -79,10 +91,26 @@ export function AssetDialog({
             visualPrompt: '',
             imageUrl: '',
             type: assetType,
+            metadata: {},
         });
       }
     }
   }, [open, mode, initialData, assetType]);
+
+  const toggleEpisode = (episodeId: string) => {
+    const currentIds = getEpisodeIds(formData.metadata as Asset['metadata'] | undefined);
+    const nextIds = currentIds.includes(episodeId)
+      ? currentIds.filter((id) => id !== episodeId)
+      : [...currentIds, episodeId];
+
+    setFormData({
+      ...formData,
+      metadata: {
+        ...(formData.metadata || {}),
+        episodeIds: nextIds,
+      },
+    });
+  };
 
   const openFilePicker = () => {
     if (isUploading) return;
@@ -232,7 +260,7 @@ export function AssetDialog({
                     id="name"
                     value={formData.name}
                     onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                    placeholder={`例如：${assetType === 'character' ? '张三' : '老旧公寓'}`}
+                    placeholder={`例如：${assetType === 'character' ? '张三' : assetType === 'location' ? '老旧公寓' : '祖传戒指'}`}
                     required
                     />
                 </div>
@@ -286,7 +314,52 @@ export function AssetDialog({
                     <p className="text-[10px] text-muted-foreground">
                         {assetType === 'character' && '自动添加：三视图、白背景等约束'}
                         {assetType === 'location' && '自动添加：无人场景、环境光等约束'}
+                        {assetType === 'prop' && '自动添加：孤立物体、清晰材质等约束'}
                     </p>
+                </div>
+
+                <div className="space-y-2">
+                    <div className="flex items-center justify-between">
+                        <Label>关联剧集</Label>
+                        {selectedEpisodeIds.length > 0 && (
+                            <span className="text-xs text-muted-foreground">
+                                已选 {selectedEpisodeIds.length} 集
+                            </span>
+                        )}
+                    </div>
+                    <div className="max-h-44 overflow-y-auto rounded-md border border-black/10 p-2">
+                        {episodes.length > 0 ? (
+                            <div className="grid grid-cols-2 gap-1">
+                                {episodes.map((episode) => {
+                                    const checked = selectedEpisodeIds.includes(episode.id);
+                                    return (
+                                        <button
+                                            key={episode.id}
+                                            type="button"
+                                            onClick={() => toggleEpisode(episode.id)}
+                                            className={`flex items-center gap-2 rounded px-2 py-1.5 text-left text-xs transition-colors ${
+                                                checked
+                                                    ? 'bg-black text-white'
+                                                    : 'text-black/70 hover:bg-black/[0.04]'
+                                            }`}
+                                            title={episode.title}
+                                        >
+                                            <span className={`flex h-4 w-4 shrink-0 items-center justify-center rounded border ${
+                                                checked ? 'border-white/50' : 'border-black/20'
+                                            }`}>
+                                                {checked && <Check className="h-3 w-3" />}
+                                            </span>
+                                            <span className="truncate">
+                                                第 {episode.episodeNumber} 集
+                                            </span>
+                                        </button>
+                                    );
+                                })}
+                            </div>
+                        ) : (
+                            <p className="px-2 py-3 text-xs text-muted-foreground">暂无剧集可关联</p>
+                        )}
+                    </div>
                 </div>
             </div>
 

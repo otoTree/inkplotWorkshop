@@ -28,7 +28,8 @@ export function AssetBudgetIndicator({ episode, assets, onAssetClick }: AssetBud
   // 按类型分组
   const assetsByType = {
     character: usedAssets.filter(a => a.type === 'character'),
-    location: usedAssets.filter(a => a.type === 'location')
+    location: usedAssets.filter(a => a.type === 'location'),
+    prop: usedAssets.filter(a => a.type === 'prop')
   };
 
   const remaining = maxAssets - usedAssetIds.length;
@@ -124,6 +125,25 @@ export function AssetBudgetIndicator({ episode, assets, onAssetClick }: AssetBud
                 <div className="text-xs text-muted-foreground mb-1">场景</div>
                 <div className="flex flex-wrap gap-2">
                   {assetsByType.location.map(asset => (
+                    <Badge
+                      key={asset.id}
+                      variant="secondary"
+                      className="cursor-pointer hover:bg-secondary/80"
+                      onClick={() => onAssetClick?.(asset.id)}
+                    >
+                      {asset.name}
+                    </Badge>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* 道具 */}
+            {assetsByType.prop.length > 0 && (
+              <div>
+                <div className="text-xs text-muted-foreground mb-1">道具</div>
+                <div className="flex flex-wrap gap-2">
+                  {assetsByType.prop.map(asset => (
                     <Badge
                       key={asset.id}
                       variant="secondary"

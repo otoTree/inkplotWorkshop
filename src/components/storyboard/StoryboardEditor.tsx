@@ -22,6 +22,10 @@ import {
   resolveStoryboardRelatedAssetIds,
   StoryboardGeneratedShot,
   StoryboardPlanShot,
+  findMissingStoryboardDialogues,
+  findOverfilledStoryboardDialogues,
+  getStoryboardDialogueDiagnosticsPrompt,
+  normalizeStoryboardDialogueText,
 } from '@/lib/storyboard-generation';
 import {
   DEFAULT_PROJECT_VIDEO_ASPECT_RATIO,
@@ -110,23 +114,40 @@ export function StoryboardEditor({ projectId }: StoryboardEditorProps) {
 
     const storyboardAssets = compactStoryboardAssets(assets || []);
     const stylePayload = buildVisualStyleRequestPayload(project);
+    const requestPlan = async (planFeedback?: string) => {
+      const planRes = await fetch('/api/ai/generate-storyboard', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          mode: 'plan',
+          script: scriptContent,
+          assets: storyboardAssets,
+          language: project?.language,
+          planFeedback,
+          ...stylePayload,
+        }),
+      });
+
+      if (!planRes.ok) throw new Error(await planRes.text());
+
+      const planData = await planRes.json() as { shots?: StoryboardPlanShot[] };
+      return Array.isArray(planData.shots) ? planData.shots : [];
+    };
+
     onProgress?.({ phase: '正在规划镜头数量', current: 0, total: 0 });
-    const planRes = await fetch('/api/ai/generate-storyboard', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        mode: 'plan',
-        script: scriptContent,
-        assets: storyboardAssets,
-        language: project?.language,
-        ...stylePayload,
-      }),
+    let plannedShots = await requestPlan();
+    const initialMissingDialogues = findMissingStoryboardDialogues(scriptContent, plannedShots);
+    const initialOverfilledDialogues = findOverfilledStoryboardDialogues(plannedShots);
+    const planFeedback = getStoryboardDialogueDiagnosticsPrompt({
+      missingDialogues: initialMissingDialogues,
+      overfilledDialogues: initialOverfilledDialogues,
     });
 
-    if (!planRes.ok) throw new Error(await planRes.text());
+    if (planFeedback) {
+      onProgress?.({ phase: '正在修正对白覆盖与时长', current: 0, total: 0 });
+      plannedShots = await requestPlan(planFeedback);
+    }
 
-    const planData = await planRes.json() as { shots?: StoryboardPlanShot[] };
-    const plannedShots = Array.isArray(planData.shots) ? planData.shots : [];
     if (plannedShots.length === 0) return [];
     onProgress?.({ phase: '正在逐镜头生成', current: 0, total: plannedShots.length });
 
@@ -165,6 +186,14 @@ export function StoryboardEditor({ projectId }: StoryboardEditorProps) {
       allShots.push({
         ...shotPlan,
         ...data.shot,
+        dialogue:
+          data.shot.dialogue &&
+          (!shotPlan.dialogue ||
+            normalizeStoryboardDialogueText(data.shot.dialogue).includes(
+              normalizeStoryboardDialogueText(shotPlan.dialogue)
+            ))
+            ? data.shot.dialogue
+            : shotPlan.dialogue || data.shot.dialogue,
         duration: shotPlan.duration ?? data.shot.duration,
       });
       onProgress?.({
@@ -176,6 +205,16 @@ export function StoryboardEditor({ projectId }: StoryboardEditorProps) {
 
     if (allShots.length === 0) {
       return [];
+    }
+
+    const finalMissingDialogues = findMissingStoryboardDialogues(scriptContent, allShots);
+    const finalOverfilledDialogues = findOverfilledStoryboardDialogues(allShots);
+    if (finalMissingDialogues.length > 0 || finalOverfilledDialogues.length > 0) {
+      const diagnostics = getStoryboardDialogueDiagnosticsPrompt({
+        missingDialogues: finalMissingDialogues,
+        overfilledDialogues: finalOverfilledDialogues,
+      });
+      throw new Error(`分镜对白校验未通过：\n${diagnostics}`);
     }
 
     const newShots: Shot[] = allShots.map((s, index: number) => {
@@ -232,7 +271,7 @@ export function StoryboardEditor({ projectId }: StoryboardEditorProps) {
       }
     } catch (error) {
       console.error('Failed to generate storyboard:', error);
-      alert('生成失败，请查看控制台详情。');
+      alert(error instanceof Error ? error.message : '生成失败，请查看控制台详情。');
     } finally {
       setIsGenerating(false);
       setShotGenerationPhase('');
@@ -289,7 +328,7 @@ export function StoryboardEditor({ projectId }: StoryboardEditorProps) {
       }
     } catch (error) {
       console.error('Failed to generate all storyboards:', error);
-      alert('批量生成过程中发生错误，请查看控制台详情。');
+      alert(error instanceof Error ? error.message : '批量生成过程中发生错误，请查看控制台详情。');
     } finally {
       setIsGeneratingAll(false);
       setGenerationCurrent(0);

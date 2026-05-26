@@ -391,9 +391,9 @@ export function ScriptEditor({ projectId }: { projectId: string }) {
           if (!item?.name) return;
           const rawType = item.type;
           const type: AssetType =
-            rawType === 'character' || rawType === 'location'
+            rawType === 'character' || rawType === 'location' || rawType === 'prop'
               ? rawType
-              : 'location';
+              : 'prop';
           normalizedAssets.push({
             id: crypto.randomUUID(),
             projectId,
@@ -474,7 +474,6 @@ export function ScriptEditor({ projectId }: { projectId: string }) {
     setScriptGenerationFailed(0);
 
     let failedCount = 0;
-    let nextEpisodes = episodes;
 
     try {
       let completedCount = 0;

@@ -95,6 +95,7 @@ export function ProjectOverview({ projectId }: { projectId: string }) {
 
   const characters = assets.filter(a => a.type === 'character').length;
   const locations = assets.filter(a => a.type === 'location').length;
+  const props = assets.filter(a => a.type === 'prop').length;
 
   return (
     <div className="p-8 max-w-6xl mx-auto space-y-8 animate-in fade-in duration-500">
@@ -146,7 +147,7 @@ export function ProjectOverview({ projectId }: { projectId: string }) {
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold font-serif">{totalAssets}</div>
-            <p className="text-xs text-black/40 mt-1">{characters} 个角色 · {locations} 个场景</p>
+            <p className="text-xs text-black/40 mt-1">{characters} 个角色 · {locations} 个场景 · {props} 个道具</p>
           </CardContent>
         </Card>
 

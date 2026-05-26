@@ -9,6 +9,27 @@ import { Progress } from '@/components/ui/progress';
 import { Download, Loader2, AlertCircle, CheckCircle2 } from 'lucide-react';
 import { useState } from 'react';
 import { resolveArtStyleConfig } from '@/lib/project-visual-style';
+import type { Asset, Episode, Project, Shot } from '@/types';
+
+type FileSystemWritableFileStreamLike = WritableStream<Uint8Array> & {
+  write: (data: Blob | string) => Promise<void>;
+  close: () => Promise<void>;
+};
+
+type FileSystemFileHandleLike = {
+  createWritable: () => Promise<FileSystemWritableFileStreamLike>;
+};
+
+type FileSystemDirectoryHandleLike = {
+  getDirectoryHandle: (
+    name: string,
+    options?: { create?: boolean }
+  ) => Promise<FileSystemDirectoryHandleLike>;
+  getFileHandle: (
+    name: string,
+    options?: { create?: boolean }
+  ) => Promise<FileSystemFileHandleLike>;
+};
 
 interface VirtualFileSystem {
   saveFile: (path: string[], filename: string, data: Blob | string) => Promise<void>;
@@ -25,10 +46,10 @@ interface ExportSummary {
   shotsTotal: number;
   shotsMissingVideos: number;
   data: {
-    project: any;
-    episodes: any[];
-    assets: any[];
-    shots: any[];
+    project: Project;
+    episodes: Episode[];
+    assets: Asset[];
+    shots: Shot[];
   };
 }
 
@@ -89,15 +110,17 @@ export function ExportPanel({ projectId }: { projectId: string }) {
     if (!summaryData) return;
     const { project, episodes, assets, shots } = summaryData.data;
 
-    let baseDirHandle: any = null;
+    let baseDirHandle: FileSystemDirectoryHandleLike | null = null;
 
     // 1. 立即请求文件夹权限，以满足浏览器对“用户手势(User Gesture)”的严格要求
-    if ('showDirectoryPicker' in window) {
+    const windowWithDirectoryPicker = window as Window & {
+      showDirectoryPicker?: (options?: { mode?: 'read' | 'readwrite' }) => Promise<FileSystemDirectoryHandleLike>;
+    };
+    if (windowWithDirectoryPicker.showDirectoryPicker) {
       try {
-        // @ts-ignore
-        baseDirHandle = await window.showDirectoryPicker({ mode: 'readwrite' });
-      } catch (err: any) {
-        if (err.name === 'AbortError') {
+        baseDirHandle = await windowWithDirectoryPicker.showDirectoryPicker({ mode: 'readwrite' });
+      } catch (err: unknown) {
+        if (err instanceof DOMException && err.name === 'AbortError') {
            setSummaryData(null);
            return; // 用户取消了选择，直接退出
         }
@@ -191,8 +214,8 @@ export function ExportPanel({ projectId }: { projectId: string }) {
             }
           };
           isNativeFs = true;
-        } catch (err: any) {
-          if (err.name === 'AbortError') {
+        } catch (err: unknown) {
+          if (err instanceof DOMException && err.name === 'AbortError') {
              throw err; // Stop completely if user clicked cancel
           }
           console.log('FS API failed, fallback to ZIP', err);
@@ -335,10 +358,16 @@ export function ExportPanel({ projectId }: { projectId: string }) {
             setExportStatus(`正在打包设定图 (${completedAssets + 1}/${totalAssets})...`);
             
             const safeName = asset.name.replace(/[<>:"/\\|?*]/g, '_');
-            const folderPath = asset.type === 'character' ? ['assets', 'characters'] : ['assets', 'locations'];
+            const assetFolder =
+              asset.type === 'character'
+                ? 'characters'
+                : asset.type === 'location'
+                  ? 'locations'
+                  : 'props';
+            const folderPath = ['assets', assetFolder];
             
             const finalName = await vfs.streamFile(folderPath, safeName, asset.imageUrl, 'png');
-            assetFilenames[asset.id] = `../assets/${asset.type === 'character' ? 'characters' : 'locations'}/${finalName}`;
+            assetFilenames[asset.id] = `../assets/${assetFolder}/${finalName}`;
             
             completedAssets++;
             setExportProgress(15 + Math.floor((completedAssets / totalAssets) * 20));
@@ -504,8 +533,8 @@ export function ExportPanel({ projectId }: { projectId: string }) {
       setExportProgress(100);
       setExportStatus('导出完成！');
 
-    } catch (error: any) {
-      if (error.name === 'AbortError') {
+    } catch (error: unknown) {
+      if (error instanceof DOMException && error.name === 'AbortError') {
         console.log('User aborted directory picker');
       } else {
         console.error('Export failed:', error);

@@ -56,6 +56,8 @@ test('mergeVolcengineTaskMetadata keeps unified status metadata shape', () => {
     model: 'doubao-seedance-2-0-260128',
     requestContentMode: 'asset_uri',
     referenceAssetIds: ['asset-1'],
+    aspectRatio: '9:16',
+    resolution: '720p',
     result: {
       id: 'cgt-test',
       status: 'processing',

@@ -2,7 +2,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogD
 import { Button } from '@/components/ui/button';
 import { ArtStyleConfig, Asset, AssetType } from '@/types';
 import { useState, useEffect } from 'react';
-import { User, MapPin, Wand2, Loader2, Image as ImageIcon } from 'lucide-react';
+import { User, MapPin, Wand2, Loader2, Image as ImageIcon, Package } from 'lucide-react';
 import { getImageGenerationPrompt } from '@/lib/prompts';
 import { buildVisualStyleRequestPayload } from '@/lib/project-visual-style';
 import { DEFAULT_IMAGE_GENERATION_MODEL, type SupportedImageGenerationModel } from '@/lib/image-generation-models';
@@ -81,7 +81,7 @@ export function ExtractionPreviewDialog({
             const errData = await response.json();
             if (errData.error) errorMsg = errData.error;
             if (errData.details) errorMsg += ` - ${errData.details}`;
-        } catch (e) {
+        } catch {
             // ignore
         }
         throw new Error(errorMsg);
@@ -98,7 +98,7 @@ export function ExtractionPreviewDialog({
       } else {
         throw new Error(data.error || '生成失败，未返回图片链接');
       }
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error(`Failed to generate image for asset ${index}:`, error);
       // alert(`生成图片失败: ${error.message || '未知错误'}`); // Optional: mute alert in batch dialog
     } finally {
@@ -129,12 +129,14 @@ export function ExtractionPreviewDialog({
   const typeMap: Record<string, string> = {
     character: '角色',
     location: '场景',
+    prop: '道具',
   };
 
   const getIcon = (type: string) => {
     switch (type) {
         case 'character': return <User className="w-4 h-4" />;
         case 'location': return <MapPin className="w-4 h-4" />;
+        case 'prop': return <Package className="w-4 h-4" />;
         default: return <MapPin className="w-4 h-4" />;
     }
   };

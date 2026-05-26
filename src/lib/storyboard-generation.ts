@@ -2,6 +2,8 @@ export type StoryboardAssetContext = {
   id?: string;
   name: string;
   type?: string;
+  description?: string;
+  metadata?: Record<string, unknown>;
 };
 
 export type StoryboardCharacterContext = {
@@ -50,6 +52,7 @@ export type StoryboardPlanShot = {
 };
 
 export type StoryboardGeneratedShot = {
+  sequence?: number;
   description?: string;
   sceneLabel?: string;
   scriptExcerpt?: string;
@@ -69,6 +72,20 @@ export type StoryboardGeneratedShot = {
   characters?: StoryboardCharacterContext[];
   suggestedAssetNames?: string[];
   suggestedAssets?: StoryboardSuggestedAssets;
+};
+
+export type StoryboardDialogueLine = {
+  speaker: string;
+  text: string;
+  raw: string;
+  normalizedText: string;
+};
+
+export type StoryboardDialogueOverfill = {
+  sequence?: number;
+  duration: number;
+  estimatedSeconds: number;
+  dialogue: string;
 };
 
 const STORYBOARD_TARGET_CHUNK_LENGTH = 2200;
@@ -189,7 +206,13 @@ export const chunkStoryboardScript = (
 };
 
 export const compactStoryboardAssets = (
-  assets: Array<{ id?: unknown; name?: unknown; type?: unknown }>
+  assets: Array<{
+    id?: unknown;
+    name?: unknown;
+    type?: unknown;
+    description?: unknown;
+    metadata?: unknown;
+  }>
 ): StoryboardAssetContext[] => {
   const seen = new Set<string>();
   const result: StoryboardAssetContext[] = [];
@@ -206,10 +229,147 @@ export const compactStoryboardAssets = (
       id: typeof asset?.id === 'string' ? asset.id : undefined,
       name,
       type: typeof asset?.type === 'string' ? asset.type : undefined,
+      description:
+        typeof asset?.description === 'string' && asset.description.trim()
+          ? asset.description.trim().slice(0, 220)
+          : undefined,
+      metadata:
+        asset?.metadata && typeof asset.metadata === 'object' && !Array.isArray(asset.metadata)
+          ? (asset.metadata as Record<string, unknown>)
+          : undefined,
     });
   }
 
   return result;
+};
+
+export const normalizeStoryboardDialogueText = (value: string) =>
+  value
+    .replace(/[“”"'‘’「」『』]/g, '')
+    .replace(/\s+/g, '')
+    .trim()
+    .toLowerCase();
+
+export const extractStoryboardDialogueLines = (value: string): StoryboardDialogueLine[] => {
+  const plainText = extractStoryboardScriptText(value);
+  if (!plainText) return [];
+
+  return plainText
+    .split(/\n+/)
+    .map((line) => line.trim())
+    .filter(Boolean)
+    .map((line) => {
+      const match = line.match(/^([^：:\n]{1,24})[：:]\s*(.+)$/);
+      if (!match) return null;
+
+      const speaker = match[1].trim();
+      const text = match[2].trim();
+      const normalizedText = normalizeStoryboardDialogueText(text);
+      if (!speaker || !normalizedText) return null;
+
+      return {
+        speaker,
+        text,
+        raw: `${speaker}：${text}`,
+        normalizedText,
+      };
+    })
+    .filter((line): line is StoryboardDialogueLine => Boolean(line));
+};
+
+const getShotDialogueText = (shot: Pick<StoryboardGeneratedShot | StoryboardPlanShot, 'dialogue'>) =>
+  typeof shot.dialogue === 'string' ? shot.dialogue : '';
+
+export const findMissingStoryboardDialogues = (
+  scriptContent: string,
+  shots: Array<Pick<StoryboardGeneratedShot | StoryboardPlanShot, 'dialogue'>>
+) => {
+  const sourceDialogues = extractStoryboardDialogueLines(scriptContent);
+  if (sourceDialogues.length === 0) return [];
+
+  const generatedDialogueText = normalizeStoryboardDialogueText(
+    shots.map(getShotDialogueText).filter(Boolean).join('\n')
+  );
+  if (!generatedDialogueText) return sourceDialogues;
+
+  return sourceDialogues.filter((line) => {
+    if (!line.normalizedText) return false;
+    return !generatedDialogueText.includes(line.normalizedText);
+  });
+};
+
+export const estimateStoryboardDialogueSeconds = (dialogue: string) => {
+  const text = dialogue
+    .replace(/^([^：:\n]{1,24})[：:]/gm, '')
+    .replace(/[“”"'‘’「」『』]/g, '')
+    .trim();
+  if (!text) return 0;
+
+  const cjkCount = (text.match(/[\u3400-\u9fff\uf900-\ufaff]/g) || []).length;
+  const nonCjkText = text.replace(/[\u3400-\u9fff\uf900-\ufaff]/g, ' ');
+  const wordCount = (nonCjkText.match(/[A-Za-z0-9]+(?:[-'][A-Za-z0-9]+)*/g) || []).length;
+  const lineCount = Math.max(1, text.split(/\n+/).filter((line) => line.trim()).length);
+
+  return cjkCount / 3.6 + wordCount / 2.4 + lineCount * 0.35;
+};
+
+export const findOverfilledStoryboardDialogues = <
+  T extends { dialogue?: string; duration?: number; sequence?: number }
+>(
+  shots: T[],
+  maxDialogueShare = 0.68
+): StoryboardDialogueOverfill[] =>
+  shots
+    .map((shot) => {
+      const dialogue = getShotDialogueText(shot).trim();
+      const duration = Number(shot.duration) || 0;
+      const estimatedSeconds = estimateStoryboardDialogueSeconds(dialogue);
+
+      return {
+        sequence: shot.sequence,
+        duration,
+        estimatedSeconds,
+        dialogue,
+      };
+    })
+    .filter(
+      (item) =>
+        item.dialogue &&
+        item.duration > 0 &&
+        item.estimatedSeconds > Math.max(1, item.duration * maxDialogueShare)
+    );
+
+export const getStoryboardDialogueDiagnosticsPrompt = ({
+  missingDialogues,
+  overfilledDialogues,
+}: {
+  missingDialogues: StoryboardDialogueLine[];
+  overfilledDialogues: StoryboardDialogueOverfill[];
+}) => {
+  const messages: string[] = [];
+
+  if (missingDialogues.length > 0) {
+    messages.push(
+      `上一次规划遗漏了这些原剧本对白，必须逐句分配到镜头 dialogue 字段：${missingDialogues
+        .slice(0, 20)
+        .map((line) => line.raw)
+        .join(' / ')}`
+    );
+  }
+
+  if (overfilledDialogues.length > 0) {
+    messages.push(
+      `上一次规划存在对白超时，不能让角色高速说完。请拆到更多镜头或缩短每镜对白：${overfilledDialogues
+        .slice(0, 12)
+        .map(
+          (item) =>
+            `镜头${item.sequence || '?'}：${item.estimatedSeconds.toFixed(1)}秒对白 / ${item.duration}秒镜头`
+        )
+        .join('；')}`
+    );
+  }
+
+  return messages.join('\n');
 };
 
 export const collectStoryboardSuggestedNames = (
@@ -241,22 +401,84 @@ export const collectStoryboardSuggestedNames = (
 };
 
 export const resolveStoryboardRelatedAssetIds = (
-  shot: Pick<StoryboardGeneratedShot | StoryboardPlanShot, 'suggestedAssetNames' | 'suggestedAssets'>,
-  assets: Array<{ id: string; name: string }>
+  shot: Pick<StoryboardGeneratedShot | StoryboardPlanShot, 'suggestedAssetNames' | 'suggestedAssets'> &
+    Partial<{
+      sceneLabel: string;
+      scriptExcerpt: string;
+      dialogue: string;
+      videoPrompt: string;
+      characters: StoryboardCharacterContext[];
+    }>,
+  assets: Array<{ id: string; name: string; type?: string; description?: string }>
 ) => {
   const relatedIds: string[] = [];
   const suggestedNames = collectStoryboardSuggestedNames(shot);
   const normalize = (value: string) => value.trim().toLowerCase();
+  const context = normalize(
+    [
+      shot.sceneLabel,
+      shot.scriptExcerpt,
+      shot.dialogue,
+      shot.videoPrompt,
+      ...(Array.isArray(shot.characters)
+        ? shot.characters.flatMap((character) => [character.name, character.description])
+        : []),
+    ]
+      .filter((value): value is string => typeof value === 'string')
+      .join(' ')
+  );
+  const stateTokens = [
+    '十年前',
+    '十年后',
+    '少年',
+    '青年',
+    '成年',
+    '中年',
+    '老年',
+    '年轻',
+    '年老',
+    '过去',
+    '现在',
+    '未来',
+    '受伤',
+    '婚礼',
+    '工作服',
+    '作战服',
+    'young',
+    'old',
+    'teen',
+    'adult',
+    'past',
+    'future',
+  ];
+  const getContextualAsset = (candidates: typeof assets) =>
+    candidates.find((asset) => {
+      const haystack = normalize(`${asset.name} ${asset.description || ''}`);
+      return stateTokens.some((token) => haystack.includes(token) && context.includes(token));
+    });
+  const hasStateToken = (asset: { name: string; description?: string }) => {
+    const haystack = normalize(`${asset.name} ${asset.description || ''}`);
+    return stateTokens.some((token) => haystack.includes(token));
+  };
 
   for (const name of suggestedNames) {
     const normalizedName = normalize(name);
     const exact = assets.find((asset) => normalize(asset.name) === normalizedName);
-    const fuzzy = assets.find(
+    const fuzzyCandidates = assets.filter(
       (asset) =>
         normalize(asset.name).includes(normalizedName) ||
         normalizedName.includes(normalize(asset.name))
     );
-    const matchedAsset = exact || fuzzy;
+    const nonCharacterCandidates = fuzzyCandidates.filter((asset) => asset.type !== 'character');
+    const fuzzy =
+      fuzzyCandidates.length === 1
+        ? fuzzyCandidates[0]
+        : getContextualAsset(fuzzyCandidates) ||
+          (nonCharacterCandidates.length === 1 ? nonCharacterCandidates[0] : undefined);
+    const matchedAsset =
+      exact && (exact.type !== 'character' || hasStateToken(exact))
+        ? exact
+        : getContextualAsset(fuzzyCandidates) || exact || fuzzy;
     if (matchedAsset && !relatedIds.includes(matchedAsset.id)) {
       relatedIds.push(matchedAsset.id);
     }

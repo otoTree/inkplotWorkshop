@@ -5,8 +5,9 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Progress } from '@/components/ui/progress';
-import { Plus, User, MapPin, Wand2, Loader2, Sparkles, Trash2 } from 'lucide-react';
-import { ArtStyleConfig, Asset, AssetType, Project } from '@/types';
+import { Input } from '@/components/ui/input';
+import { Plus, User, MapPin, Wand2, Loader2, Sparkles, Trash2, Package, Search } from 'lucide-react';
+import { ArtStyleConfig, Asset, AssetType, Episode, Project } from '@/types';
 import { useState, useEffect, useCallback } from 'react';
 import { AssetDialog } from './AssetDialog';
 import { ExtractionPreviewDialog } from './ExtractionPreviewDialog';
@@ -16,8 +17,10 @@ import { DEFAULT_IMAGE_GENERATION_MODEL, IMAGE_GENERATION_MODEL_LABELS } from '@
 
 export function AssetGallery({ projectId }: { projectId: string }) {
   const [assets, setAssets] = useState<Asset[]>([]);
+  const [episodes, setEpisodes] = useState<Episode[]>([]);
   const [project, setProject] = useState<Project | null>(null);
   const [activeTab, setActiveTab] = useState<AssetType>('character');
+  const [searchQuery, setSearchQuery] = useState('');
   
   // Dialog State
   const [dialogOpen, setDialogOpen] = useState(false);
@@ -39,12 +42,14 @@ export function AssetGallery({ projectId }: { projectId: string }) {
 
   const fetchData = useCallback(async () => {
       try {
-          const [proj, assetList] = await Promise.all([
+          const [proj, assetList, episodeList] = await Promise.all([
               api.projects.get(projectId),
-              api.assets.list(projectId)
+              api.assets.list(projectId),
+              api.episodes.list(projectId)
           ]);
           setProject(proj);
           setAssets(assetList);
+          setEpisodes(episodeList);
       } catch (e) {
           console.error('Failed to load assets', e);
       }
@@ -62,6 +67,46 @@ export function AssetGallery({ projectId }: { projectId: string }) {
   const typeMap: Record<string, string> = {
     character: '角色',
     location: '场景',
+    prop: '道具',
+  };
+
+  const typeIconMap: Record<AssetType, typeof User> = {
+    character: User,
+    location: MapPin,
+    prop: Package,
+  };
+
+  const getEpisodeIds = (asset: Partial<Asset>) =>
+    Array.isArray(asset.metadata?.episodeIds)
+      ? asset.metadata.episodeIds.filter((id): id is string => typeof id === 'string')
+      : [];
+
+  const getEpisodeLabel = (asset: Asset) => {
+    const episodeIds = getEpisodeIds(asset);
+    if (episodeIds.length === 0) return '';
+    const linked = episodes.filter((episode) => episodeIds.includes(episode.id));
+    if (linked.length === 0) return `${episodeIds.length} 集`;
+    if (linked.length <= 2) {
+      return linked.map((episode) => `第${episode.episodeNumber}集`).join('、');
+    }
+    return `第${linked[0].episodeNumber}集等 ${linked.length} 集`;
+  };
+
+  const normalizeText = (value: string) => value.trim().toLowerCase();
+
+  const getFilteredAssetsByType = (type: AssetType) => {
+    const query = normalizeText(searchQuery);
+    return getAssetsByType(type).filter((asset) => {
+      if (!query) return true;
+      const episodeText = episodes
+        .filter((episode) => getEpisodeIds(asset).includes(episode.id))
+        .map((episode) => `第${episode.episodeNumber}集 ${episode.title}`)
+        .join(' ');
+      const haystack = normalizeText(
+        [asset.name, asset.description, asset.visualPrompt, episodeText].filter(Boolean).join(' ')
+      );
+      return haystack.includes(query);
+    });
   };
 
   const handleOpenCreate = () => {
@@ -140,7 +185,7 @@ export function AssetGallery({ projectId }: { projectId: string }) {
       const allFoundAssets: Partial<Asset>[] = [];
       const existingNames = new Set(assets?.map(a => a.name));
       // Track names found in this session to avoid duplicates
-      const sessionNames = new Set<string>();
+      const sessionAssetsByName = new Map<string, Partial<Asset>>();
 
       // Sort episodes by number to ensure logical processing order
       const sortedEpisodes = episodes.sort((a, b) => a.episodeNumber - b.episodeNumber);
@@ -170,11 +215,33 @@ export function AssetGallery({ projectId }: { projectId: string }) {
               if (!normalizedName) return;
               
               if (existingNames.has(normalizedName)) return;
-              if (sessionNames.has(normalizedName)) return;
-              
-              sessionNames.add(normalizedName);
+              const existingSessionAsset = sessionAssetsByName.get(normalizedName);
+              if (existingSessionAsset) {
+                const episodeIds = new Set(getEpisodeIds(existingSessionAsset));
+                episodeIds.add(episode.id);
+                existingSessionAsset.metadata = {
+                  ...(existingSessionAsset.metadata || {}),
+                  episodeIds: Array.from(episodeIds),
+                };
+                return;
+              }
+
+              const normalizedType: AssetType =
+                a.type === 'character' || a.type === 'location' || a.type === 'prop'
+                  ? a.type
+                  : 'prop';
               // Ensure we keep the normalized name
-              allFoundAssets.push({ ...a, name: normalizedName });
+              const foundAsset = {
+                ...a,
+                type: normalizedType,
+                name: normalizedName,
+                metadata: {
+                  ...(a.metadata || {}),
+                  episodeIds: [episode.id],
+                },
+              };
+              sessionAssetsByName.set(normalizedName, foundAsset);
+              allFoundAssets.push(foundAsset);
             });
           }
         } catch (err) {
@@ -212,13 +279,16 @@ export function AssetGallery({ projectId }: { projectId: string }) {
         const newAssets: Asset[] = selectedAssets.map(asset => ({
           id: crypto.randomUUID(),
           projectId,
-          type: (asset.type as AssetType) || 'location', // Default fallback
+          type:
+            asset.type === 'character' || asset.type === 'location' || asset.type === 'prop'
+              ? asset.type
+              : 'prop',
           name: asset.name || '未命名',
           description: asset.description || '',
           visualPrompt: asset.visualPrompt || '',
           imageUrl: asset.imageUrl || '', // Preserve generated image url if any
           status: 'draft',
-          metadata: {},
+          metadata: asset.metadata || {},
         } as Asset));
         
         await api.assets.bulkCreate(newAssets);
@@ -262,7 +332,7 @@ export function AssetGallery({ projectId }: { projectId: string }) {
                 const errData = await response.json();
                 if (errData.error) errorMsg = errData.error;
                 if (errData.details) errorMsg += ` - ${errData.details}`;
-            } catch (e) {
+            } catch {
                 // ignore json parse error
             }
             throw new Error(errorMsg);
@@ -276,9 +346,9 @@ export function AssetGallery({ projectId }: { projectId: string }) {
         } else {
             throw new Error(data.error || '生成失败，未返回图片链接');
         }
-    } catch (error: any) {
+    } catch (error: unknown) {
         console.error('Generation error:', error);
-        alert(`生成图片失败: ${error.message || '未知错误'}`);
+        alert(`生成图片失败: ${error instanceof Error ? error.message : '未知错误'}`);
     } finally {
         setGeneratingAssets(prev => {
             const next = new Set(prev);
@@ -329,7 +399,7 @@ export function AssetGallery({ projectId }: { projectId: string }) {
                     const errData = await response.json();
                     if (errData.error) errorMsg = errData.error;
                     if (errData.details) errorMsg += ` - ${errData.details}`;
-                } catch (e) {
+                } catch {
                     // ignore json parse error
                 }
                 throw new Error(errorMsg);
@@ -343,7 +413,7 @@ export function AssetGallery({ projectId }: { projectId: string }) {
             } else {
                 throw new Error(data.error || '生成失败，未返回图片链接');
             }
-        } catch (error: any) {
+        } catch (error: unknown) {
             console.error(`Batch generation error for ${asset.name}:`, error);
             // Don't alert here to avoid spamming the user, but we could collect errors.
         } finally {
@@ -369,18 +439,23 @@ export function AssetGallery({ projectId }: { projectId: string }) {
 
   const characterCount = assets.filter(a => a.type === 'character').length;
   const locationCount = assets.filter(a => a.type === 'location').length;
+  const propCount = assets.filter(a => a.type === 'prop').length;
   const missingImageCount = assets.filter(a => !a.imageUrl && a.visualPrompt).length;
+  const visibleAssets = getFilteredAssetsByType(activeTab);
+  const ActiveIcon = typeIconMap[activeTab];
 
   return (
     <div className="p-8 max-w-6xl mx-auto">
       <div className="flex justify-between items-center mb-8">
         <div>
             <h1 className="text-3xl font-serif font-bold mb-2">设定集</h1>
-            <p className="text-black/60 mb-3">管理您的角色和场景。</p>
+            <p className="text-black/60 mb-3">管理您的角色、场景和道具。</p>
             <div className="flex gap-4 text-sm text-black/50 bg-black/[0.03] px-3 py-1.5 rounded-md w-fit">
                 <span className="flex items-center gap-1.5"><User className="w-3.5 h-3.5" /> {characterCount}</span>
                 <span className="w-px h-3 bg-black/10"></span>
                 <span className="flex items-center gap-1.5"><MapPin className="w-3.5 h-3.5" /> {locationCount}</span>
+                <span className="w-px h-3 bg-black/10"></span>
+                <span className="flex items-center gap-1.5"><Package className="w-3.5 h-3.5" /> {propCount}</span>
             </div>
         </div>
         <div className="flex gap-2 items-center">
@@ -427,10 +502,22 @@ export function AssetGallery({ projectId }: { projectId: string }) {
       </div>
 
       <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as AssetType)} className="w-full">
-        <TabsList className="mb-8">
-          <TabsTrigger value="character" className="px-8">角色</TabsTrigger>
-          <TabsTrigger value="location" className="px-8">场景</TabsTrigger>
-        </TabsList>
+        <div className="mb-8 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <TabsList>
+              <TabsTrigger value="character" className="px-8">角色</TabsTrigger>
+              <TabsTrigger value="location" className="px-8">场景</TabsTrigger>
+              <TabsTrigger value="prop" className="px-8">道具</TabsTrigger>
+            </TabsList>
+            <div className="relative w-full sm:w-80">
+                <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-black/35" />
+                <Input
+                    value={searchQuery}
+                    onChange={(event) => setSearchQuery(event.target.value)}
+                    placeholder="搜索资产、描述或剧集"
+                    className="pl-9"
+                />
+            </div>
+        </div>
 
         <TabsContent value={activeTab} className="mt-0">
             {/* Masonry-like Grid Layout */}
@@ -444,7 +531,9 @@ export function AssetGallery({ projectId }: { projectId: string }) {
                     <span className="text-sm text-black/40 font-medium">添加{typeMap[activeTab]}</span>
                 </button>
 
-                {getAssetsByType(activeTab).map((asset) => (
+                {visibleAssets.map((asset) => {
+                  const episodeLabel = getEpisodeLabel(asset);
+                  return (
                     <Card 
                         key={asset.id} 
                         className="overflow-hidden hover:shadow-md transition-shadow cursor-pointer group break-inside-avoid mb-6 flex flex-col"
@@ -467,8 +556,7 @@ export function AssetGallery({ projectId }: { projectId: string }) {
                                 <img src={asset.imageUrl} alt={asset.name} className="w-full h-auto object-cover" />
                             ) : (
                                 <div className="w-full aspect-video bg-black/[0.04] flex items-center justify-center text-black/10 group-hover:text-black/20 transition-colors">
-                                    {activeTab === 'character' && <User className="w-16 h-16" />}
-                                    {activeTab === 'location' && <MapPin className="w-16 h-16" />}
+                                    <ActiveIcon className="w-16 h-16" />
                                 </div>
                             )}
                             
@@ -506,9 +594,21 @@ export function AssetGallery({ projectId }: { projectId: string }) {
                         </CardHeader>
                         <CardContent className="p-4 pt-0 text-xs text-black/50">
                             <p className="line-clamp-3">{asset.description || '暂无描述'}</p>
+                            {episodeLabel && (
+                                <p className="mt-2 inline-flex rounded bg-black/[0.04] px-2 py-1 text-[11px] text-black/50">
+                                    {episodeLabel}
+                                </p>
+                            )}
                         </CardContent>
                     </Card>
-                ))}
+                  );
+                })}
+
+                {visibleAssets.length === 0 && searchQuery.trim() && (
+                    <div className="break-inside-avoid rounded-lg border border-black/[0.06] bg-black/[0.02] p-8 text-center text-sm text-black/45">
+                        没有匹配的{typeMap[activeTab]}
+                    </div>
+                )}
             </div>
         </TabsContent>
       </Tabs>
@@ -520,6 +620,7 @@ export function AssetGallery({ projectId }: { projectId: string }) {
         mode={dialogMode}
         assetType={activeTab}
         projectId={projectId}
+        episodes={episodes}
         onSave={handleSaveAsset}
         onDelete={(id) => api.assets.delete(id).then(() => setAssets(prev => prev.filter(a => a.id !== id)))}
         artStyle={artStyleConfig}

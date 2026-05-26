@@ -24,6 +24,10 @@ import {
 import {
   compactStoryboardAssets,
   extractStoryboardScriptText,
+  findMissingStoryboardDialogues,
+  findOverfilledStoryboardDialogues,
+  getStoryboardDialogueDiagnosticsPrompt,
+  normalizeStoryboardDialogueText,
   resolveStoryboardRelatedAssetIds,
   StoryboardGeneratedShot,
   StoryboardPlanShot,
@@ -34,6 +38,23 @@ interface OneClickWorkflowDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
 }
+
+type BlueprintEpisodeItem = {
+  episode_number?: number;
+  title?: string;
+  summary?: string;
+  hook?: string;
+  climax?: string;
+  cliffhanger?: string;
+  duration_seconds?: number;
+};
+
+type BlueprintAssetItem = {
+  name?: string;
+  description?: string;
+  visualPrompt?: string;
+  isMain?: boolean;
+};
 
 export function OneClickWorkflowDialog({ projectId, open, onOpenChange }: OneClickWorkflowDialogProps) {
   const [isRunning, setIsRunning] = useState(false);
@@ -59,8 +80,8 @@ export function OneClickWorkflowDialog({ projectId, open, onOpenChange }: OneCli
         project.imageGenerationModel || DEFAULT_IMAGE_GENERATION_MODEL;
 
       let episodes = await api.episodes.list(projectId);
-      let hasSummary = episodes.some(ep => ep.structure?.summary);
-      let hasContent = episodes.some(ep => ep.content?.trim());
+      const hasSummary = episodes.some(ep => ep.structure?.summary);
+      const hasContent = episodes.some(ep => ep.content?.trim());
       
       // 0. 如果连大纲都没有，尝试使用一句话梗概直接生成大纲 (Generate blueprint if empty)
       if (!hasSummary && !hasContent) {
@@ -91,7 +112,7 @@ export function OneClickWorkflowDialog({ projectId, open, onOpenChange }: OneCli
           // Clear old episodes
           await api.episodes.deleteByProject(projectId);
           
-          const newEps: Episode[] = generatedEpisodes.map((ep: any) => ({
+          const newEps: Episode[] = generatedEpisodes.map((ep: BlueprintEpisodeItem) => ({
             id: crypto.randomUUID(),
             projectId,
             episodeNumber: ep.episode_number,
@@ -122,7 +143,7 @@ export function OneClickWorkflowDialog({ projectId, open, onOpenChange }: OneCli
           if (blueprintData.assets) {
             log('正在保存项目设计中提取的初始资产...');
             const initAssets: Asset[] = [];
-            const addInitAssets = (items: any[], type: 'character' | 'location') => {
+            const addInitAssets = (items: BlueprintAssetItem[], type: 'character' | 'location' | 'prop') => {
               if (!Array.isArray(items)) return;
               items.forEach(item => {
                 if (!item.name) return;
@@ -142,6 +163,7 @@ export function OneClickWorkflowDialog({ projectId, open, onOpenChange }: OneCli
             };
             addInitAssets(blueprintData.assets.characters, 'character');
             addInitAssets(blueprintData.assets.locations, 'location');
+            addInitAssets(blueprintData.assets.items, 'prop');
             if (initAssets.length > 0) {
               await api.assets.bulkCreate(initAssets);
             }
@@ -157,7 +179,7 @@ export function OneClickWorkflowDialog({ projectId, open, onOpenChange }: OneCli
       const episodesToGenerate = episodes.filter(ep => ep.structure?.summary && !ep.content?.trim());
       if (episodesToGenerate.length > 0) {
         log(`发现 ${episodesToGenerate.length} 集缺失剧本内容，准备生成...`);
-        let currentAssets = await api.assets.list(projectId);
+        const currentAssets = await api.assets.list(projectId);
         
         let completedScripts = 0;
         const processScript = async (ep: Episode) => {
@@ -290,25 +312,42 @@ export function OneClickWorkflowDialog({ projectId, open, onOpenChange }: OneCli
 
           const storyboardAssets = compactStoryboardAssets(assets || []);
           const stylePayload = buildVisualStyleRequestPayload(project);
+          const requestPlan = async (planFeedback?: string) => {
+            const planRes = await fetch('/api/ai/generate-storyboard', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                mode: 'plan',
+                script: scriptContent,
+                assets: storyboardAssets,
+                language: project?.language,
+                planFeedback,
+                ...stylePayload,
+              })
+            });
+
+            if (!planRes.ok) {
+              throw new Error(await planRes.text());
+            }
+
+            const planData = await planRes.json() as { shots?: StoryboardPlanShot[] };
+            return Array.isArray(planData.shots) ? planData.shots : [];
+          };
+
           log(`第 ${ep.episodeNumber} 集：正在规划镜头数量...`);
-          const planRes = await fetch('/api/ai/generate-storyboard', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              mode: 'plan',
-              script: scriptContent,
-              assets: storyboardAssets,
-              language: project?.language,
-              ...stylePayload,
-            })
+          let plannedShots = await requestPlan();
+          const initialMissingDialogues = findMissingStoryboardDialogues(scriptContent, plannedShots);
+          const initialOverfilledDialogues = findOverfilledStoryboardDialogues(plannedShots);
+          const planFeedback = getStoryboardDialogueDiagnosticsPrompt({
+            missingDialogues: initialMissingDialogues,
+            overfilledDialogues: initialOverfilledDialogues,
           });
 
-          if (!planRes.ok) {
-            throw new Error(await planRes.text());
+          if (planFeedback) {
+            log(`第 ${ep.episodeNumber} 集：检测到对白遗漏或超时，正在重新规划...`);
+            plannedShots = await requestPlan(planFeedback);
           }
 
-          const planData = await planRes.json() as { shots?: StoryboardPlanShot[] };
-          const plannedShots = Array.isArray(planData.shots) ? planData.shots : [];
           if (plannedShots.length === 0) {
             log(`第 ${ep.episodeNumber} 集：未生成任何镜头规划。`);
             return;
@@ -352,6 +391,14 @@ export function OneClickWorkflowDialog({ projectId, open, onOpenChange }: OneCli
             const detailedShot: StoryboardGeneratedShot = {
               ...shotPlan,
               ...data.shot,
+              dialogue:
+                data.shot.dialogue &&
+                (!shotPlan.dialogue ||
+                  normalizeStoryboardDialogueText(data.shot.dialogue).includes(
+                    normalizeStoryboardDialogueText(shotPlan.dialogue)
+                  ))
+                  ? data.shot.dialogue
+                  : shotPlan.dialogue || data.shot.dialogue,
               duration: shotPlan.duration ?? data.shot.duration,
             };
             detailedShots.push(detailedShot);
@@ -378,6 +425,17 @@ export function OneClickWorkflowDialog({ projectId, open, onOpenChange }: OneCli
               characters: Array.isArray(detailedShot.characters) ? detailedShot.characters : [],
               relatedAssetIds: resolveStoryboardRelatedAssetIds(detailedShot, assets || []),
             } as Shot);
+          }
+
+          const finalMissingDialogues = findMissingStoryboardDialogues(scriptContent, detailedShots);
+          const finalOverfilledDialogues = findOverfilledStoryboardDialogues(detailedShots);
+          if (finalMissingDialogues.length > 0 || finalOverfilledDialogues.length > 0) {
+            throw new Error(
+              `分镜对白校验未通过：${getStoryboardDialogueDiagnosticsPrompt({
+                missingDialogues: finalMissingDialogues,
+                overfilledDialogues: finalOverfilledDialogues,
+              })}`
+            );
           }
           
           if (newShots.length > 0) {
@@ -520,8 +578,8 @@ export function OneClickWorkflowDialog({ projectId, open, onOpenChange }: OneCli
       log(`全流程生成完成！新增了 ${storyboardCount} 个镜头。`);
       setProgress(100);
       setStatus('success');
-    } catch (error: any) {
-      log(`错误: ${error.message}`);
+    } catch (error: unknown) {
+      log(`错误: ${error instanceof Error ? error.message : String(error)}`);
       setStatus('error');
     } finally {
       setIsRunning(false);

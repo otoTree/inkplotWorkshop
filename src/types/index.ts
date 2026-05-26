@@ -95,7 +95,7 @@ export interface Episode {
   };
 }
 
-export type AssetType = 'character' | 'location';
+export type AssetType = 'character' | 'location' | 'prop';
 
 export interface Asset {
   id: string;             // UUID
@@ -106,7 +106,9 @@ export interface Asset {
   visualPrompt: string;   // AI 生成的绘画 Prompt
   imageUrl: string;       // 本地 Blob URL 或 云端 URL
   status: 'draft' | 'locked'; // 锁定后不可随意更改
-  metadata: Record<string, unknown>; // 额外属性 (e.g. 年龄, 风格)
+  metadata: Record<string, unknown> & {
+    episodeIds?: string[];
+  }; // 额外属性 (e.g. 年龄, 风格, 关联剧集)
   isMain?: boolean;       // ★NEW: 是否为核心主角 (最多2个)
   volcengineAssetId?: string;
   volcengineAssetStatus?: 'Active' | 'Processing' | 'Failed';
