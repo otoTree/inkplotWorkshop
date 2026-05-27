@@ -863,12 +863,11 @@ ${JSON.stringify(compactPromptAssets(existingAssets, 80))}
 
 export const getStoryboardSystemPrompt = (artStyle?: ArtStyleInput) => {
   const { strategy } = resolvePromptStrategy(artStyle);
-  return `${strategy.storyboard.systemRole} Output rule: all storyboard fields except dialogue and script excerpt fields must be written in Chinese; dialogue and script excerpts follow the project language/source script language. Never output English in non-dialogue, non-script-excerpt fields.`;
+  return `全局美术风格：${strategy.storyboard.styleDirective}`;
 };
 
 export const getStoryboardShotPrompt = (
   {
-    scriptContent,
     shotPlan,
     previousShot,
     nextShotPlan,
@@ -886,36 +885,18 @@ export const getStoryboardShotPrompt = (
   return `
 # 任务：只生成一个镜头的详细分镜 JSON
 
-目标：基于给定的“镜头规划项”，只产出当前这一个镜头的详细导演级分镜，不要生成其他镜头。
-
-## 硬性规则
-1. 输出必须是一个 JSON 对象，不要输出数组，不要输出解释文字。
-2. 只能生成当前镜头：sequence=${shotPlan.sequence ?? 1}，全集共 ${totalShots || '未知'} 个镜头。
-3. 除 \`dialogue\` 外，所有字段必须使用中文。
-4. \`dialogue\` 必须使用 ${dialogueLanguageLabel}。
-5. \`sceneLabel\` 必须非空，并与当前镜头规划一致或高度一致。
-6. \`duration\` 必须优先遵循当前镜头规划值 ${shotPlan.duration ?? DEFAULT_SHOT_DURATION_SECONDS}，并且必须保持在 ${SHOT_DURATION_MIN_SECONDS}-${SHOT_DURATION_MAX_SECONDS} 秒之间。
-7. 必须优先复用已有资产名称。
-8. \`videoPrompt\` 必须是可直接用于视频模型的中文连续镜头提示词，并严格包含五个小标题：【绝对主体与物理动势】【美学介质与底层渲染参数】【环境场与情绪光影】【时间轴与状态演变】【光学与摄影机调度】。
-9. 只生成一个镜头，不要扩写成整集。
-10. 本镜头必须与上一镜、下一镜发生可追踪的剧情与视觉连接；不能只根据当前规划孤立生成。
-11. 必须优先依据当前镜头规划中的 \`scriptExcerpt\` 生成本镜头；\`previousScriptExcerpt\` 只用于承接开头，\`nextScriptExcerpt\` 只用于给结尾留下承接点，不允许把邻近片段的剧情提前拍完。
-12. **尊重剧本**：当前镜头只能把 \`scriptExcerpt\` 转成镜头，不能删除、改写、概括、替换其中的剧情动作和人物动机；如果发现当前规划漏掉了 \`scriptExcerpt\` 中的对白或关键动作，必须在本镜头补回。
-13. 如果当前镜头规划或 \`scriptExcerpt\` 中有对白，必须在 \`dialogue\` 字段逐句保留对应对白，保留说话人和台词原文，不得删除、改写、概括、换成旁白；并且必须把对白融入 \`videoPrompt\`：写清“哪个角色在什么身体状态、情绪状态、视线/动作状态下说出哪句台词”。不要只列台词，也不要漏掉说话时的表演状态。
-14. **资产选择必须精确克制**：\`suggestedAssets.characters\` 和 \`suggestedAssetNames\` 只能包含当前镜头实际可见的角色状态资产；同一角色只能保留一个最贴合当前状态的资产。若资产列表中同时存在通用角色图与 young/old/工作服/作战服/ep编号/场次编号/十年前/十年后/少年/成年/老年等状态图，必须只选状态最准确且名称完全对应的那一个。不要把同一角色的多张状态图、道具图、旧服装图一起输出。
-15. \`suggestedAssets.locations\` 只保留当前镜头最核心的一个场景资产；不要把上一镜、下一镜或气氛参考场景一起输出。
-16. **动作必须拆解到视频模型可执行**：禁止在 \`videoPrompt\` 中只写“转身离开”“走过去”“看着他”“回头”“冲上前”“停顿”等概括动作；必须写成身体部位、重心、步伐、视线、衣物/环境反馈按时间连续变化的画面信息。
+只产出 sequence=${shotPlan.sequence ?? 1} / ${totalShots || '未知'} 这一个镜头。
 
 ## 当前镜头规划
 ${JSON.stringify(shotPlan)}
 
-## 当前镜头对应剧本片段（最高优先级）
+## 当前镜头对应剧本片段
 ${shotPlan.scriptExcerpt || '未提供，请根据当前镜头规划与剧本全文定位。'}
 
-## 上一段邻近剧本片段（只用于承接）
+## 上一段邻近剧本片段
 ${shotPlan.previousScriptExcerpt || '无'}
 
-## 下一段邻近剧本片段（只用于留钩）
+## 下一段邻近剧本片段
 ${shotPlan.nextScriptExcerpt || '无'}
 
 ## 上一镜最终结果
@@ -927,47 +908,19 @@ ${nextShotPlan ? JSON.stringify(nextShotPlan) : '无'}
 ## 已有资产
 ${JSON.stringify(compactPromptAssets(existingAssets, 80))}
 
-## 剧本全文（只用于纠错和核对，不要覆盖当前镜头对应剧本片段）
-${scriptContent.slice(0, 15000)}
-
 ## 风格约束
 - 分镜整体风格：${strategy.storyboard.styleDirective}
 - 视频提示词重点：${strategy.storyboard.videoDirective}
-- 负面限制：${strategy.storyboard.negativeDirective}
 - 场景风格：${resolvedSceneStyle}
 
 ${STORYBOARD_VIDEO_PROMPT_DIMENSIONS}
-
-${STORYBOARD_ACTION_DECOMPOSITION_RULES}
-
-${STORYBOARD_CONTINUITY_RULES}
-
-## 本镜头连续性执行要求
-- 如果有上一镜：\`videoPrompt\` 的“时间轴与状态演变”必须接住上一镜的结束动作、视线、情绪、环境状态或剧情信息。
-- 如果有下一镜规划：本镜头的结尾必须给下一镜留下明确承接点，不能把动作和情绪全部封死；可以留下未完成动作、转向视线、正在扩散的环境变化、刚出现的信息或即将发生的反应。
-- 如果当前镜头规划中的 \`continuityIn\`、\`continuityOut\`、\`stateChange\` 存在，必须优先落实到 \`videoPrompt\` 中。
-- \`videoPrompt\` 的“时间轴与状态演变”必须明确对应当前 \`scriptExcerpt\`，开头只承接 \`previousScriptExcerpt\`，结尾只预备 \`nextScriptExcerpt\`。
-- 当前镜头如有对白，\`videoPrompt\` 的【绝对主体与物理动势】或【时间轴与状态演变】必须包含对白表演信息，例如“角色名在肩膀绷紧、压低声音、视线避开对方的状态下说：‘台词’”。
-- 当前镜头如有转身、离开、靠近、回头、停步、坐下、站起、推门、抓握、松手等动作，必须拆成“先动哪里、重心如何变、下一步如何接、衣物/道具/环境如何滞后或响应、最后画面停在哪里”。
-
-## 输出字段
-只允许输出以下字段：
-- \`sequence\`
-- \`duration\`
-- \`dialogue\`：当前镜头对应对白；没有则空字符串。
-- \`videoPrompt\`：唯一最终提示词字段；所有主体、物理动势、动作拆解、美学介质、环境光影、时间连续、摄影机调度、与前后镜头的衔接都必须写进这里。
-- \`suggestedAssetNames\`：仅用于系统自动关联资产，不要在这里写描述。
-- \`characters\`：仅用于系统自动关联角色，保持简短。
-- \`suggestedAssets\`：仅用于系统自动关联资产。
-
-不要输出以下字段：\`description\`、\`sceneLabel\`、\`transition\`、\`eyeline\`、\`lightingEvolution\`、\`cameraMotivation\`、\`timeline\`、\`environmentalState\`、\`generationConstraints\`、\`characterAction\`、\`emotion\`、\`lightingAtmosphere\`、\`soundEffect\`、\`camera\`、\`size\`。
 
 ## Output Format
 {
   "sequence": ${shotPlan.sequence ?? 1},
   "duration": ${shotPlan.duration ?? DEFAULT_SHOT_DURATION_SECONDS},
-  "dialogue": "角色名：当前镜头对应台词，没有则为空字符串",
-  "videoPrompt": "【绝对主体与物理动势】明确主体、起始姿态、先动的身体部位、发力方式、重心转移、脚步/肩颈/手部/视线的连续变化、可见物理反馈、说话时的身体状态与结束姿态；如有对白，写成角色名在具体动作阶段和情绪状态下说：“台词”；禁止只写转身离开、走过去、看向某人这类概括动作。【美学介质与底层渲染参数】结合项目风格写清媒介质感、材质、皮肤/布料/环境细节与渲染或摄影质感。【环境场与情绪光影】写清空间层次、环境状态、空气颗粒、色温、明暗对比、反光、遮挡与情绪光影。【时间轴与状态演变】按开场状态、第一处可见动作、第二处可见动作、对白发生、中途变化、结束状态书写，并承接上一镜、交代交给下一镜的状态。【光学与摄影机调度】写清焦段感、景深、机位、运动路径、对焦变化与构图落点。",
+  "dialogue": "当前镜头对白，使用 ${dialogueLanguageLabel}，没有则为空字符串",
+  "videoPrompt": "当前镜头的视频生成提示词",
   "suggestedAssetNames": ["角色名", "场景名"],
   "characters": [
     {
