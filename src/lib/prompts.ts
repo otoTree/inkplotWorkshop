@@ -603,6 +603,16 @@ type StoryboardPlanPromptInput = {
   }>;
 };
 
+type StoryboardPlanScopeInput = {
+  segmentIndex?: number;
+  segmentTotal?: number;
+  targetShotCount?: number;
+  targetDurationSeconds?: number;
+  globalScriptMap?: string;
+  previousScriptContext?: string;
+  nextScriptContext?: string;
+};
+
 type StoryboardShotPromptInput = {
   scriptContent: string;
   shotPlan: StoryboardPlanPromptInput;
@@ -615,10 +625,36 @@ export const getStoryboardPlanPrompt = (
   scriptContent: string,
   existingAssets: ExistingAsset[],
   artStyle?: ArtStyleInput,
-  language: string = 'zh'
+  language: string = 'zh',
+  planScope?: StoryboardPlanScopeInput
 ) => {
   const { strategy } = resolvePromptStrategy(artStyle);
   const dialogueLanguageLabel = getStoryboardDialogueLanguageLabel(language);
+  const isSegmentedPlan =
+    Number(planScope?.segmentTotal) > 1 &&
+    Number(planScope?.targetShotCount) > 0 &&
+    Number(planScope?.targetDurationSeconds) > 0;
+  const shotCountRule = isSegmentedPlan
+    ? `当前只规划第 ${planScope?.segmentIndex}/${planScope?.segmentTotal} 段，镜头数必须精确等于 ${planScope?.targetShotCount} 个。`
+    : `总镜头数必须是 ${STORYBOARD_SHOT_COUNT_LABEL} 个。`;
+  const durationRule = isSegmentedPlan
+    ? `当前段全部镜头总时长必须精确等于 ${planScope?.targetDurationSeconds} 秒。`
+    : `全部镜头总时长必须精确等于 ${EPISODE_DURATION_LABEL}。`;
+  const segmentContext = isSegmentedPlan
+    ? `
+## 分段上下文
+当前任务只规划 Script Content 中的这一段。下面的上下文只用于承接和理解整集结构，不要为上下文单独生成镜头。
+
+整集段落地图：
+${planScope?.globalScriptMap || '无'}
+
+上一段末尾：
+${planScope?.previousScriptContext || '无'}
+
+下一段开头：
+${planScope?.nextScriptContext || '无'}
+`
+    : '';
 
   return `
 # 任务：为整集剧本先生成“镜头规划表”
@@ -627,9 +663,9 @@ export const getStoryboardPlanPrompt = (
 
 ## 硬性规则
 1. 输出必须是合法 json 对象，且只包含 \`shots\` 数组；不要输出 markdown、解释文字或代码块。
-2. 总镜头数必须是 ${STORYBOARD_SHOT_COUNT_LABEL} 个。
+2. ${shotCountRule}
 3. 每个镜头时长必须在 ${SHOT_DURATION_LABEL} 之间。
-4. 全部镜头总时长必须精确等于 ${EPISODE_DURATION_LABEL}。
+4. ${durationRule}
 5. 除 \`dialogue\`、\`scriptExcerpt\` 外，所有字段都必须使用中文。
 6. \`dialogue\` 如有内容，必须使用 ${dialogueLanguageLabel}。
 7. 每个镜头都必须有非空 \`sceneLabel\`。
@@ -660,6 +696,8 @@ export const getStoryboardPlanPrompt = (
 
 ## Script Content
 ${scriptContent.slice(0, 9000)}
+
+${segmentContext}
 
 ## Existing Asset Names (optional quick reference)
 ${JSON.stringify(compactPromptAssets(existingAssets, 60))}

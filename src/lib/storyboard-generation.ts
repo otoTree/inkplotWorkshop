@@ -1,3 +1,12 @@
+import {
+  EPISODE_DURATION_TARGET_SECONDS,
+  SHOT_DURATION_MAX_SECONDS,
+  SHOT_DURATION_MIN_SECONDS,
+  STORYBOARD_SHOT_COUNT_MAX,
+  STORYBOARD_SHOT_COUNT_MIN,
+  normalizeStoryboardShots,
+} from './duration';
+
 export type StoryboardAssetContext = {
   id?: string;
   name: string;
@@ -90,6 +99,10 @@ export type StoryboardDialogueOverfill = {
 
 const STORYBOARD_TARGET_CHUNK_LENGTH = 2200;
 const STORYBOARD_MAX_CHUNK_LENGTH = 3000;
+const STORYBOARD_PLAN_TARGET_CHUNK_LENGTH = 1800;
+const STORYBOARD_PLAN_MAX_CHUNK_LENGTH = 2400;
+const STORYBOARD_PLAN_CONTEXT_LENGTH = 700;
+const STORYBOARD_PLAN_MAP_EXCERPT_LENGTH = 260;
 
 const decodeHtmlEntities = (value: string) =>
   value
@@ -203,6 +216,147 @@ export const chunkStoryboardScript = (
   if (currentChunk) chunks.push(currentChunk);
 
   return chunks;
+};
+
+export type StoryboardPlanBatch = {
+  script: string;
+  index: number;
+  total: number;
+  targetShotCount: number;
+  targetDurationSeconds: number;
+  globalScriptMap: string;
+  previousScriptContext?: string;
+  nextScriptContext?: string;
+};
+
+const mergeStoryboardChunksToLimit = (chunks: string[], maxChunks: number) => {
+  const merged = [...chunks];
+
+  while (merged.length > maxChunks) {
+    let mergeIndex = 0;
+    let shortestPairLength = Number.POSITIVE_INFINITY;
+
+    for (let index = 0; index < merged.length - 1; index += 1) {
+      const pairLength = merged[index].length + merged[index + 1].length;
+      if (pairLength < shortestPairLength) {
+        shortestPairLength = pairLength;
+        mergeIndex = index;
+      }
+    }
+
+    merged.splice(mergeIndex, 2, `${merged[mergeIndex]}\n\n${merged[mergeIndex + 1]}`);
+  }
+
+  return merged;
+};
+
+const distributeIntegerTotal = (
+  total: number,
+  weights: number[],
+  minValues: number[],
+  maxValues?: number[]
+) => {
+  const values = minValues.map((value) => Math.max(0, Math.floor(value)));
+  let remaining = total - values.reduce((sum, value) => sum + value, 0);
+
+  if (remaining <= 0) return values;
+
+  const safeWeights = weights.map((weight) => Math.max(1, weight));
+  const totalWeight = safeWeights.reduce((sum, weight) => sum + weight, 0);
+  const ideals = safeWeights.map((weight, index) => values[index] + (remaining * weight) / totalWeight);
+
+  while (remaining > 0) {
+    let bestIndex = -1;
+    let bestDeficit = Number.NEGATIVE_INFINITY;
+
+    for (let index = 0; index < values.length; index += 1) {
+      if (maxValues && values[index] >= maxValues[index]) continue;
+
+      const deficit = ideals[index] - values[index];
+      if (deficit > bestDeficit) {
+        bestDeficit = deficit;
+        bestIndex = index;
+      }
+    }
+
+    if (bestIndex === -1) break;
+    values[bestIndex] += 1;
+    remaining -= 1;
+  }
+
+  return values;
+};
+
+export const buildStoryboardPlanBatches = (scriptContent: string): StoryboardPlanBatch[] => {
+  const chunks = mergeStoryboardChunksToLimit(
+    chunkStoryboardScript(scriptContent, {
+      targetChunkLength: STORYBOARD_PLAN_TARGET_CHUNK_LENGTH,
+      maxChunkLength: STORYBOARD_PLAN_MAX_CHUNK_LENGTH,
+    }),
+    STORYBOARD_SHOT_COUNT_MAX
+  );
+
+  if (chunks.length <= 1) return [];
+
+  const weights = chunks.map((chunk) => chunk.length);
+  const targetShotCount = Math.min(
+    STORYBOARD_SHOT_COUNT_MAX,
+    Math.max(
+      STORYBOARD_SHOT_COUNT_MIN,
+      chunks.length,
+      Math.round(EPISODE_DURATION_TARGET_SECONDS / 10)
+    )
+  );
+  const shotCounts = distributeIntegerTotal(
+    targetShotCount,
+    weights,
+    chunks.map(() => 1)
+  );
+  const durationTargets = distributeIntegerTotal(
+    EPISODE_DURATION_TARGET_SECONDS,
+    shotCounts,
+    shotCounts.map((shotCount) => shotCount * SHOT_DURATION_MIN_SECONDS),
+    shotCounts.map((shotCount) => shotCount * SHOT_DURATION_MAX_SECONDS)
+  );
+  const globalScriptMap = chunks
+    .map((chunk, index) => {
+      const compactChunk = chunk.replace(/\s+/g, ' ').trim();
+      const start = compactChunk.slice(0, STORYBOARD_PLAN_MAP_EXCERPT_LENGTH);
+      const end =
+        compactChunk.length > STORYBOARD_PLAN_MAP_EXCERPT_LENGTH
+          ? compactChunk.slice(-STORYBOARD_PLAN_MAP_EXCERPT_LENGTH)
+          : '';
+      const excerpt = end && end !== start ? `${start} ... ${end}` : start;
+      return `第 ${index + 1}/${chunks.length} 段，目标 ${shotCounts[index]} 镜 / ${durationTargets[index]} 秒：${excerpt}`;
+    })
+    .join('\n');
+
+  return chunks.map((script, index) => ({
+    script,
+    index: index + 1,
+    total: chunks.length,
+    targetShotCount: shotCounts[index],
+    targetDurationSeconds: durationTargets[index],
+    globalScriptMap,
+    previousScriptContext:
+      index > 0 ? chunks[index - 1].slice(-STORYBOARD_PLAN_CONTEXT_LENGTH) : undefined,
+    nextScriptContext:
+      index < chunks.length - 1 ? chunks[index + 1].slice(0, STORYBOARD_PLAN_CONTEXT_LENGTH) : undefined,
+  }));
+};
+
+export const finalizeStoryboardPlan = (shots: StoryboardPlanShot[]) => {
+  const normalizedShots = normalizeStoryboardShots(shots);
+  if (!normalizedShots) return null;
+
+  return normalizedShots.map((shot, index, allShots) => ({
+    ...shot,
+    sequence: index + 1,
+    previousScriptExcerpt:
+      index > 0 ? allShots[index - 1]?.scriptExcerpt : shot.previousScriptExcerpt,
+    nextScriptExcerpt:
+      index < allShots.length - 1 ? allShots[index + 1]?.scriptExcerpt : shot.nextScriptExcerpt,
+  }));
 };
 
 export const compactStoryboardAssets = (

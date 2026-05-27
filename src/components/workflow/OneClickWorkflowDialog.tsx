@@ -23,7 +23,9 @@ import {
 } from '@/lib/duration';
 import {
   compactStoryboardAssets,
+  buildStoryboardPlanBatches,
   extractStoryboardScriptText,
+  finalizeStoryboardPlan,
   normalizeStoryboardDialogueText,
   resolveStoryboardRelatedAssetIds,
   StoryboardGeneratedShot,
@@ -312,24 +314,56 @@ export function OneClickWorkflowDialog({ projectId, open, onOpenChange }: OneCli
           const storyboardAssets = compactStoryboardAssets(assets || []);
           const stylePayload = buildVisualStyleRequestPayload(project);
           const requestPlan = async () => {
-            const planRes = await fetch('/api/ai/generate-storyboard', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({
-                mode: 'plan',
-                script: scriptContent,
-                assets: storyboardAssets,
-                language: project?.language,
-                ...stylePayload,
-              })
-            });
+            const planBatches = buildStoryboardPlanBatches(scriptContent);
 
-            if (!planRes.ok) {
-              throw new Error(await planRes.text());
+            if (planBatches.length === 0) {
+              const planRes = await fetch('/api/ai/generate-storyboard', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                  mode: 'plan',
+                  script: scriptContent,
+                  assets: storyboardAssets,
+                  language: project?.language,
+                  ...stylePayload,
+                })
+              });
+
+              if (!planRes.ok) {
+                throw new Error(await planRes.text());
+              }
+
+              const planData = await planRes.json() as { shots?: StoryboardPlanShot[] };
+              return finalizeStoryboardPlan(
+                Array.isArray(planData.shots) ? planData.shots : []
+              ) || [];
             }
 
-            const planData = await planRes.json() as { shots?: StoryboardPlanShot[] };
-            return Array.isArray(planData.shots) ? planData.shots : [];
+            const plannedSegments: StoryboardPlanShot[] = [];
+            for (const planBatch of planBatches) {
+              log(`第 ${ep.episodeNumber} 集：正在规划第 ${planBatch.index}/${planBatch.total} 段...`);
+              const planRes = await fetch('/api/ai/generate-storyboard', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                  mode: 'plan',
+                  script: planBatch.script,
+                  assets: storyboardAssets,
+                  language: project?.language,
+                  planBatch,
+                  ...stylePayload,
+                })
+              });
+
+              if (!planRes.ok) {
+                throw new Error(await planRes.text());
+              }
+
+              const planData = await planRes.json() as { shots?: StoryboardPlanShot[] };
+              plannedSegments.push(...(Array.isArray(planData.shots) ? planData.shots : []));
+            }
+
+            return finalizeStoryboardPlan(plannedSegments) || [];
           };
 
           log(`第 ${ep.episodeNumber} 集：正在规划镜头数量...`);

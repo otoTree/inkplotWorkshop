@@ -47,59 +47,61 @@ export const getStoryboardTotalDurationSeconds = <
   return shots.reduce((sum, shot) => sum + normalizeShotDurationSeconds(shot.duration), 0);
 };
 
-const getReachableEpisodeRange = (shotCount: number) => {
-  const minTotal = shotCount * SHOT_DURATION_MIN_SECONDS;
-  const maxTotal = shotCount * SHOT_DURATION_MAX_SECONDS;
-
-  return {
-    minTotal,
-    maxTotal,
-    targetMin: Math.max(EPISODE_DURATION_MIN_SECONDS, minTotal),
-    targetMax: Math.min(EPISODE_DURATION_MAX_SECONDS, maxTotal),
-  };
-};
-
-export const normalizeStoryboardShots = <T extends { duration?: unknown }>(
-  shots: T[]
+export const normalizeStoryboardShotsToDuration = <T extends { duration?: unknown }>(
+  shots: T[],
+  {
+    targetMin = EPISODE_DURATION_MIN_SECONDS,
+    targetMax = EPISODE_DURATION_MAX_SECONDS,
+  }: {
+    targetMin?: number;
+    targetMax?: number;
+  } = {}
 ) => {
   const normalizedShots = shots.map((shot) => ({
     ...shot,
     duration: normalizeShotDurationSeconds(shot.duration),
   }));
 
-  const { targetMin, targetMax } = getReachableEpisodeRange(normalizedShots.length);
+  const minTotal = normalizedShots.length * SHOT_DURATION_MIN_SECONDS;
+  const maxTotal = normalizedShots.length * SHOT_DURATION_MAX_SECONDS;
+  const reachableTargetMin = Math.max(targetMin, minTotal);
+  const reachableTargetMax = Math.min(targetMax, maxTotal);
 
-  if (normalizedShots.length === 0 || targetMin > targetMax) {
+  if (normalizedShots.length === 0 || reachableTargetMin > reachableTargetMax) {
     return null;
   }
 
   let total = normalizedShots.reduce((sum, shot) => sum + shot.duration, 0);
 
-  if (total > targetMax) {
-    for (let index = normalizedShots.length - 1; index >= 0 && total > targetMax; index -= 1) {
+  if (total > reachableTargetMax) {
+    for (let index = normalizedShots.length - 1; index >= 0 && total > reachableTargetMax; index -= 1) {
       const shot = normalizedShots[index];
       const reducible = shot.duration - SHOT_DURATION_MIN_SECONDS;
 
       if (reducible <= 0) continue;
 
-      const delta = Math.min(reducible, total - targetMax);
+      const delta = Math.min(reducible, total - reachableTargetMax);
       shot.duration -= delta;
       total -= delta;
     }
   }
 
-  if (total < targetMin) {
-    for (let index = 0; index < normalizedShots.length && total < targetMin; index += 1) {
+  if (total < reachableTargetMin) {
+    for (let index = 0; index < normalizedShots.length && total < reachableTargetMin; index += 1) {
       const shot = normalizedShots[index];
       const increasable = SHOT_DURATION_MAX_SECONDS - shot.duration;
 
       if (increasable <= 0) continue;
 
-      const delta = Math.min(increasable, targetMin - total);
+      const delta = Math.min(increasable, reachableTargetMin - total);
       shot.duration += delta;
       total += delta;
     }
   }
 
-  return total >= targetMin && total <= targetMax ? normalizedShots : null;
+  return total >= reachableTargetMin && total <= reachableTargetMax ? normalizedShots : null;
 };
+
+export const normalizeStoryboardShots = <T extends { duration?: unknown }>(
+  shots: T[]
+) => normalizeStoryboardShotsToDuration(shots);

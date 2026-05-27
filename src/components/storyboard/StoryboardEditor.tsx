@@ -18,7 +18,9 @@ import {
 } from '@/lib/duration';
 import {
   compactStoryboardAssets,
+  buildStoryboardPlanBatches,
   extractStoryboardScriptText,
+  finalizeStoryboardPlan,
   resolveStoryboardRelatedAssetIds,
   StoryboardGeneratedShot,
   StoryboardPlanShot,
@@ -106,30 +108,65 @@ export function StoryboardEditor({ projectId }: StoryboardEditorProps) {
       total: number;
     }) => void
   ) => {
-    await api.shots.deleteByEpisode(episode.id);
-    
     const scriptContent = extractStoryboardScriptText(episode.content || '');
     if (!scriptContent.trim()) return [];
 
     const storyboardAssets = compactStoryboardAssets(assets || []);
     const stylePayload = buildVisualStyleRequestPayload(project);
     const requestPlan = async () => {
-      const planRes = await fetch('/api/ai/generate-storyboard', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          mode: 'plan',
-          script: scriptContent,
-          assets: storyboardAssets,
-          language: project?.language,
-          ...stylePayload,
-        }),
-      });
+      const planBatches = buildStoryboardPlanBatches(scriptContent);
 
-      if (!planRes.ok) throw new Error(await planRes.text());
+      if (planBatches.length === 0) {
+        const planRes = await fetch('/api/ai/generate-storyboard', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            mode: 'plan',
+            script: scriptContent,
+            assets: storyboardAssets,
+            language: project?.language,
+            ...stylePayload,
+          }),
+        });
 
-      const planData = await planRes.json() as { shots?: StoryboardPlanShot[] };
-      return Array.isArray(planData.shots) ? planData.shots : [];
+        if (!planRes.ok) throw new Error(await planRes.text());
+
+        const planData = await planRes.json() as { shots?: StoryboardPlanShot[] };
+        const finalizedPlan = finalizeStoryboardPlan(
+          Array.isArray(planData.shots) ? planData.shots : []
+        );
+        return finalizedPlan || [];
+      }
+
+      const plannedSegments: StoryboardPlanShot[] = [];
+      for (const planBatch of planBatches) {
+        onProgress?.({
+          phase: `正在分段规划镜头 ${planBatch.index}/${planBatch.total}`,
+          current: planBatch.index - 1,
+          total: planBatch.total,
+        });
+
+        const planRes = await fetch('/api/ai/generate-storyboard', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            mode: 'plan',
+            script: planBatch.script,
+            assets: storyboardAssets,
+            language: project?.language,
+            planBatch,
+            ...stylePayload,
+          }),
+        });
+
+        if (!planRes.ok) throw new Error(await planRes.text());
+
+        const planData = await planRes.json() as { shots?: StoryboardPlanShot[] };
+        plannedSegments.push(...(Array.isArray(planData.shots) ? planData.shots : []));
+      }
+
+      const finalizedPlan = finalizeStoryboardPlan(plannedSegments);
+      return finalizedPlan || [];
     };
 
     onProgress?.({ phase: '正在规划镜头数量', current: 0, total: 0 });
@@ -219,6 +256,7 @@ export function StoryboardEditor({ projectId }: StoryboardEditorProps) {
       };
     });
 
+    await api.shots.deleteByEpisode(episode.id);
     await api.shots.bulkCreate(newShots);
     return newShots;
   };

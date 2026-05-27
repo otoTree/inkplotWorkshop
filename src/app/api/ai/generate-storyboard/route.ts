@@ -10,7 +10,10 @@ import {
   EPISODE_DURATION_MAX_SECONDS,
   EPISODE_DURATION_MIN_SECONDS,
   EPISODE_DURATION_TARGET_SECONDS,
+  SHOT_DURATION_MAX_SECONDS,
+  SHOT_DURATION_MIN_SECONDS,
   normalizeShotDurationSeconds,
+  normalizeStoryboardShotsToDuration,
   normalizeStoryboardShots,
 } from '@/lib/duration';
 import { appendNoSubtitleDirective, compactStoryboardAssets } from '@/lib/storyboard-generation';
@@ -38,7 +41,12 @@ const parseJSONContent = (content: string) => {
   return JSON.parse(cleanContent);
 };
 
-const normalizeStoryboardListPayload = (parsed: unknown) => {
+const normalizeStoryboardListPayload = (
+  parsed: unknown,
+  options: {
+    targetDurationSeconds?: number;
+  } = {}
+) => {
   let jsonContent: Record<string, unknown> = {};
   if (Array.isArray(parsed)) {
     jsonContent.shots = parsed;
@@ -63,8 +71,21 @@ const normalizeStoryboardListPayload = (parsed: unknown) => {
       ? [...rawShots].sort((a, b) => Number(a.sequence) - Number(b.sequence))
       : rawShots;
 
-  const normalizedShots = normalizeStoryboardShots(sortableShots);
+  const normalizedShots =
+    Number.isFinite(options.targetDurationSeconds) && Number(options.targetDurationSeconds) > 0
+      ? normalizeStoryboardShotsToDuration(sortableShots, {
+          targetMin: Number(options.targetDurationSeconds),
+          targetMax: Number(options.targetDurationSeconds),
+        })
+      : normalizeStoryboardShots(sortableShots);
   if (!normalizedShots) {
+    const targetDurationSeconds = Number(options.targetDurationSeconds);
+    if (Number.isFinite(targetDurationSeconds) && targetDurationSeconds > 0) {
+      throw new Error(
+        `Invalid storyboard output: segment duration must be normalizable to exactly ${targetDurationSeconds} seconds with ${SHOT_DURATION_MIN_SECONDS}-${SHOT_DURATION_MAX_SECONDS}s shots`
+      );
+    }
+
     throw new Error(
       EPISODE_DURATION_MIN_SECONDS === EPISODE_DURATION_MAX_SECONDS
         ? `Invalid storyboard output: total duration must be normalizable to exactly ${EPISODE_DURATION_TARGET_SECONDS} seconds`
@@ -138,7 +159,33 @@ export async function POST(req: Request) {
       previousShot,
       nextShotPlan,
       totalShots,
+      planBatch,
     } = body;
+    const planBatchRecord =
+      planBatch && typeof planBatch === 'object'
+        ? (planBatch as Record<string, unknown>)
+        : undefined;
+    const normalizedPlanBatch =
+      planBatchRecord
+        ? {
+            segmentIndex: Number(planBatchRecord.index) || undefined,
+            segmentTotal: Number(planBatchRecord.total) || undefined,
+            targetShotCount: Number(planBatchRecord.targetShotCount) || undefined,
+            targetDurationSeconds: Number(planBatchRecord.targetDurationSeconds) || undefined,
+            globalScriptMap:
+              typeof planBatchRecord.globalScriptMap === 'string'
+                ? planBatchRecord.globalScriptMap
+                : undefined,
+            previousScriptContext:
+              typeof planBatchRecord.previousScriptContext === 'string'
+                ? planBatchRecord.previousScriptContext
+                : undefined,
+            nextScriptContext:
+              typeof planBatchRecord.nextScriptContext === 'string'
+                ? planBatchRecord.nextScriptContext
+                : undefined,
+          }
+        : undefined;
     const styleInput = artStyle ?? {
       visualStylePreset,
       artStyle: typeof artStyle === 'string' ? artStyle : undefined,
@@ -156,7 +203,8 @@ export async function POST(req: Request) {
             script,
             compactAssets,
             resolvedStyle,
-            language
+            language,
+            normalizedPlanBatch
           )
         : generationMode === 'shot'
           ? getStoryboardShotPrompt(
@@ -200,7 +248,11 @@ export async function POST(req: Request) {
         return NextResponse.json({ shot: normalizeSingleShotPayload(parsed) });
       }
 
-      return NextResponse.json(normalizeStoryboardListPayload(parsed));
+      return NextResponse.json(
+        normalizeStoryboardListPayload(parsed, {
+          targetDurationSeconds: normalizedPlanBatch?.targetDurationSeconds,
+        })
+      );
     } catch (e) {
       console.error('JSON Parse Error:', e);
       return NextResponse.json({ error: 'Invalid JSON response', raw: content }, { status: 500 });
