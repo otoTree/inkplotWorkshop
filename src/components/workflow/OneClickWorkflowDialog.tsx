@@ -24,9 +24,6 @@ import {
 import {
   compactStoryboardAssets,
   extractStoryboardScriptText,
-  findMissingStoryboardDialogues,
-  findOverfilledStoryboardDialogues,
-  getStoryboardDialogueDiagnosticsPrompt,
   normalizeStoryboardDialogueText,
   resolveStoryboardRelatedAssetIds,
   StoryboardGeneratedShot,
@@ -55,6 +52,8 @@ type BlueprintAssetItem = {
   visualPrompt?: string;
   isMain?: boolean;
 };
+
+const STORYBOARD_EPISODE_BATCH_SIZE = 2;
 
 export function OneClickWorkflowDialog({ projectId, open, onOpenChange }: OneClickWorkflowDialogProps) {
   const [isRunning, setIsRunning] = useState(false);
@@ -312,7 +311,7 @@ export function OneClickWorkflowDialog({ projectId, open, onOpenChange }: OneCli
 
           const storyboardAssets = compactStoryboardAssets(assets || []);
           const stylePayload = buildVisualStyleRequestPayload(project);
-          const requestPlan = async (planFeedback?: string) => {
+          const requestPlan = async () => {
             const planRes = await fetch('/api/ai/generate-storyboard', {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
@@ -321,7 +320,6 @@ export function OneClickWorkflowDialog({ projectId, open, onOpenChange }: OneCli
                 script: scriptContent,
                 assets: storyboardAssets,
                 language: project?.language,
-                planFeedback,
                 ...stylePayload,
               })
             });
@@ -335,18 +333,7 @@ export function OneClickWorkflowDialog({ projectId, open, onOpenChange }: OneCli
           };
 
           log(`第 ${ep.episodeNumber} 集：正在规划镜头数量...`);
-          let plannedShots = await requestPlan();
-          const initialMissingDialogues = findMissingStoryboardDialogues(scriptContent, plannedShots);
-          const initialOverfilledDialogues = findOverfilledStoryboardDialogues(plannedShots);
-          const planFeedback = getStoryboardDialogueDiagnosticsPrompt({
-            missingDialogues: initialMissingDialogues,
-            overfilledDialogues: initialOverfilledDialogues,
-          });
-
-          if (planFeedback) {
-            log(`第 ${ep.episodeNumber} 集：检测到对白遗漏或超时，正在重新规划...`);
-            plannedShots = await requestPlan(planFeedback);
-          }
+          const plannedShots = await requestPlan();
 
           if (plannedShots.length === 0) {
             log(`第 ${ep.episodeNumber} 集：未生成任何镜头规划。`);
@@ -427,17 +414,6 @@ export function OneClickWorkflowDialog({ projectId, open, onOpenChange }: OneCli
             } as Shot);
           }
 
-          const finalMissingDialogues = findMissingStoryboardDialogues(scriptContent, detailedShots);
-          const finalOverfilledDialogues = findOverfilledStoryboardDialogues(detailedShots);
-          if (finalMissingDialogues.length > 0 || finalOverfilledDialogues.length > 0) {
-            throw new Error(
-              `分镜对白校验未通过：${getStoryboardDialogueDiagnosticsPrompt({
-                missingDialogues: finalMissingDialogues,
-                overfilledDialogues: finalOverfilledDialogues,
-              })}`
-            );
-          }
-          
           if (newShots.length > 0) {
             await api.shots.bulkCreate(newShots);
             storyboardCount += newShots.length;
@@ -452,7 +428,7 @@ export function OneClickWorkflowDialog({ projectId, open, onOpenChange }: OneCli
         }
       };
 
-      const storyboardChunkSize = 50;
+      const storyboardChunkSize = STORYBOARD_EPISODE_BATCH_SIZE;
       for (let i = 0; i < validEpisodes.length; i += storyboardChunkSize) {
         const chunk = validEpisodes.slice(i, i + storyboardChunkSize);
         await Promise.allSettled(chunk.map(ep => processStoryboard(ep)));

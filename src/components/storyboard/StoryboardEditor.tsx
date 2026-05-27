@@ -22,9 +22,6 @@ import {
   resolveStoryboardRelatedAssetIds,
   StoryboardGeneratedShot,
   StoryboardPlanShot,
-  findMissingStoryboardDialogues,
-  findOverfilledStoryboardDialogues,
-  getStoryboardDialogueDiagnosticsPrompt,
   normalizeStoryboardDialogueText,
 } from '@/lib/storyboard-generation';
 import {
@@ -44,6 +41,8 @@ const renumberShots = (shotList: Shot[]) =>
     ...shot,
     sequence: index + 1,
   }));
+
+const STORYBOARD_EPISODE_BATCH_SIZE = 2;
 
 export function StoryboardEditor({ projectId }: StoryboardEditorProps) {
   const [selectedEpisodeId, setSelectedEpisodeId] = useState<string | null>(null);
@@ -114,7 +113,7 @@ export function StoryboardEditor({ projectId }: StoryboardEditorProps) {
 
     const storyboardAssets = compactStoryboardAssets(assets || []);
     const stylePayload = buildVisualStyleRequestPayload(project);
-    const requestPlan = async (planFeedback?: string) => {
+    const requestPlan = async () => {
       const planRes = await fetch('/api/ai/generate-storyboard', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -123,7 +122,6 @@ export function StoryboardEditor({ projectId }: StoryboardEditorProps) {
           script: scriptContent,
           assets: storyboardAssets,
           language: project?.language,
-          planFeedback,
           ...stylePayload,
         }),
       });
@@ -135,18 +133,7 @@ export function StoryboardEditor({ projectId }: StoryboardEditorProps) {
     };
 
     onProgress?.({ phase: '正在规划镜头数量', current: 0, total: 0 });
-    let plannedShots = await requestPlan();
-    const initialMissingDialogues = findMissingStoryboardDialogues(scriptContent, plannedShots);
-    const initialOverfilledDialogues = findOverfilledStoryboardDialogues(plannedShots);
-    const planFeedback = getStoryboardDialogueDiagnosticsPrompt({
-      missingDialogues: initialMissingDialogues,
-      overfilledDialogues: initialOverfilledDialogues,
-    });
-
-    if (planFeedback) {
-      onProgress?.({ phase: '正在修正对白覆盖与时长', current: 0, total: 0 });
-      plannedShots = await requestPlan(planFeedback);
-    }
+    const plannedShots = await requestPlan();
 
     if (plannedShots.length === 0) return [];
     onProgress?.({ phase: '正在逐镜头生成', current: 0, total: plannedShots.length });
@@ -205,16 +192,6 @@ export function StoryboardEditor({ projectId }: StoryboardEditorProps) {
 
     if (allShots.length === 0) {
       return [];
-    }
-
-    const finalMissingDialogues = findMissingStoryboardDialogues(scriptContent, allShots);
-    const finalOverfilledDialogues = findOverfilledStoryboardDialogues(allShots);
-    if (finalMissingDialogues.length > 0 || finalOverfilledDialogues.length > 0) {
-      const diagnostics = getStoryboardDialogueDiagnosticsPrompt({
-        missingDialogues: finalMissingDialogues,
-        overfilledDialogues: finalOverfilledDialogues,
-      });
-      throw new Error(`分镜对白校验未通过：\n${diagnostics}`);
     }
 
     const newShots: Shot[] = allShots.map((s, index: number) => {
@@ -315,7 +292,7 @@ export function StoryboardEditor({ projectId }: StoryboardEditorProps) {
         }
       };
 
-      const chunkSize = 50;
+      const chunkSize = STORYBOARD_EPISODE_BATCH_SIZE;
       for (let i = 0; i < validEpisodes.length; i += chunkSize) {
         const chunk = validEpisodes.slice(i, i + chunkSize);
         await Promise.all(chunk.map(ep => processEpisode(ep)));

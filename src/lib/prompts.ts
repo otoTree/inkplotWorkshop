@@ -566,6 +566,17 @@ type ExistingAsset = {
   metadata?: Record<string, unknown>;
 };
 
+const compactPromptAssets = (existingAssets: ExistingAsset[], limit = 60) =>
+  existingAssets.slice(0, limit).map((asset) => ({
+    id: asset.id,
+    name: asset.name,
+    type: asset.type,
+    description:
+      typeof asset.description === 'string'
+        ? asset.description.slice(0, 140)
+        : asset.description,
+  }));
+
 type StoryboardPlanPromptInput = {
   sequence?: number;
   sceneLabel?: string;
@@ -604,8 +615,7 @@ export const getStoryboardPlanPrompt = (
   scriptContent: string,
   existingAssets: ExistingAsset[],
   artStyle?: ArtStyleInput,
-  language: string = 'zh',
-  planFeedback?: string
+  language: string = 'zh'
 ) => {
   const { strategy } = resolvePromptStrategy(artStyle);
   const dialogueLanguageLabel = getStoryboardDialogueLanguageLabel(language);
@@ -652,9 +662,7 @@ export const getStoryboardPlanPrompt = (
 ${scriptContent.slice(0, 9000)}
 
 ## Existing Asset Names (optional quick reference)
-${JSON.stringify(existingAssets.slice(0, 80).map((asset) => ({ id: asset.id, name: asset.name, type: asset.type, description: asset.description, metadata: asset.metadata })))}
-
-${planFeedback ? `## 上一次规划的程序化校验失败，必须修正\n${planFeedback}` : ''}
+${JSON.stringify(compactPromptAssets(existingAssets, 60))}
 
 ## Output Format
 {
@@ -761,7 +769,7 @@ ${STORYBOARD_CONTINUITY_RULES}
 ${scriptContent.slice(0, 15000)}...
 
 **Existing Assets Context** (Try to reuse these if applicable, match by name):
-${JSON.stringify(existingAssets.map(a => ({ id: a.id, name: a.name, type: a.type, description: a.description, metadata: a.metadata })))}
+${JSON.stringify(compactPromptAssets(existingAssets, 80))}
 
 **Scene Art Style**: ${resolvedSceneStyle}
 **Style Strategy**: ${strategy.storyboard.styleDirective}
@@ -879,7 +887,7 @@ ${previousShot ? JSON.stringify(previousShot) : '无'}
 ${nextShotPlan ? JSON.stringify(nextShotPlan) : '无'}
 
 ## 已有资产
-${JSON.stringify(existingAssets.map((asset) => ({ id: asset.id, name: asset.name, type: asset.type, description: asset.description, metadata: asset.metadata })))}
+${JSON.stringify(compactPromptAssets(existingAssets, 80))}
 
 ## 剧本全文（只用于纠错和核对，不要覆盖当前镜头对应剧本片段）
 ${scriptContent.slice(0, 15000)}
