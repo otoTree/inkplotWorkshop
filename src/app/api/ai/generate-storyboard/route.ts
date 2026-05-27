@@ -38,26 +38,6 @@ const parseJSONContent = (content: string) => {
   return JSON.parse(cleanContent);
 };
 
-const getNumberFromEnv = (name: string, fallback: number) => {
-  const value = process.env[name];
-  if (!value) return fallback;
-  const parsed = Number(value);
-  return Number.isFinite(parsed) ? parsed : fallback;
-};
-
-const getStoryboardMaxTokens = (mode: 'plan' | 'shot' | 'full') => {
-  const envName =
-    mode === 'plan'
-      ? 'STORYBOARD_PLAN_MAX_TOKENS'
-      : mode === 'shot'
-        ? 'STORYBOARD_SHOT_MAX_TOKENS'
-        : 'STORYBOARD_FULL_MAX_TOKENS';
-  const fallback = mode === 'plan' ? 6000 : mode === 'shot' ? 8000 : 16000;
-  const value = Math.round(getNumberFromEnv(envName, fallback));
-
-  return value > 0 ? value : undefined;
-};
-
 const normalizeStoryboardListPayload = (parsed: unknown) => {
   let jsonContent: Record<string, unknown> = {};
   if (Array.isArray(parsed)) {
@@ -208,7 +188,7 @@ export async function POST(req: Request) {
         { role: 'user', content: prompt },
       ],
       temperature: 0.7,
-      maxTokens: getStoryboardMaxTokens(generationMode),
+      maxTokens: 384000,
       extraPayload: { response_format: { type: 'json_object' } },
     });
     const content = extractFirstMessageContent(data);
