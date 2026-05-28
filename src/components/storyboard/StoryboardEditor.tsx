@@ -44,6 +44,26 @@ const renumberShots = (shotList: Shot[]) =>
     sequence: index + 1,
   }));
 
+const serializeShotVideoGenerationMetadata = (metadata: Shot['videoGenerationMetadata']) =>
+  JSON.stringify(metadata ?? {});
+
+const buildShotUpdatePayload = (
+  updatedShot: Shot,
+  existingShot?: Shot
+): Partial<Shot> => {
+  const payload: Partial<Shot> = { ...updatedShot };
+
+  if (
+    existingShot &&
+    serializeShotVideoGenerationMetadata(updatedShot.videoGenerationMetadata) ===
+      serializeShotVideoGenerationMetadata(existingShot.videoGenerationMetadata)
+  ) {
+    delete payload.videoGenerationMetadata;
+  }
+
+  return payload;
+};
+
 const STORYBOARD_EPISODE_BATCH_SIZE = 2;
 
 export function StoryboardEditor({ projectId }: StoryboardEditorProps) {
@@ -543,14 +563,16 @@ export function StoryboardEditor({ projectId }: StoryboardEditorProps) {
           reorderedShots.map((shotItem) =>
             api.shots.update(
               shotItem.id,
-              shotItem.id === mergedShot.id ? shotItem : { sequence: shotItem.sequence }
+              shotItem.id === mergedShot.id
+                ? buildShotUpdatePayload(shotItem, existingShot)
+                : { sequence: shotItem.sequence }
             )
           )
         );
         return;
       }
 
-      await api.shots.update(mergedShot.id, mergedShot);
+      await api.shots.update(mergedShot.id, buildShotUpdatePayload(mergedShot, existingShot));
       setShots(prev =>
         sortShotsBySequence(prev.map(s => s.id === mergedShot.id ? mergedShot : s))
       );

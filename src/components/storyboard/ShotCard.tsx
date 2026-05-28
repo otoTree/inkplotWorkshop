@@ -71,9 +71,10 @@ export function ShotCard({
         videoGenerationId: shot.videoGenerationId,
         videoStatus: shot.videoStatus,
         videoUrl: shot.videoUrl,
+        videoGenerationMetadata: shot.videoGenerationMetadata,
       };
     });
-  }, [shot.videoGenerationId, shot.videoStatus, shot.videoUrl]);
+  }, [shot.videoGenerationId, shot.videoStatus, shot.videoUrl, shot.videoGenerationMetadata]);
 
   const sensitivityLabel = (value: number) => {
     if (value >= 3) return '强';
