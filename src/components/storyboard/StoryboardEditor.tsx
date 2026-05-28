@@ -30,6 +30,10 @@ import {
   DEFAULT_PROJECT_VIDEO_ASPECT_RATIO,
   normalizeProjectVideoSettings,
 } from '@/lib/volcengine/video-compat';
+import {
+  getVideoGenerationErrorMessage,
+  normalizeVideoGenerationError,
+} from '@/lib/video-generation-error';
 
 interface StoryboardEditorProps {
   projectId: string;
@@ -439,7 +443,13 @@ export function StoryboardEditor({ projectId }: StoryboardEditorProps) {
           });
 
           if (!response.ok) {
-            throw new Error('API Request Failed');
+            const errData = await response.json().catch(() => ({}));
+            const errorMessage =
+              errData.videoErrorMessage ||
+              getVideoGenerationErrorMessage(errData.videoError || errData.details) ||
+              errData.error ||
+              'API Request Failed';
+            throw new Error(errorMessage);
           }
 
           const data = await response.json();
@@ -468,6 +478,19 @@ export function StoryboardEditor({ projectId }: StoryboardEditorProps) {
           
         } catch (error) {
           console.error(`镜头 ${currentShot.sequence} 视频生成失败:`, error);
+          const videoError = normalizeVideoGenerationError(
+            error instanceof Error ? error.message : error
+          );
+          const failedShot: Shot = {
+            ...currentShot,
+            videoStatus: 'failed',
+            videoGenerationMetadata: {
+              ...(currentShot.videoGenerationMetadata || {}),
+              error: videoError,
+            },
+          };
+          await api.shots.update(failedShot.id, failedShot);
+          setShots(prev => prev.map(s => s.id === failedShot.id ? failedShot : s));
           failedCount++;
         } finally {
           completedCount++;

@@ -12,6 +12,10 @@ import { Save, Trash2, Plus, Box, Maximize2, Download, Copy, Shield, Video, Load
 import { toPng } from 'html-to-image';
 import { ShotDetailDialog } from './ShotDetailDialog';
 import { normalizeShotDurationSeconds } from '@/lib/duration';
+import {
+  getVideoGenerationErrorMessage,
+  normalizeVideoGenerationError,
+} from '@/lib/video-generation-error';
 
 interface ShotCardProps {
   shot: Shot;
@@ -85,6 +89,7 @@ export function ShotCard({
 
   const isGeneratingVideo = current.videoStatus === 'queued' || (current.videoStatus === 'processing' && !current.videoGenerationId);
   const [queuePosition, setQueuePosition] = useState<number | null>(null);
+  const videoErrorMessage = getVideoGenerationErrorMessage(current.videoGenerationMetadata?.error);
   
   const currentRef = useRef(current);
   const onUpdateRef = useRef(onUpdate);
@@ -104,18 +109,46 @@ export function ShotCard({
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ shotId: current.id }),
           });
+          if (!res.ok) {
+            const errData = await res.json().catch(() => ({}));
+            const videoError = normalizeVideoGenerationError(
+              errData.videoError || errData.details || errData.error
+            );
+            if (videoError) {
+              onUpdateRef.current({
+                ...currentRef.current,
+                videoStatus: 'failed',
+                videoGenerationMetadata: {
+                  ...(currentRef.current.videoGenerationMetadata || {}),
+                  error: videoError,
+                },
+              });
+            }
+            return;
+          }
           if (res.ok) {
             const data = await res.json();
+            const videoGenerationMetadata =
+              data.videoGenerationMetadata ||
+              (data.videoError
+                ? {
+                    ...(currentRef.current.videoGenerationMetadata || {}),
+                    error: data.videoError,
+                  }
+                : currentRef.current.videoGenerationMetadata);
             if (data.videoStatus && (
               data.videoStatus !== currentRef.current.videoStatus ||
               data.videoGenerationId !== currentRef.current.videoGenerationId ||
-              data.videoUrl !== currentRef.current.videoUrl
+              data.videoUrl !== currentRef.current.videoUrl ||
+              data.videoGenerationMetadata ||
+              data.videoError
             )) {
               onUpdateRef.current({
                 ...currentRef.current,
                 videoStatus: data.videoStatus,
                 videoGenerationId: data.videoGenerationId || currentRef.current.videoGenerationId,
                 videoUrl: data.videoUrl || currentRef.current.videoUrl,
+                videoGenerationMetadata,
               });
             }
             if (data.position !== undefined) {
@@ -164,7 +197,16 @@ export function ShotCard({
 
         const data = await res.json();
         const statusInfo = data.data || data;
-        const status = (statusInfo.status || '').toLowerCase();
+        const status = (data.videoStatus || statusInfo.status || '').toLowerCase();
+        const videoError = normalizeVideoGenerationError(
+          data.videoError ||
+            data.videoGenerationMetadata?.error ||
+            statusInfo.error ||
+            statusInfo.Error ||
+            statusInfo.last_error ||
+            statusInfo.failure_reason ||
+            statusInfo.message
+        );
         
         if (['completed', 'succeeded', 'success'].includes(status)) {
           // extract url from nested data structure if needed
@@ -176,13 +218,22 @@ export function ShotCard({
           onUpdateRef.current({
             ...latestCurrent,
             videoStatus: 'completed',
-            videoUrl: directUrl || `/api/ai/download-video?videoId=${latestCurrent.videoGenerationId}`
+            videoUrl: directUrl || `/api/ai/download-video?videoId=${latestCurrent.videoGenerationId}`,
+            videoGenerationMetadata: data.videoGenerationMetadata || {
+              ...(latestCurrent.videoGenerationMetadata || {}),
+              error: null,
+            },
           });
           return; // Stop polling
         } else if (['failed', 'error'].includes(status)) {
           onUpdateRef.current({
             ...latestCurrent,
             videoStatus: 'failed',
+            videoGenerationMetadata: {
+              ...(latestCurrent.videoGenerationMetadata || {}),
+              ...(data.videoGenerationMetadata || {}),
+              ...(videoError ? { error: videoError } : {}),
+            },
           });
           return; // Stop polling
         }
@@ -259,7 +310,12 @@ export function ShotCard({
 
       if (!response.ok) {
         const errData = await response.json().catch(() => ({}));
-        throw new Error(errData.error || '生成请求失败');
+        const errorMessage =
+          errData.videoErrorMessage ||
+          getVideoGenerationErrorMessage(errData.videoError || errData.details) ||
+          errData.error ||
+          '生成请求失败';
+        throw new Error(errorMessage);
       }
 
       const data = await response.json();
@@ -286,7 +342,14 @@ export function ShotCard({
     } catch (error: unknown) {
       const message = error instanceof Error ? error.message : '生成请求失败';
       alert(`视频生成失败: ${message}`);
-      onUpdate({ ...current, videoStatus: 'failed' });
+      onUpdate({
+        ...current,
+        videoStatus: 'failed',
+        videoGenerationMetadata: {
+          ...(current.videoGenerationMetadata || {}),
+          error: normalizeVideoGenerationError(message),
+        },
+      });
     } finally {
       setQueuePosition(null);
     }
@@ -612,6 +675,11 @@ ${current.videoPrompt || 'None'}
                         <span className="text-xl">⚠️</span>
                       </div>
                       <span className="text-xs font-medium">视频生成失败</span>
+                      {videoErrorMessage && (
+                        <p className="max-w-full whitespace-pre-wrap break-words rounded-md bg-red-50 px-3 py-2 text-left text-[11px] leading-relaxed text-red-600">
+                          {videoErrorMessage}
+                        </p>
+                      )}
                       <Button variant="outline" size="sm" className="h-7 text-xs bg-white" onClick={handleGenerateVideo}>
                         重新生成
                       </Button>

@@ -7,6 +7,7 @@ import {
   callAIVideoGeneration,
 } from '@/lib/ai-server';
 import { normalizeShotDurationSeconds } from '@/lib/duration';
+import { normalizeVideoGenerationError } from '@/lib/video-generation-error';
 import {
   buildVolcengineSubmissionMetadata,
   createSeedance2VideoTask,
@@ -60,6 +61,39 @@ type VideoTaskResult = Record<string, unknown> & {
   };
   usage?: Record<string, unknown>;
   __volcengineMetadata?: Record<string, unknown>;
+};
+
+type VideoGenerationMetadata = {
+  provider?: string;
+  model?: string;
+  requestContentMode?: 'asset_uri' | 'url';
+  referenceAssetIds?: string[];
+  rawStatus?: string;
+  usage?: Record<string, unknown>;
+  error?: Record<string, unknown> | string | null;
+};
+
+const asRecord = (value: unknown): Record<string, unknown> =>
+  value && typeof value === 'object' && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : {};
+
+const getLegacyVideoStatusError = (result: unknown) => {
+  const root = asRecord(result);
+  const data = asRecord(root.data);
+  const statusInfo = data.status ? data : root;
+  return normalizeVideoGenerationError(
+    statusInfo.error ||
+      statusInfo.Error ||
+      statusInfo.last_error ||
+      statusInfo.lastError ||
+      statusInfo.failure_reason ||
+      statusInfo.failureReason ||
+      statusInfo.message ||
+      root.error ||
+      root.Error ||
+      root.message
+  );
 };
 
 const getShotAspectRatio = (shot: { video_generation_metadata?: unknown }) => {
@@ -143,15 +177,7 @@ export async function GET(req: Request) {
         if (!videoId || videoId.startsWith('pending:') || videoId.startsWith('job_')) continue;
 
         try {
-          const metadata = (shot.video_generation_metadata || {}) as {
-            provider?: string;
-            model?: string;
-            requestContentMode?: 'asset_uri' | 'url';
-            referenceAssetIds?: string[];
-            rawStatus?: string;
-            usage?: Record<string, unknown>;
-            error?: Record<string, unknown> | string | null;
-          };
+          const metadata = (shot.video_generation_metadata || {}) as VideoGenerationMetadata;
           const isVolcengineTask = inferVideoTaskProvider(videoId, metadata) === 'volcengine';
           const providerStatus = isVolcengineTask
             ? await getSeedance2VideoTask(videoId)
@@ -164,10 +190,12 @@ export async function GET(req: Request) {
           
           let dbStatus = 'processing';
           let videoUrl = null;
+          let nextMetadata: VideoGenerationMetadata = metadata;
 
           if (isVolcengineTask) {
             dbStatus = volcengineSnapshot?.videoStatus || 'processing';
             videoUrl = volcengineSnapshot?.videoUrl || null;
+            nextMetadata = mergeVolcengineTaskMetadata(metadata, providerStatus);
           } else if (['completed', 'succeeded', 'success'].includes(status)) {
             dbStatus = 'completed';
             videoUrl = statusInfo.url || statusInfo.video_url || (statusInfo.data && (statusInfo.data.url || statusInfo.data.video_url));
@@ -176,6 +204,12 @@ export async function GET(req: Request) {
             }
           } else if (['failed', 'error'].includes(status)) {
             dbStatus = 'failed';
+            nextMetadata = {
+              ...metadata,
+              provider: metadata.provider || 'legacy',
+              rawStatus: status || metadata.rawStatus || 'failed',
+              error: getLegacyVideoStatusError(providerStatus) || metadata.error || null,
+            };
           }
 
           if (dbStatus !== 'processing') {
@@ -184,10 +218,8 @@ export async function GET(req: Request) {
               .update({
                 video_status: dbStatus,
                 ...(videoUrl ? { video_url: videoUrl } : {}),
-                ...(isVolcengineTask
-                  ? {
-                      video_generation_metadata: mergeVolcengineTaskMetadata(metadata, providerStatus),
-                    }
+                ...(dbStatus === 'failed' || isVolcengineTask
+                  ? { video_generation_metadata: nextMetadata }
                   : {})
               })
               .eq('id', shot.id);

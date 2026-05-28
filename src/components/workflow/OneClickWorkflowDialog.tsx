@@ -31,6 +31,10 @@ import {
   StoryboardGeneratedShot,
   StoryboardPlanShot,
 } from '@/lib/storyboard-generation';
+import {
+  getVideoGenerationErrorMessage,
+  normalizeVideoGenerationError,
+} from '@/lib/video-generation-error';
 
 interface OneClickWorkflowDialogProps {
   projectId: string;
@@ -543,31 +547,48 @@ export function OneClickWorkflowDialog({ projectId, open, onOpenChange }: OneCli
                 }),
               });
 
-              if (response.ok) {
-                const data = await response.json();
-                
-                if (data.status === 'queued') {
-                  // DB is already updated to queued by the API (or by us before calling), just count it as success
-                  successVideos++;
-                } else {
-                  const taskId = data.task_id || data.id || data.data?.task_id || data.data?.id;
-                  if (taskId) {
-                    const directUrl = data.url || data.video_url || data.data?.url || data.data?.video_url;
-                    const status = (data.status || data.data?.status || 'processing').toLowerCase();
+              if (!response.ok) {
+                const errData = await response.json().catch(() => ({}));
+                const errorMessage =
+                  errData.videoErrorMessage ||
+                  getVideoGenerationErrorMessage(errData.videoError || errData.details) ||
+                  errData.error ||
+                  '视频生成请求失败';
+                throw new Error(errorMessage);
+              }
 
-                    const updatedShot: Partial<Shot> = {
-                      videoGenerationId: taskId,
-                      videoStatus: ['completed', 'succeeded', 'success'].includes(status) ? 'completed' : 'processing',
-                      ...(directUrl ? { videoUrl: directUrl } : {})
-                    };
-                    
-                    await api.shots.update(currentShot.id, updatedShot);
-                    successVideos++;
-                  }
+              const data = await response.json();
+                
+              if (data.status === 'queued') {
+                // DB is already updated to queued by the API (or by us before calling), just count it as success
+                successVideos++;
+              } else {
+                const taskId = data.task_id || data.id || data.data?.task_id || data.data?.id;
+                if (taskId) {
+                  const directUrl = data.url || data.video_url || data.data?.url || data.data?.video_url;
+                  const status = (data.status || data.data?.status || 'processing').toLowerCase();
+
+                  const updatedShot: Partial<Shot> = {
+                    videoGenerationId: taskId,
+                    videoStatus: ['completed', 'succeeded', 'success'].includes(status) ? 'completed' : 'processing',
+                    ...(directUrl ? { videoUrl: directUrl } : {})
+                  };
+
+                  await api.shots.update(currentShot.id, updatedShot);
+                  successVideos++;
                 }
               }
             } catch (error) {
               console.error(`视频生成失败: ${currentShot.id}`, error);
+              await api.shots.update(currentShot.id, {
+                videoStatus: 'failed',
+                videoGenerationMetadata: {
+                  ...(currentShot.videoGenerationMetadata || {}),
+                  error: normalizeVideoGenerationError(
+                    error instanceof Error ? error.message : error
+                  ),
+                },
+              });
             } finally {
               completedVideos++;
               setProgress(80 + ((completedVideos / shotsToGenerate.length) * 20)); // Up to 100%

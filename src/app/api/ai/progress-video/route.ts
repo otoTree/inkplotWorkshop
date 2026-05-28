@@ -9,6 +9,10 @@ import {
 } from '@/lib/ai-server';
 import { normalizeShotDurationSeconds } from '@/lib/duration';
 import {
+  getVideoGenerationErrorMessage,
+  normalizeVideoGenerationError,
+} from '@/lib/video-generation-error';
+import {
   buildVolcengineSubmissionMetadata,
   extractVolcengineTaskId,
   getConfiguredVolcengineVideoModel,
@@ -61,6 +65,50 @@ type VideoTaskResult = Record<string, unknown> & {
   };
   usage?: Record<string, unknown>;
   __volcengineMetadata?: Record<string, unknown>;
+};
+
+type VideoGenerationMetadata = {
+  provider?: string;
+  model?: string;
+  requestContentMode?: 'asset_uri' | 'url';
+  referenceAssetIds?: string[];
+  aspectRatio?: '9:16' | '16:9';
+  resolution?: Seedance2Resolution;
+  rawStatus?: string;
+  usage?: Record<string, unknown>;
+  error?: Record<string, unknown> | string | null;
+};
+
+const asRecord = (value: unknown): Record<string, unknown> =>
+  value && typeof value === 'object' && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : {};
+
+const getErrorResponseFields = (error: unknown) => {
+  const videoError = normalizeVideoGenerationError(error);
+  const videoErrorMessage = getVideoGenerationErrorMessage(videoError);
+  return {
+    ...(videoError ? { videoError } : {}),
+    ...(videoErrorMessage ? { videoErrorMessage } : {}),
+  };
+};
+
+const getLegacyVideoStatusError = (result: unknown) => {
+  const root = asRecord(result);
+  const data = asRecord(root.data);
+  const statusInfo = data.status ? data : root;
+  return normalizeVideoGenerationError(
+    statusInfo.error ||
+      statusInfo.Error ||
+      statusInfo.last_error ||
+      statusInfo.lastError ||
+      statusInfo.failure_reason ||
+      statusInfo.failureReason ||
+      statusInfo.message ||
+      root.error ||
+      root.Error ||
+      root.message
+  );
 };
 
 const getShotAspectRatio = (shot: { video_generation_metadata?: unknown }) => {
@@ -142,11 +190,14 @@ export async function POST(req: Request) {
     }
 
     if (shot.video_status === 'completed' || shot.video_status === 'failed') {
+      const metadata = (shot.video_generation_metadata || {}) as VideoGenerationMetadata;
       return NextResponse.json({
         shotId: shot.id,
         videoStatus: shot.video_status,
         videoGenerationId: shot.video_generation_id,
         videoUrl: shot.video_url,
+        videoGenerationMetadata: metadata,
+        ...getErrorResponseFields(metadata.error),
       });
     }
 
@@ -172,16 +223,19 @@ export async function POST(req: Request) {
       if (!claimedShot) {
         const { data: latestShot } = await supabase
           .from('shots')
-          .select('id, video_status, video_generation_id, video_url')
+          .select('id, video_status, video_generation_id, video_url, video_generation_metadata')
           .eq('id', shot.id)
           .eq('user_id', user.id)
           .single();
+        const metadata = (latestShot?.video_generation_metadata || {}) as VideoGenerationMetadata;
 
         return NextResponse.json({
           shotId: shot.id,
           videoStatus: latestShot?.video_status || 'queued',
           videoGenerationId: latestShot?.video_generation_id || null,
           videoUrl: latestShot?.video_url || null,
+          videoGenerationMetadata: metadata,
+          ...getErrorResponseFields(metadata.error),
         });
       }
 
@@ -345,6 +399,8 @@ export async function POST(req: Request) {
           videoGenerationId: taskId || null,
           videoUrl: directUrl || null,
           providerStatus: status,
+          ...(useSeedance2 ? { videoGenerationMetadata: result.__volcengineMetadata } : {}),
+          ...getErrorResponseFields(result.__volcengineMetadata?.error),
         });
       } catch (error) {
         if (error instanceof AIAPIError && (error.status === 429 || error.status === 409)) {
@@ -375,6 +431,18 @@ export async function POST(req: Request) {
             videoStatus: 'queued',
             videoGenerationId: null,
             videoUrl: claimedShot.video_url,
+            ...(useSeedance2
+              ? {
+                  videoGenerationMetadata: {
+                    provider: 'volcengine',
+                    model: resolvedSeedanceModel || undefined,
+                    aspectRatio,
+                    resolution: DEFAULT_SEEDANCE_2_RESOLUTION,
+                    rawStatus: 'waiting_for_assets',
+                    error: error.details || error.message,
+                  },
+                }
+              : {}),
           });
         }
 
@@ -405,33 +473,29 @@ export async function POST(req: Request) {
 
     const videoId = shot.video_generation_id;
     if (videoId && videoId.startsWith('pending:')) {
+      const metadata = (shot.video_generation_metadata || {}) as VideoGenerationMetadata;
       return NextResponse.json({
         shotId: shot.id,
         videoStatus: 'queued',
         videoGenerationId: null,
         videoUrl: shot.video_url,
+        videoGenerationMetadata: metadata,
+        ...getErrorResponseFields(metadata.error),
       });
     }
     if (!videoId) {
+      const metadata = (shot.video_generation_metadata || {}) as VideoGenerationMetadata;
       return NextResponse.json({
         shotId: shot.id,
         videoStatus: shot.video_status || 'pending',
         videoGenerationId: null,
         videoUrl: shot.video_url,
+        videoGenerationMetadata: metadata,
+        ...getErrorResponseFields(metadata.error),
       });
     }
 
-    const metadata = (shot.video_generation_metadata || {}) as {
-      provider?: string;
-      model?: string;
-      requestContentMode?: 'asset_uri' | 'url';
-      referenceAssetIds?: string[];
-      aspectRatio?: '9:16' | '16:9';
-      resolution?: Seedance2Resolution;
-      rawStatus?: string;
-      usage?: Record<string, unknown>;
-      error?: Record<string, unknown> | string | null;
-    };
+    const metadata = (shot.video_generation_metadata || {}) as VideoGenerationMetadata;
     const isVolcengineTask = inferVideoTaskProvider(videoId, metadata) === 'volcengine';
     const result = isVolcengineTask ? await getSeedance2VideoTask(videoId) : await getAIVideoStatus(videoId);
     const statusInfo = result.data || result;
@@ -448,6 +512,9 @@ export async function POST(req: Request) {
         null;
 
     let videoStatus = shot.video_status || 'processing';
+    const providerError = isVolcengineTask
+      ? volcengineSnapshot?.error || null
+      : getLegacyVideoStatusError(result);
     if (isVolcengineTask) {
       videoStatus = volcengineSnapshot?.videoStatus || 'processing';
     } else if (['completed', 'succeeded', 'success'].includes(status)) {
@@ -457,16 +524,24 @@ export async function POST(req: Request) {
     } else {
       videoStatus = 'processing';
     }
+    const nextMetadata: VideoGenerationMetadata = isVolcengineTask
+      ? mergeVolcengineTaskMetadata(metadata, result)
+      : videoStatus === 'failed'
+        ? {
+            ...metadata,
+            provider: metadata.provider || 'legacy',
+            rawStatus: status || metadata.rawStatus || 'failed',
+            error: providerError || metadata.error || null,
+          }
+        : metadata;
 
     await supabase
       .from('shots')
       .update({
         video_status: videoStatus,
         ...(directUrl ? { video_url: directUrl } : {}),
-        ...(isVolcengineTask
-          ? {
-              video_generation_metadata: mergeVolcengineTaskMetadata(metadata, result),
-            }
+        ...(videoStatus === 'failed' || isVolcengineTask
+          ? { video_generation_metadata: nextMetadata }
           : {}),
       })
       .eq('id', shot.id)
@@ -482,12 +557,27 @@ export async function POST(req: Request) {
       videoGenerationId: videoId,
       videoUrl: directUrl || shot.video_url || null,
       providerStatus: status,
+      videoGenerationMetadata: nextMetadata,
+      ...getErrorResponseFields(nextMetadata.error),
     });
   } catch (error) {
     if (error instanceof AIAPIError) {
-      return NextResponse.json({ error: error.message, details: error.details }, { status: error.status });
+      return NextResponse.json(
+        {
+          error: error.message,
+          details: error.details,
+          ...getErrorResponseFields(error.details || error.message),
+        },
+        { status: error.status }
+      );
     }
     const err = error as { message?: string };
-    return NextResponse.json({ error: err.message || 'Internal Server Error' }, { status: 500 });
+    return NextResponse.json(
+      {
+        error: err.message || 'Internal Server Error',
+        ...getErrorResponseFields(err.message),
+      },
+      { status: 500 }
+    );
   }
 }

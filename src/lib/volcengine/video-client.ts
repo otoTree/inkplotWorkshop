@@ -1,4 +1,5 @@
 import { AIAPIError } from '../ai-server.ts';
+import { normalizeVideoGenerationError } from '../video-generation-error.ts';
 import type { Seedance2Resolution, Seedance2VideoPayload } from './video-payload.ts';
 
 export type VolcengineVideoConfig = {
@@ -115,6 +116,13 @@ const getOptionalRecord = (value: unknown): JsonRecord | undefined => {
   return Object.keys(record).length > 0 ? record : undefined;
 };
 
+const getOptionalError = (value: unknown): Record<string, unknown> | string | null => {
+  const normalized = normalizeVideoGenerationError(value);
+  if (!normalized) return null;
+  if (typeof normalized === 'string') return normalized;
+  return Object.keys(normalized).length > 0 ? normalized : null;
+};
+
 const getString = (record: JsonRecord, key: string) =>
   typeof record[key] === 'string' ? record[key] : null;
 
@@ -145,7 +153,14 @@ export const getVolcengineTaskSnapshot = (result: unknown): VolcengineTaskSnapsh
     videoStatus: mapVolcengineTaskStatus(rawStatus),
     videoUrl: extractVolcengineVideoUrl(result),
     usage: getOptionalRecord(statusInfo.usage) || getOptionalRecord(root.usage),
-    error: getOptionalRecord(statusInfo.error) || getOptionalRecord(root.error) || null,
+    error:
+      getOptionalError(statusInfo.error) ||
+      getOptionalError(statusInfo.Error) ||
+      getOptionalError(statusInfo.last_error) ||
+      getOptionalError(statusInfo.failure_reason) ||
+      getOptionalError(root.error) ||
+      getOptionalError(root.Error) ||
+      null,
   };
 };
 
