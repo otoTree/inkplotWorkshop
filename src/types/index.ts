@@ -110,13 +110,13 @@ export interface Asset {
     episodeIds?: string[];
   }; // 额外属性 (e.g. 年龄, 风格, 关联剧集)
   isMain?: boolean;       // ★NEW: 是否为核心主角 (最多2个)
-  volcengineAssetId?: string;
-  volcengineAssetStatus?: 'Active' | 'Processing' | 'Failed';
-  volcengineAssetGroupId?: string;
-  volcengineAssetProjectName?: string;
-  volcengineAssetType?: 'Image' | 'Video' | 'Audio';
+  volcengineAssetId?: string | null;
+  volcengineAssetStatus?: 'Active' | 'Processing' | 'Failed' | null;
+  volcengineAssetGroupId?: string | null;
+  volcengineAssetProjectName?: string | null;
+  volcengineAssetType?: 'Image' | 'Video' | 'Audio' | null;
   volcengineAssetError?: Record<string, unknown> | null;
-  volcengineAssetSyncedAt?: string;
+  volcengineAssetSyncedAt?: string | null;
 }
 
 export interface Task {

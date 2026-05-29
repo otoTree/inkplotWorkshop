@@ -259,7 +259,7 @@ export const resolveVolcengineReferenceAssets = async ({
 
     try {
       const created = await assetClient.createAsset({
-        GroupId: groupId,
+        GroupId: effectiveGroupId,
         URL: asset.imageUrl,
         Name: (asset.name || 'Reference asset').slice(0, 64),
         AssetType: getAssetType(),
@@ -327,10 +327,11 @@ export const resolveVolcengineReferenceAssets = async ({
   const referenceAssetIds = resolved
     .filter((asset) => asset.mode === 'asset_uri' && asset.volcengineAssetId)
     .map((asset) => asset.volcengineAssetId!);
+  const requestContentMode = resolved.some((asset) => asset.mode === 'asset_uri') ? 'asset_uri' : 'url';
 
   return {
     references: resolved,
-    requestContentMode: resolved.some((asset) => asset.mode === 'asset_uri') ? 'asset_uri' : 'url',
+    requestContentMode,
     referenceAssetIds,
     requiresAssetReadiness: syncEnabled && pendingAssets.length > 0,
     pendingAssets,

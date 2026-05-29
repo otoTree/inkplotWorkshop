@@ -165,6 +165,7 @@ test('resolveVolcengineReferenceAssets marks non-active assets as pending readin
 
 test('resolveVolcengineReferenceAssets auto-creates asset group when missing', async () => {
   const projectUpdates: Array<Record<string, unknown>> = [];
+  const createdAssets: Array<Record<string, unknown>> = [];
 
   const resolved = await resolveVolcengineReferenceAssets({
     references: [
@@ -188,17 +189,21 @@ test('resolveVolcengineReferenceAssets auto-creates asset group when missing', a
       createAssetGroup: async () => ({
         Id: 'ag_auto_created',
       }),
-      createAsset: async () => ({
-        Id: 'asset-created-1',
-        Status: 'Processing',
-        GroupId: 'ag_auto_created',
-        ProjectName: 'demo-project',
-        AssetType: 'Image',
-      }),
+      createAsset: async (input) => {
+        createdAssets.push(input);
+        return {
+          Id: 'asset-created-1',
+          Status: 'Processing',
+          GroupId: 'ag_auto_created',
+          ProjectName: 'demo-project',
+          AssetType: 'Image',
+        };
+      },
     },
   });
 
   assert.equal(resolved.assetGroupId, 'ag_auto_created');
   assert.equal(projectUpdates[0]?.assetGroupId, 'ag_auto_created');
+  assert.equal(createdAssets[0]?.GroupId, 'ag_auto_created');
   assert.equal(resolved.requiresAssetReadiness, true);
 });

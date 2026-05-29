@@ -3,6 +3,7 @@
 import { api } from '@/lib/api';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Progress } from '@/components/ui/progress';
 import { Input } from '@/components/ui/input';
@@ -13,7 +14,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { Plus, User, MapPin, Wand2, Loader2, Sparkles, Trash2, Package, Search } from 'lucide-react';
+import { Plus, User, MapPin, Wand2, Loader2, Sparkles, Trash2, Package, Search, RefreshCw } from 'lucide-react';
 import { ArtStyleConfig, Asset, AssetType, Episode, Project } from '@/types';
 import { useState, useEffect, useCallback } from 'react';
 import { AssetDialog } from './AssetDialog';
@@ -29,6 +30,7 @@ export function AssetGallery({ projectId }: { projectId: string }) {
   const [activeTab, setActiveTab] = useState<AssetType>('character');
   const [searchQuery, setSearchQuery] = useState('');
   const [episodeFilter, setEpisodeFilter] = useState('all');
+  const [isRefreshing, setIsRefreshing] = useState(false);
   
   // Dialog State
   const [dialogOpen, setDialogOpen] = useState(false);
@@ -69,6 +71,7 @@ export function AssetGallery({ projectId }: { projectId: string }) {
 
   const artStyleConfig: ArtStyleConfig = resolveArtStyleConfig(project);
   const imageModel = project?.imageGenerationModel || DEFAULT_IMAGE_GENERATION_MODEL;
+  const volcengineSyncEnabled = project?.volcengineVideoSettings?.syncAssetsToPrivateLibrary === true;
 
   const getAssetsByType = (type: AssetType) => assets?.filter((a) => a.type === type) || [];
 
@@ -98,6 +101,50 @@ export function AssetGallery({ projectId }: { projectId: string }) {
       return linked.map((episode) => `第${episode.episodeNumber}集`).join('、');
     }
     return `第${linked[0].episodeNumber}集等 ${linked.length} 集`;
+  };
+
+  const formatSyncTime = (value?: string | null) => {
+    if (!value) return '暂无记录';
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) return '暂无记录';
+    return new Intl.DateTimeFormat('zh-CN', {
+      month: '2-digit',
+      day: '2-digit',
+      hour: '2-digit',
+      minute: '2-digit',
+    }).format(date);
+  };
+
+  const resetVolcengineAssetSync = (): Partial<Asset> => ({
+    volcengineAssetId: null,
+    volcengineAssetStatus: null,
+    volcengineAssetGroupId: null,
+    volcengineAssetProjectName: null,
+    volcengineAssetType: null,
+    volcengineAssetError: null,
+    volcengineAssetSyncedAt: null,
+  });
+
+  const getAssetSyncLabel = (asset: Asset) => {
+    if (!asset.imageUrl) return '无图片';
+    if (asset.volcengineAssetStatus === 'Active' && asset.volcengineAssetId) return '已同步';
+    if (asset.volcengineAssetStatus === 'Processing') return '处理中';
+    if (asset.volcengineAssetStatus === 'Failed') return '同步失败';
+    if (asset.volcengineAssetId) return '已提交';
+    return '未同步';
+  };
+
+  const getAssetSyncClassName = (asset: Asset) => {
+    if (asset.volcengineAssetStatus === 'Active' && asset.volcengineAssetId) {
+      return 'border-emerald-200 bg-emerald-50 text-emerald-700';
+    }
+    if (asset.volcengineAssetStatus === 'Processing') {
+      return 'border-sky-200 bg-sky-50 text-sky-700';
+    }
+    if (asset.volcengineAssetStatus === 'Failed') {
+      return 'border-red-200 bg-red-50 text-red-700';
+    }
+    return 'border-slate-200 bg-slate-50 text-slate-500';
   };
 
   const normalizeText = (value: string) => value.trim().toLowerCase();
@@ -136,6 +183,15 @@ export function AssetGallery({ projectId }: { projectId: string }) {
     setDialogOpen(true);
   };
 
+  const handleRefresh = async () => {
+    setIsRefreshing(true);
+    try {
+      await fetchData();
+    } finally {
+      setIsRefreshing(false);
+    }
+  };
+
   const handleSaveAsset = async (data: Partial<Asset>) => {
     if (dialogMode === 'create') {
         const newAsset: Asset = {
@@ -153,8 +209,13 @@ export function AssetGallery({ projectId }: { projectId: string }) {
         await api.assets.create(newAsset);
         setAssets(prev => [...prev, newAsset]);
     } else if (dialogMode === 'edit' && selectedAsset?.id) {
-        await api.assets.update(selectedAsset.id, data);
-        setAssets(prev => prev.map(a => a.id === selectedAsset.id ? { ...a, ...data } : a));
+        const imageChanged =
+          data.imageUrl !== undefined && data.imageUrl !== selectedAsset.imageUrl;
+        const updateData: Partial<Asset> = imageChanged
+          ? { ...data, ...resetVolcengineAssetSync() }
+          : data;
+        await api.assets.update(selectedAsset.id, updateData);
+        setAssets(prev => prev.map(a => a.id === selectedAsset.id ? { ...a, ...updateData } : a));
     }
   };
 
@@ -356,8 +417,9 @@ export function AssetGallery({ projectId }: { projectId: string }) {
         const data = await response.json();
 
         if (data.data && data.data[0]?.url) {
-            await api.assets.update(asset.id, { imageUrl: data.data[0].url });
-            setAssets(prev => prev.map(a => a.id === asset.id ? { ...a, imageUrl: data.data[0].url } : a));
+            const updates: Partial<Asset> = { imageUrl: data.data[0].url, ...resetVolcengineAssetSync() };
+            await api.assets.update(asset.id, updates);
+            setAssets(prev => prev.map(a => a.id === asset.id ? { ...a, ...updates } : a));
         } else {
             throw new Error(data.error || '生成失败，未返回图片链接');
         }
@@ -423,8 +485,9 @@ export function AssetGallery({ projectId }: { projectId: string }) {
             const data = await response.json();
 
             if (data.data && data.data[0]?.url) {
-                await api.assets.update(asset.id, { imageUrl: data.data[0].url });
-                setAssets(prev => prev.map(a => a.id === asset.id ? { ...a, imageUrl: data.data[0].url } : a));
+                const updates: Partial<Asset> = { imageUrl: data.data[0].url, ...resetVolcengineAssetSync() };
+                await api.assets.update(asset.id, updates);
+                setAssets(prev => prev.map(a => a.id === asset.id ? { ...a, ...updates } : a));
             } else {
                 throw new Error(data.error || '生成失败，未返回图片链接');
             }
@@ -456,6 +519,23 @@ export function AssetGallery({ projectId }: { projectId: string }) {
   const locationCount = assets.filter(a => a.type === 'location').length;
   const propCount = assets.filter(a => a.type === 'prop').length;
   const missingImageCount = assets.filter(a => !a.imageUrl && a.visualPrompt).length;
+  const syncableAssets = assets.filter(a => a.imageUrl);
+  const submittedAssetCount = syncableAssets.filter(a => a.volcengineAssetId).length;
+  const activeAssetCount = syncableAssets.filter(
+    a => a.volcengineAssetStatus === 'Active' && a.volcengineAssetId
+  ).length;
+  const processingAssetCount = syncableAssets.filter(a => a.volcengineAssetStatus === 'Processing').length;
+  const failedAssetCount = syncableAssets.filter(a => a.volcengineAssetStatus === 'Failed').length;
+  const unsyncedAssetCount = Math.max(0, syncableAssets.length - submittedAssetCount);
+  const latestSyncTime = syncableAssets
+    .map(a => a.volcengineAssetSyncedAt)
+    .filter((value): value is string => typeof value === 'string' && value.length > 0)
+    .map(value => new Date(value).getTime())
+    .filter(value => !Number.isNaN(value))
+    .sort((a, b) => b - a)[0];
+  const latestSyncLabel = latestSyncTime
+    ? formatSyncTime(new Date(latestSyncTime).toISOString())
+    : '暂无记录';
   const visibleAssets = getFilteredAssetsByType(activeTab);
   const ActiveIcon = typeIconMap[activeTab];
   const selectedEpisode = episodes.find((episode) => episode.id === episodeFilter);
@@ -522,6 +602,69 @@ export function AssetGallery({ projectId }: { projectId: string }) {
                 {isExtracting ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Wand2 className="w-4 h-4 mr-2" />}
                 {isExtracting ? (loadingMessage || '正在分析剧本...') : '从剧本自动提取'}
             </Button>
+        </div>
+      </div>
+
+      <div className="mb-8 rounded-lg border border-black/[0.08] bg-white p-4">
+        <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+          <div>
+            <div className="flex flex-wrap items-center gap-2">
+              <h2 className="text-sm font-semibold text-black/80">火山素材库同步</h2>
+              <Badge
+                variant="outline"
+                className={
+                  volcengineSyncEnabled
+                    ? 'border-emerald-200 bg-emerald-50 text-emerald-700'
+                    : 'border-slate-200 bg-slate-50 text-slate-500'
+                }
+              >
+                {volcengineSyncEnabled ? '已开启' : '未开启'}
+              </Badge>
+            </div>
+            <p className="mt-1 text-xs text-black/45">
+              状态来自资产库记录；视频生成前会把关联资产同步到火山素材库。
+            </p>
+          </div>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={handleRefresh}
+            disabled={isRefreshing}
+            className="w-fit"
+          >
+            <RefreshCw className={`mr-2 h-4 w-4 ${isRefreshing ? 'animate-spin' : ''}`} />
+            刷新状态
+          </Button>
+        </div>
+        <div className="mt-4 grid grid-cols-2 gap-3 md:grid-cols-5">
+          <div className="rounded-md bg-black/[0.03] px-3 py-2">
+            <p className="text-[10px] uppercase tracking-widest text-black/35">可同步图片</p>
+            <p className="mt-1 text-lg font-semibold text-black/80">{syncableAssets.length}</p>
+          </div>
+          <div className="rounded-md bg-emerald-50 px-3 py-2">
+            <p className="text-[10px] uppercase tracking-widest text-emerald-600/65">可用于生成</p>
+            <p className="mt-1 text-lg font-semibold text-emerald-700">{activeAssetCount}/{syncableAssets.length}</p>
+          </div>
+          <div className="rounded-md bg-sky-50 px-3 py-2">
+            <p className="text-[10px] uppercase tracking-widest text-sky-600/65">处理中</p>
+            <p className="mt-1 text-lg font-semibold text-sky-700">{processingAssetCount}</p>
+          </div>
+          <div className="rounded-md bg-red-50 px-3 py-2">
+            <p className="text-[10px] uppercase tracking-widest text-red-600/65">失败</p>
+            <p className="mt-1 text-lg font-semibold text-red-700">{failedAssetCount}</p>
+          </div>
+          <div className="rounded-md bg-black/[0.03] px-3 py-2">
+            <p className="text-[10px] uppercase tracking-widest text-black/35">最后同步</p>
+            <p className="mt-1 text-sm font-semibold text-black/75">{latestSyncLabel}</p>
+          </div>
+        </div>
+        <div className="mt-3 flex flex-wrap gap-2 text-xs text-black/45">
+          <span>已提交到素材库 {submittedAssetCount} 张</span>
+          <span>未同步 {unsyncedAssetCount} 张</span>
+          {project?.volcengineVideoSettings?.assetGroupId && (
+            <span>素材组 {project.volcengineVideoSettings.assetGroupId}</span>
+          )}
         </div>
       </div>
 
@@ -634,6 +777,23 @@ export function AssetGallery({ projectId }: { projectId: string }) {
                         </CardHeader>
                         <CardContent className="p-4 pt-0 text-xs text-black/50">
                             <p className="line-clamp-3">{asset.description || '暂无描述'}</p>
+                            {asset.imageUrl && (
+                                <div className="mt-3 flex flex-wrap items-center gap-2">
+                                    <span className={`rounded border px-2 py-0.5 text-[10px] font-medium ${getAssetSyncClassName(asset)}`}>
+                                        {getAssetSyncLabel(asset)}
+                                    </span>
+                                    {asset.volcengineAssetId && (
+                                        <span className="max-w-full truncate rounded bg-black/[0.04] px-2 py-1 font-mono text-[10px] text-black/45">
+                                            {asset.volcengineAssetId}
+                                        </span>
+                                    )}
+                                    {asset.volcengineAssetSyncedAt && (
+                                        <span className="text-[10px] text-black/35">
+                                            {formatSyncTime(asset.volcengineAssetSyncedAt)}
+                                        </span>
+                                    )}
+                                </div>
+                            )}
                             {episodeLabel && (
                                 <p className="mt-2 inline-flex rounded bg-black/[0.04] px-2 py-1 text-[11px] text-black/50">
                                     {episodeLabel}

@@ -5,7 +5,7 @@ import { createClient } from '@/lib/supabase/server';
 export const maxDuration = 300;
 
 const MAX_IMAGE_UPLOAD_SIZE_BYTES = 50 * 1024 * 1024;
-const ASSET_PATH_PATTERN = /^assets\/[a-zA-Z0-9_-]+\/(character|location)\/[a-zA-Z0-9._-]+$/;
+const ASSET_PATH_PATTERN = /^assets\/[a-zA-Z0-9_-]+\/(character|location|prop)\/[a-zA-Z0-9._-]+$/;
 
 export async function POST(request: Request): Promise<NextResponse> {
   const supabase = await createClient();
