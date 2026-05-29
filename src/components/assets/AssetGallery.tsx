@@ -31,6 +31,7 @@ export function AssetGallery({ projectId }: { projectId: string }) {
   const [searchQuery, setSearchQuery] = useState('');
   const [episodeFilter, setEpisodeFilter] = useState('all');
   const [isRefreshing, setIsRefreshing] = useState(false);
+  const [isSyncingVolcengineAssets, setIsSyncingVolcengineAssets] = useState(false);
   
   // Dialog State
   const [dialogOpen, setDialogOpen] = useState(false);
@@ -189,6 +190,33 @@ export function AssetGallery({ projectId }: { projectId: string }) {
       await fetchData();
     } finally {
       setIsRefreshing(false);
+    }
+  };
+
+  const handleResyncVolcengineAssets = async () => {
+    if (!volcengineSyncEnabled) {
+      alert('请先在项目设置中开启“同步素材到火山素材库”。');
+      return;
+    }
+
+    setIsSyncingVolcengineAssets(true);
+    try {
+      const response = await fetch('/api/assets/sync-volcengine', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ projectId }),
+      });
+      const data = await response.json().catch(() => ({}));
+
+      if (!response.ok) {
+        throw new Error(data.error || '同步失败，请稍后重试');
+      }
+
+      await fetchData();
+    } catch (error) {
+      alert(error instanceof Error ? error.message : '同步失败，请稍后重试');
+    } finally {
+      setIsSyncingVolcengineAssets(false);
     }
   };
 
@@ -527,6 +555,9 @@ export function AssetGallery({ projectId }: { projectId: string }) {
   const processingAssetCount = syncableAssets.filter(a => a.volcengineAssetStatus === 'Processing').length;
   const failedAssetCount = syncableAssets.filter(a => a.volcengineAssetStatus === 'Failed').length;
   const unsyncedAssetCount = Math.max(0, syncableAssets.length - submittedAssetCount);
+  const resyncCandidateCount = syncableAssets.filter(
+    a => !a.volcengineAssetId || a.volcengineAssetStatus === 'Failed'
+  ).length;
   const latestSyncTime = syncableAssets
     .map(a => a.volcengineAssetSyncedAt)
     .filter((value): value is string => typeof value === 'string' && value.length > 0)
@@ -625,17 +656,38 @@ export function AssetGallery({ projectId }: { projectId: string }) {
               状态来自资产库记录；视频生成前会把关联资产同步到火山素材库。
             </p>
           </div>
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            onClick={handleRefresh}
-            disabled={isRefreshing}
-            className="w-fit"
-          >
-            <RefreshCw className={`mr-2 h-4 w-4 ${isRefreshing ? 'animate-spin' : ''}`} />
-            刷新状态
-          </Button>
+          <div className="flex flex-wrap gap-2">
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={handleRefresh}
+              disabled={isRefreshing || isSyncingVolcengineAssets}
+              className="w-fit"
+            >
+              <RefreshCw className={`mr-2 h-4 w-4 ${isRefreshing ? 'animate-spin' : ''}`} />
+              刷新状态
+            </Button>
+            <Button
+              type="button"
+              size="sm"
+              onClick={handleResyncVolcengineAssets}
+              disabled={
+                !volcengineSyncEnabled ||
+                isSyncingVolcengineAssets ||
+                resyncCandidateCount === 0
+              }
+              className="w-fit bg-black text-white hover:bg-black/80"
+              title={
+                volcengineSyncEnabled
+                  ? '只同步未同步和失败的资产'
+                  : '请先在项目设置中开启素材库同步'
+              }
+            >
+              <RefreshCw className={`mr-2 h-4 w-4 ${isSyncingVolcengineAssets ? 'animate-spin' : ''}`} />
+              {isSyncingVolcengineAssets ? '同步中...' : `重新同步 (${resyncCandidateCount})`}
+            </Button>
+          </div>
         </div>
         <div className="mt-4 grid grid-cols-2 gap-3 md:grid-cols-5">
           <div className="rounded-md bg-black/[0.03] px-3 py-2">
@@ -662,6 +714,7 @@ export function AssetGallery({ projectId }: { projectId: string }) {
         <div className="mt-3 flex flex-wrap gap-2 text-xs text-black/45">
           <span>已提交到素材库 {submittedAssetCount} 张</span>
           <span>未同步 {unsyncedAssetCount} 张</span>
+          <span>待重新同步 {resyncCandidateCount} 张</span>
           {project?.volcengineVideoSettings?.assetGroupId && (
             <span>素材组 {project.volcengineVideoSettings.assetGroupId}</span>
           )}
