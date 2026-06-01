@@ -240,14 +240,6 @@ export async function POST(req: Request) {
       }
 
       const referenceAssets: LocalReferenceAsset[] = [];
-      if (claimedShot.reference_image) {
-        referenceAssets.push({
-          name: claimedShot.scene_label || 'Scene reference',
-          type: 'location',
-          imageUrl: claimedShot.reference_image,
-        });
-      }
-
       if (claimedShot.related_asset_ids && claimedShot.related_asset_ids.length > 0) {
         const { data: assets } = await supabase
           .from('assets')

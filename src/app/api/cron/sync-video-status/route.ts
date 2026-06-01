@@ -253,14 +253,6 @@ export async function GET(req: Request) {
         let resolvedSeedanceModel = '';
         try {
           const referenceAssets: LocalReferenceAsset[] = [];
-          if (shot.reference_image) {
-            referenceAssets.push({
-              name: shot.scene_label || 'Scene reference',
-              type: 'location',
-              imageUrl: shot.reference_image,
-            });
-          }
-
           if (shot.related_asset_ids && shot.related_asset_ids.length > 0) {
             const { data: assets } = await supabase
               .from('assets')

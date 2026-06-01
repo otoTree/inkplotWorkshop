@@ -385,11 +385,7 @@ const normalizeVideoReferenceAssets = (referenceAssets: VideoReferenceAsset[] = 
       type: typeof asset.type === 'string' ? asset.type.trim().toLowerCase() : '',
       imageUrl: typeof asset.imageUrl === 'string' ? encodeVideoImageUrl(asset.imageUrl) : '',
     }))
-    .filter((asset) => asset.imageUrl)
-    .filter(
-      (asset, index, assets) =>
-        assets.findIndex((candidate) => candidate.imageUrl === asset.imageUrl) === index
-    );
+    .filter((asset) => asset.imageUrl);
 
 const getVideoReferenceLabel = (
   asset: ReturnType<typeof normalizeVideoReferenceAssets>[number],
@@ -401,8 +397,46 @@ const getVideoReferenceLabel = (
       : asset.type === 'location'
         ? 'Location reference'
         : 'Reference image';
-  return `${asset.name || fallbackName}<<<image_${index + 1}>>>`;
+  return `${asset.name || fallbackName}：@<<<image_${index + 1}>>>`;
 };
+
+const VIDEO_PROMPT_SECTION_LABELS: Record<string, string> = {
+  'scene heading': '镜头场景',
+  'video prompt': '视频分镜',
+  'visual description': '画面描述',
+  'shot action': '主体动作',
+  emotion: '情绪落点',
+  lighting: '光线氛围',
+  'camera framing': '镜头调度',
+  dialogue: '同步台词/画外音',
+  'sound design': '声音设计',
+};
+
+const STRUCTURED_VIDEO_PROMPT_TITLES = [
+  '资产参考',
+  '分镜提示词',
+  '台词约束',
+  '全局美术风格',
+];
+
+const extractStructuredVideoPromptSection = (prompt: string, title: string) => {
+  const titlePattern = STRUCTURED_VIDEO_PROMPT_TITLES.join('|');
+  const pattern = new RegExp(`【${title}】\\s*([\\s\\S]*?)(?=\\n?【(?:${titlePattern})】|$)`);
+  return prompt.match(pattern)?.[1]?.trim() || '';
+};
+
+const stripStructuredVideoPromptSections = (prompt: string) => {
+  let result = prompt;
+  for (const title of STRUCTURED_VIDEO_PROMPT_TITLES) {
+    const titlePattern = STRUCTURED_VIDEO_PROMPT_TITLES.join('|');
+    const pattern = new RegExp(`\\n?【${title}】\\s*[\\s\\S]*?(?=\\n?【(?:${titlePattern})】|$)`, 'g');
+    result = result.replace(pattern, '');
+  }
+  return result.trim();
+};
+
+const mapVideoPromptSectionLabel = (label: string) =>
+  VIDEO_PROMPT_SECTION_LABELS[label.trim().toLowerCase()] || label.trim();
 
 const buildVideoGenerationMetadata = (
   metadata?: Record<string, unknown>,
@@ -461,60 +495,64 @@ export const buildVideoGenerationPrompt = (
   sections: VideoPromptSection[],
   referenceAssets: VideoReferenceAsset[] = []
 ) => {
-  const promptLines = sections
+  const normalizedSections = sections
     .map((section) => ({
       label: section.label.trim(),
       value: typeof section.value === 'string' ? section.value.trim() : '',
     }))
-    .filter((section) => section.label && section.value)
-    .map((section) => `${section.label}: ${section.value}`);
+    .filter((section) => section.label && section.value);
 
-  const promptText = promptLines.join('\n');
-  if (promptText.includes('<<<image_')) {
-    return appendNoSubtitleDirective(promptText);
-  }
-
-  const normalizedAssets = normalizeVideoReferenceAssets(referenceAssets);
-  if (normalizedAssets.length === 0) {
-    return appendNoSubtitleDirective(promptText);
-  }
-
-  const locationAssets = normalizedAssets
-    .filter((asset) => asset.type !== 'character')
-    .map((asset) => {
-      const assetIndex = normalizedAssets.findIndex(
-        (candidate) => candidate.imageUrl === asset.imageUrl
-      );
-      return getVideoReferenceLabel(asset, assetIndex);
-    });
-  const characterAssets = normalizedAssets
-    .filter((asset) => asset.type === 'character')
-    .map((asset) => {
-      const assetIndex = normalizedAssets.findIndex(
-        (candidate) => candidate.imageUrl === asset.imageUrl
-      );
-      return getVideoReferenceLabel(asset, assetIndex);
-    });
-
-  const assetLines: string[] = [];
-  if (locationAssets.length > 0) {
-    assetLines.push(`Locations: ${locationAssets.join(', ')}.`);
-  }
-  if (characterAssets.length > 0) {
-    assetLines.push(`Visible characters/entities: ${characterAssets.join(', ')}.`);
-  }
-  if (assetLines.length === 0) {
-    assetLines.push(
-      `Reference images: ${normalizedAssets
-        .map((asset, index) => getVideoReferenceLabel(asset, index))
-        .join(', ')}.`
-    );
-  }
-  assetLines.push(
-    'Continuity rules: Match the referenced images exactly for subject identity, wardrobe, environment, and lighting continuity.'
+  const promptLines = normalizedSections.map(
+    (section) => `${mapVideoPromptSectionLabel(section.label)}：${section.value}`
   );
 
-  return appendNoSubtitleDirective([...assetLines, ...promptLines].join('\n'));
+  const promptText = promptLines.join('\n');
+  const normalizedAssets = normalizeVideoReferenceAssets(referenceAssets);
+  const generatedAssetSection = extractStructuredVideoPromptSection(promptText, '资产参考');
+  const generatedStoryboardSection = extractStructuredVideoPromptSection(promptText, '分镜提示词');
+  const generatedDialogueSection = extractStructuredVideoPromptSection(promptText, '台词约束');
+  const generatedStyleSection = extractStructuredVideoPromptSection(promptText, '全局美术风格');
+  const unstructuredPromptText = stripStructuredVideoPromptSections(promptText);
+  const dialogueValue =
+    normalizedSections.find((section) => section.label.trim().toLowerCase() === 'dialogue')
+      ?.value || '';
+
+  const assetLines: string[] = [];
+  if (normalizedAssets.length > 0) {
+    assetLines.push(
+      `参考资产顺序（与视频参考图数组完全一致）：${normalizedAssets
+        .map((asset, index) => getVideoReferenceLabel(asset, index))
+        .join('，')}。`
+    );
+    assetLines.push(
+      '资产一致性：严格匹配参考图中的主体身份、年龄感、脸型、发型、服装、道具、场景结构和光线方向，不要混用不同角色或场景。'
+    );
+  } else {
+    assetLines.push('未提供外部参考图；严格依据本镜头文字描述保持人物、服装、道具和场景前后一致。');
+  }
+  if (generatedAssetSection) {
+    assetLines.push(`镜头资产状态：${generatedAssetSection}`);
+  }
+
+  const storyboardContent =
+    generatedStoryboardSection || unstructuredPromptText || promptText || '按当前镜头信息生成连续、可执行的视频画面。';
+  const dialogueConstraint =
+    generatedDialogueSection ||
+    (dialogueValue
+      ? `严格按照当前镜头标注的台词播放：${dialogueValue}。每个镜头只对应当前台词，不得新增、删减、改写台词；人物口型不强制同步时，作为画外音处理，重点表现台词对应的情绪和画面落点。`
+      : '无台词，只保留环境声、呼吸声和动作声；不得生成任何新增对白、字幕或屏幕文字。');
+  const styleContent =
+    generatedStyleSection ||
+    '统一项目画面美术风格，保持镜头质感、色调、光影、材质、人物外貌、服装、年龄、发型、道具和场景连续一致；禁止现代元素错入、媒介风格漂移、脸部变形、字幕、标题、标语和屏幕文字。';
+
+  return appendNoSubtitleDirective(
+    [
+      `【资产参考】\n${assetLines.join('\n')}`,
+      `【分镜提示词】\n${storyboardContent}`,
+      `【台词约束】\n${dialogueConstraint}`,
+      `【全局美术风格】\n${styleContent}`,
+    ].join('\n\n')
+  );
 };
 
 const acquireGlobalSemaphore = async (config: AIAPIConfig): Promise<() => void | Promise<void>> => {
