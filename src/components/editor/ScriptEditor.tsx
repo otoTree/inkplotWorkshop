@@ -171,7 +171,7 @@ export function ScriptEditor({ projectId }: { projectId: string }) {
     },
     editorProps: {
         attributes: {
-            class: 'prose prose-lg max-w-none focus:outline-none min-h-[500px] p-8',
+            class: 'prose prose-lg max-w-none focus:outline-none min-h-[500px] p-4 sm:p-8',
         },
     },
   });
@@ -561,22 +561,22 @@ export function ScriptEditor({ projectId }: { projectId: string }) {
           : '';
 
   return (
-    <div className="flex h-full overflow-hidden">
+    <div className="flex h-full min-h-0 flex-col overflow-visible lg:flex-row lg:overflow-hidden">
       {/* Sidebar - Episode List */}
-      <aside className="w-64 bg-gray-50 border-r border-black/[0.08] flex flex-col h-full overflow-hidden">
+      <aside className="flex w-full shrink-0 flex-col overflow-hidden border-b border-black/[0.08] bg-gray-50 lg:h-full lg:w-64 lg:border-b-0 lg:border-r">
          <div className="p-4 border-b border-black/[0.04] flex justify-between items-center bg-white">
              <span className="font-serif font-bold text-sm">剧集列表</span>
              <Button variant="ghost" size="icon" onClick={handleAddEpisode} className="h-8 w-8">
                  <Plus className="h-4 w-4" />
              </Button>
          </div>
-         <div className="flex-1 overflow-y-auto p-2 space-y-1">
+         <div className="flex gap-2 overflow-x-auto p-2 lg:block lg:flex-1 lg:space-y-1 lg:overflow-y-auto">
              {episodes?.map(ep => (
                  <div 
                     key={ep.id}
                     onClick={() => setCurrentEpisode(ep)}
                     className={cn(
-                        "group flex items-center justify-between px-3 py-2 text-sm rounded-md cursor-pointer transition-colors",
+                        "group flex min-w-[180px] items-center justify-between rounded-md px-3 py-2 text-sm cursor-pointer transition-colors lg:min-w-0",
                         currentEpisode?.id === ep.id 
                             ? "bg-black text-white" 
                             : "text-black/70 hover:bg-black/5"
@@ -602,18 +602,18 @@ export function ScriptEditor({ projectId }: { projectId: string }) {
       </aside>
 
       {/* Main Content */}
-      <main className="flex-1 flex flex-col h-full overflow-hidden bg-white relative">
-          <div className="flex justify-between items-center py-4 px-8 border-b border-black/[0.04] bg-white/80 backdrop-blur-sm z-10">
-            <div>
-               <h1 className="text-2xl font-serif font-bold">{currentEpisode.title}</h1>
+      <main className="relative flex min-h-[70vh] min-w-0 flex-1 flex-col overflow-hidden bg-white">
+          <div className="z-10 flex flex-col gap-4 border-b border-black/[0.04] bg-white/80 px-4 py-4 backdrop-blur-sm sm:px-8 xl:flex-row xl:items-center xl:justify-between">
+            <div className="min-w-0">
+               <h1 className="truncate text-2xl font-serif font-bold">{currentEpisode.title}</h1>
                <p className="text-xs text-black/40 uppercase tracking-widest mt-1">
                    {status === 'saved' ? '已保存' : status === 'saving' ? '保存中...' : '有未保存的更改'}
                </p>
             </div>
-            <div className="flex gap-2">
+            <div className="flex w-full flex-col gap-2 sm:flex-row sm:flex-wrap xl:w-auto xl:justify-end">
                 <Dialog open={ideaDialogOpen} onOpenChange={setIdeaDialogOpen}>
                     <DialogTrigger asChild>
-                        <Button variant="outline" className="border-black/10">
+                        <Button variant="outline" className="w-full border-black/10 sm:w-auto">
                             <Sparkles className="w-4 h-4 mr-2" />
                             创意生成
                         </Button>
@@ -668,7 +668,7 @@ export function ScriptEditor({ projectId }: { projectId: string }) {
                         onClick={handleGenerateEpisodeScript} 
                         disabled={isGenerating}
                         variant="outline"
-                        className="border-black/10"
+                        className="w-full border-black/10 sm:w-auto"
                     >
                         {isGenerating ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <FileText className="w-4 h-4 mr-2" />}
                         生成剧本
@@ -679,7 +679,7 @@ export function ScriptEditor({ projectId }: { projectId: string }) {
                     onClick={handleGenerateAllScripts}
                     disabled={isGenerating || !canGenerateAllScripts}
                     variant="outline"
-                    className="border-black/10"
+                    className="w-full border-black/10 sm:w-auto"
                 >
                     {isGeneratingAllScripts ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <FileText className="w-4 h-4 mr-2" />}
                     {isGeneratingAllScripts ? `批量生成中 ${scriptGenerationCurrent}/${scriptGenerationTotal}` : '一键生成全部'}
@@ -688,7 +688,7 @@ export function ScriptEditor({ projectId }: { projectId: string }) {
                 <Button 
                     onClick={handleAICompletion} 
                     disabled={isLoading || isGenerating}
-                    className="bg-black text-white hover:bg-black/80"
+                    className="w-full bg-black text-white hover:bg-black/80 sm:w-auto"
                 >
                     <Wand2 className="w-4 h-4 mr-2" />
                     {isLoading ? '生成中...' : 'AI 续写'}
@@ -697,7 +697,7 @@ export function ScriptEditor({ projectId }: { projectId: string }) {
           </div>
 
           {isGeneratingAllScripts && (
-            <div className="px-8 py-3 border-b border-black/[0.04] bg-black/[0.01]">
+            <div className="border-b border-black/[0.04] bg-black/[0.01] px-4 py-3 sm:px-8">
               <div className="flex items-center justify-between text-xs text-black/60 mb-2">
                 <span>正在批量生成剧本 {scriptGenerationCurrent}/{scriptGenerationTotal}</span>
                 <span>{scriptGenerationProgress}%</span>

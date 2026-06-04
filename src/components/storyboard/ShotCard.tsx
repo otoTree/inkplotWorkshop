@@ -495,7 +495,7 @@ ${current.videoPrompt || 'None'}
         }`}
       >
         {/* Header */}
-        <div className="flex items-center justify-between p-4 bg-gray-50 border-b border-gray-100">
+        <div className="flex flex-col gap-3 bg-gray-50 p-4 sm:flex-row sm:items-center sm:justify-between border-b border-gray-100">
           <div className="flex items-center gap-4">
             <button
               type="button"
@@ -531,7 +531,7 @@ ${current.videoPrompt || 'None'}
                 </div>
               </label>
             </div>
-            <div className="flex gap-2">
+            <div className="flex flex-wrap gap-2">
               {current.sensitivityReduction > 0 && (
                 <Badge variant="secondary" className="text-xs font-mono bg-white border text-gray-600">
                   敏感度↓ {sensitivityLabel(current.sensitivityReduction)}
@@ -541,7 +541,7 @@ ${current.videoPrompt || 'None'}
           </div>
           
           {/* Action Buttons (Excluded from Export) */}
-            <div className="exclude-from-export flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity bg-white/80 backdrop-blur-sm rounded-lg p-1 border shadow-sm absolute right-4 top-3">
+            <div className="exclude-from-export relative flex flex-wrap items-center gap-1 rounded-lg border bg-white/80 p-1 opacity-100 shadow-sm backdrop-blur-sm transition-opacity sm:absolute sm:right-4 sm:top-3 md:opacity-0 md:group-hover:opacity-100">
               {(isGeneratingVideo && queuePosition !== null && queuePosition > 0) && (
                 <Button 
                   variant="outline" 

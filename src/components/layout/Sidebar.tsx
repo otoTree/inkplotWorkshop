@@ -35,16 +35,16 @@ export function Sidebar({ projectId }: { projectId: string }) {
   ];
 
   return (
-    <div className="w-64 h-screen border-r border-black/[0.08] flex flex-col bg-section-bg">
-      <div className="p-6 border-b border-black/[0.04]">
-        <Link href="/" className="flex items-center text-sm text-black/60 hover:text-black transition-colors mb-4">
+    <div className="w-full shrink-0 border-b border-black/[0.08] bg-section-bg md:h-screen md:w-64 md:border-b-0 md:border-r flex flex-col">
+      <div className="p-4 border-b border-black/[0.04] md:p-6">
+        <Link href="/" className="mb-3 flex items-center text-sm text-black/60 transition-colors hover:text-black md:mb-4">
           <ArrowLeft className="w-4 h-4 mr-2" />
           返回项目列表
         </Link>
         <h2 className="font-serif text-xl font-bold">Inkplot</h2>
       </div>
       
-      <nav className="flex-1 p-4 space-y-1">
+      <nav className="flex gap-2 overflow-x-auto p-3 md:flex-1 md:flex-col md:space-y-1 md:overflow-x-visible md:p-4">
         {links.map((link) => {
           const Icon = link.icon;
           const isActive = pathname === link.href;
@@ -54,7 +54,7 @@ export function Sidebar({ projectId }: { projectId: string }) {
               key={link.href} 
               href={link.href}
               className={cn(
-                "flex items-center px-4 py-3 text-sm font-medium rounded-md transition-colors",
+                "flex shrink-0 items-center rounded-md px-4 py-3 text-sm font-medium transition-colors md:w-full",
                 isActive 
                   ? "bg-black/5 text-black" 
                   : "text-black/60 hover:bg-black/[0.02] hover:text-black"
@@ -66,7 +66,7 @@ export function Sidebar({ projectId }: { projectId: string }) {
           );
         })}
 
-        <div className="pt-4 mt-2 border-t border-black/[0.04]">
+        <div className="shrink-0 md:mt-2 md:border-t md:border-black/[0.04] md:pt-4">
           <Button 
             onClick={() => setWorkflowOpen(true)}
             variant="outline" 
@@ -78,7 +78,7 @@ export function Sidebar({ projectId }: { projectId: string }) {
         </div>
       </nav>
 
-      <div className="px-4 pb-4">
+      <div className="hidden px-4 pb-4 md:block">
         <div className="rounded-lg border border-black/[0.06] bg-white p-3 space-y-3">
           <div className="text-[11px] uppercase tracking-widest text-black/50 font-bold">
             敏感词规则
@@ -119,7 +119,7 @@ export function Sidebar({ projectId }: { projectId: string }) {
         </div>
       </div>
       
-      <div className="p-4 border-t border-black/[0.04]">
+      <div className="hidden p-4 border-t border-black/[0.04] md:block">
         <div className="text-xs text-black/30 text-center">
           项目 ID: {projectId.slice(0, 8)}...
         </div>

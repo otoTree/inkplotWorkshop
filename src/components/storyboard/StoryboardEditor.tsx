@@ -650,19 +650,19 @@ export function StoryboardEditor({ projectId }: StoryboardEditorProps) {
   const canGenerateAllStoryboards = validEpisodesCount > 0;
 
   return (
-    <div className="flex h-full bg-white">
+    <div className="flex h-full min-h-0 flex-col bg-white lg:flex-row">
       {/* Sidebar: Episode List */}
-      <div className="w-64 border-r bg-gray-50 flex flex-col">
+      <div className="flex w-full shrink-0 flex-col border-b bg-gray-50 lg:w-64 lg:border-b-0 lg:border-r">
         <div className="p-4 border-b">
           <h2 className="font-serif font-medium">剧集列表</h2>
         </div>
-        <ScrollArea className="flex-1">
-          <div className="p-2 space-y-1">
+        <ScrollArea className="w-full lg:flex-1">
+          <div className="flex gap-2 p-2 lg:block lg:space-y-1">
             {episodes.map(ep => (
               <button
                 key={ep.id}
                 onClick={() => setSelectedEpisodeId(ep.id)}
-                className={`w-full text-left px-3 py-2 rounded-md text-sm transition-colors ${
+                className={`min-w-[160px] rounded-md px-3 py-2 text-left text-sm transition-colors lg:w-full lg:min-w-0 ${
                   selectedEpisodeId === ep.id 
                     ? 'bg-black text-white shadow-sm' 
                     : 'text-gray-600 hover:bg-gray-100'
@@ -677,10 +677,10 @@ export function StoryboardEditor({ projectId }: StoryboardEditorProps) {
       </div>
 
       {/* Main Content */}
-      <div className="flex-1 flex flex-col overflow-hidden min-h-0">
+      <div className="flex min-h-[70vh] min-w-0 flex-1 flex-col overflow-hidden">
         {/* Toolbar */}
-        <div className="h-16 border-b flex items-center justify-between px-6 bg-white shrink-0">
-          <div className="flex items-center gap-4">
+        <div className="flex shrink-0 flex-col gap-3 border-b bg-white px-4 py-4 sm:px-6 xl:flex-row xl:items-center xl:justify-between">
+          <div className="flex min-w-0 flex-col gap-2 sm:flex-row sm:items-center sm:gap-4">
             <h1 className="font-serif text-lg">分镜脚本</h1>
             <div className="flex gap-2">
               <Badge variant="outline" className="font-mono text-xs text-gray-500">
@@ -692,10 +692,10 @@ export function StoryboardEditor({ projectId }: StoryboardEditorProps) {
             </div>
           </div>
           
-          <div className="flex items-center gap-2">
+          <div className="flex w-full flex-col gap-2 sm:flex-row sm:flex-wrap xl:w-auto xl:justify-end">
             <Dialog>
               <DialogTrigger asChild>
-                <Button variant="ghost" size="sm" disabled={!selectedEpisodeId}>
+                <Button variant="ghost" size="sm" disabled={!selectedEpisodeId} className="w-full sm:w-auto">
                   <FileText className="w-4 h-4 mr-2" />
                   查看剧本
                 </Button>
@@ -715,16 +715,16 @@ export function StoryboardEditor({ projectId }: StoryboardEditorProps) {
             <Button 
               onClick={handleGenerate} 
               disabled={isGenerating || isGeneratingAll || !selectedEpisodeId}
-              className="gap-2 bg-black hover:bg-black/80 text-white"
+              className="w-full gap-2 bg-black text-white hover:bg-black/80 sm:w-auto"
             >
               {isGenerating ? <Loader2 className="w-4 h-4 animate-spin" /> : <Wand2 className="w-4 h-4" />}
-              AI 智能生成分镜脚本 (P0-P2)
+              AI 智能生成分镜脚本 <span className="hidden sm:inline">(P0-P2)</span>
             </Button>
             <Button 
               onClick={handleGenerateAll} 
               disabled={isGenerating || isGeneratingAll || !canGenerateAllStoryboards}
               variant="outline"
-              className="gap-2 border-black/10"
+              className="w-full gap-2 border-black/10 sm:w-auto"
             >
               {isGeneratingAll ? <Loader2 className="w-4 h-4 animate-spin" /> : <Sparkles className="w-4 h-4" />}
               {isGeneratingAll ? `批量生成中 ${generationCurrent}/${generationTotal}` : '一键生成全部分镜脚本'}
@@ -733,7 +733,7 @@ export function StoryboardEditor({ projectId }: StoryboardEditorProps) {
               onClick={handleGenerateEpisodeVideos} 
               disabled={isGeneratingVideos || !shots || shots.length === 0 || hasNoShotsToGenerate}
               variant="outline"
-              className="gap-2 border-black/10"
+              className="w-full gap-2 border-black/10 sm:w-auto"
             >
               {isGeneratingVideos ? <Loader2 className="w-4 h-4 animate-spin" /> : <Video className="w-4 h-4" />}
               {isGeneratingVideos
@@ -742,7 +742,7 @@ export function StoryboardEditor({ projectId }: StoryboardEditorProps) {
                   ? '当前剧集视频已全生成或排队中'
                   : '一键生成当前剧集视频'}
             </Button>
-            <Button variant="outline" size="icon" onClick={handleAddShot}>
+            <Button variant="outline" size="icon" onClick={handleAddShot} className="w-full sm:w-9">
               <Plus className="w-4 h-4" />
             </Button>
           </div>
@@ -782,7 +782,7 @@ export function StoryboardEditor({ projectId }: StoryboardEditorProps) {
         {/* Shot List */}
         <div className="flex-1 relative bg-gray-50/50 min-h-0">
           <ScrollArea className="absolute inset-0 h-full w-full">
-            <div className="p-6 max-w-5xl mx-auto space-y-6">
+            <div className="mx-auto max-w-5xl space-y-6 p-4 sm:p-6">
               {/* Content */}
               {shots?.map((shot, index) => (
                 <ShotCard 

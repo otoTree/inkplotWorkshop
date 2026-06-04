@@ -9,9 +9,9 @@ export default async function ProjectLayout({
 }) {
   const { id } = await params;
   return (
-    <div className="flex min-h-screen bg-white font-sans">
+    <div className="flex min-h-screen flex-col bg-white font-sans md:flex-row">
       <Sidebar projectId={id} />
-      <main className="flex-1 h-screen overflow-auto">
+      <main className="min-w-0 flex-1 md:h-screen md:overflow-auto">
         {children}
       </main>
     </div>

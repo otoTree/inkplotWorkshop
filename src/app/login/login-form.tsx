@@ -91,7 +91,7 @@ export function LoginForm() {
             <form action={forgotAction}>
               <CardContent className="space-y-3 pt-0 pb-8">
                 <Label htmlFor="forgot-email" className="text-xs uppercase tracking-wider text-black/40 font-medium pl-1">忘记密码</Label>
-                <div className="flex gap-2">
+                <div className="flex flex-col gap-2 sm:flex-row">
                   <Input
                     id="forgot-email"
                     name="email"
@@ -103,7 +103,7 @@ export function LoginForm() {
                   <Button
                     type="submit"
                     variant="outline"
-                    className="h-10 rounded-xl border-black/10 text-black/70 hover:text-black hover:bg-black/[0.03]"
+                    className="h-10 w-full rounded-xl border-black/10 text-black/70 hover:text-black hover:bg-black/[0.03] sm:w-auto"
                     disabled={isForgotPending}
                   >
                     {isForgotPending ? '发送中' : '发送重置'}
