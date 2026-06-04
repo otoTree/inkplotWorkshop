@@ -14,6 +14,7 @@ export default async function ProtectedAdminLayout({
         <h1 className="text-xl font-serif">管理后台</h1>
         <nav className="space-x-4">
           <Link href="/admin/redis" className="text-sm text-gray-600 hover:text-black">并发队列管理</Link>
+          <Link href="/admin/video-history" className="text-sm text-gray-600 hover:text-black">视频历史统计</Link>
           <Link href="/admin/projects" className="text-sm text-gray-600 hover:text-black">全站项目</Link>
           <Link href="/" className="text-sm text-gray-600 hover:text-black">返回前台</Link>
         </nav>
