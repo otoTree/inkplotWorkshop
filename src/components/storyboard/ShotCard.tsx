@@ -8,7 +8,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Input } from '@/components/ui/input';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { Save, Trash2, Plus, Box, Maximize2, Download, Copy, Shield, Video, Loader2, GripVertical } from 'lucide-react';
+import { Save, Trash2, Plus, Box, Maximize2, Download, Copy, Shield, Video, Loader2, GripVertical, ClipboardCopy, ClipboardPaste } from 'lucide-react';
 import { toPng } from 'html-to-image';
 import { ShotDetailDialog } from './ShotDetailDialog';
 import { normalizeShotDurationSeconds } from '@/lib/duration';
@@ -24,6 +24,9 @@ interface ShotCardProps {
   projectId: string;
   videoAspectRatio: '9:16' | '16:9';
   sensitivityPrompt: string;
+  copiedAssetIds: string[];
+  copiedAssetSourceSequence?: number;
+  onCopyAssets: (shot: Shot) => void;
   onUpdate: (shot: Shot) => void;
   onDelete: (id: string) => void;
   onDragStart?: () => void;
@@ -38,6 +41,9 @@ export function ShotCard({
   projectId,
   videoAspectRatio,
   sensitivityPrompt,
+  copiedAssetIds,
+  copiedAssetSourceSequence,
+  onCopyAssets,
   onUpdate,
   onDelete,
   onDragStart,
@@ -397,6 +403,18 @@ export function ShotCard({
     onUpdate(newData); 
   };
 
+  const replaceAssetsFromClipboard = () => {
+    if (copiedAssetIds.length === 0) return;
+
+    const newData = {
+      ...current,
+      relatedAssetIds: Array.from(new Set(copiedAssetIds)),
+    };
+
+    if (isEditing) setDraft(newData);
+    onUpdate(newData);
+  };
+
   const handleExportImage = useCallback(async () => {
     if (cardRef.current === null) return;
 
@@ -698,9 +716,46 @@ ${current.videoPrompt || 'None'}
 
             {/* Asset Panel */}
             <div className="p-4 flex flex-col gap-4 flex-1">
-              <div className="flex items-center justify-between">
-                <label className="text-[10px] uppercase tracking-widest text-gray-400 font-bold">关联资产</label>
-              
+              <div className="flex flex-col gap-3">
+                <div className="flex items-center justify-between gap-3">
+                  <label className="text-[10px] uppercase tracking-widest text-gray-400 font-bold">关联资产</label>
+                  {copiedAssetIds.length > 0 && (
+                    <Badge variant="secondary" className="exclude-from-export h-5 rounded-sm px-1.5 text-[10px] font-mono text-gray-500">
+                      来自 #{copiedAssetSourceSequence}
+                    </Badge>
+                  )}
+                </div>
+                <div className="exclude-from-export grid grid-cols-2 gap-2">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    className="h-8 gap-1.5 px-2 text-xs"
+                    onClick={() => onCopyAssets(current)}
+                    title="复制当前镜头关联资产"
+                  >
+                    <ClipboardCopy className="h-3.5 w-3.5" />
+                    复制资产
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    className="h-8 gap-1.5 px-2 text-xs"
+                    onClick={replaceAssetsFromClipboard}
+                    disabled={copiedAssetIds.length === 0}
+                    title={
+                      copiedAssetIds.length > 0
+                        ? `替换为镜头 #${copiedAssetSourceSequence} 的资产`
+                        : '请先从任意镜头复制资产'
+                    }
+                  >
+                    <ClipboardPaste className="h-3.5 w-3.5" />
+                    一键替换
+                  </Button>
+                </div>
+
+                <div className="flex items-center justify-end">
                 <Dialog>
                   <DialogTrigger asChild>
                   <Button variant="ghost" size="sm" className="exclude-from-export h-6 w-6 p-0 rounded-full hover:bg-gray-200">
@@ -744,6 +799,7 @@ ${current.videoPrompt || 'None'}
                   </ScrollArea>
                 </DialogContent>
               </Dialog>
+                </div>
               </div>
 
               <div className="space-y-2">

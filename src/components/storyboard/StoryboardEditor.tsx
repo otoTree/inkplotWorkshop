@@ -94,6 +94,10 @@ export function StoryboardEditor({ projectId }: StoryboardEditorProps) {
   const [assets, setAssets] = useState<Asset[]>([]);
   const [shots, setShots] = useState<Shot[]>([]);
   const [draggedShotId, setDraggedShotId] = useState<string | null>(null);
+  const [assetClipboard, setAssetClipboard] = useState<{
+    sourceShotSequence: number;
+    assetIds: string[];
+  } | null>(null);
   const projectVideoAspectRatio =
     project?.volcengineVideoSettings
       ? normalizeProjectVideoSettings(project.volcengineVideoSettings).aspectRatio
@@ -644,6 +648,22 @@ export function StoryboardEditor({ projectId }: StoryboardEditorProps) {
       setShots(prev => prev.filter(s => s.id !== shotId));
   };
 
+  const handleCopyShotAssets = (shot: Shot) => {
+    const validAssetIds = new Set((assets || []).map((asset) => asset.id));
+    const copiedAssetIds = Array.from(new Set(shot.relatedAssetIds || []))
+      .filter((assetId) => validAssetIds.has(assetId));
+
+    if (copiedAssetIds.length === 0) {
+      alert(`镜头 #${shot.sequence} 还没有关联资产。`);
+      return;
+    }
+
+    setAssetClipboard({
+      sourceShotSequence: shot.sequence,
+      assetIds: copiedAssetIds,
+    });
+  };
+
   if (episodes.length === 0 && !project) return <div className="p-8">加载中...</div>;
 
   const validEpisodesCount = episodes.filter(e => e.content && e.content.trim().length > 0).length;
@@ -689,6 +709,11 @@ export function StoryboardEditor({ projectId }: StoryboardEditorProps) {
               <Badge variant="outline" className="font-mono text-xs text-gray-500">
                 共 {shots?.length ? getStoryboardTotalDurationSeconds(shots) : 0} 秒
               </Badge>
+              {assetClipboard && (
+                <Badge variant="secondary" className="font-mono text-xs text-gray-600">
+                  已复制镜头 #{assetClipboard.sourceShotSequence} 的 {assetClipboard.assetIds.length} 个资产
+                </Badge>
+              )}
             </div>
           </div>
           
@@ -793,6 +818,9 @@ export function StoryboardEditor({ projectId }: StoryboardEditorProps) {
                   projectId={projectId}
                   videoAspectRatio={projectVideoAspectRatio}
                   sensitivityPrompt={project?.sensitivityPrompt || ''}
+                  copiedAssetIds={assetClipboard?.assetIds || []}
+                  copiedAssetSourceSequence={assetClipboard?.sourceShotSequence}
+                  onCopyAssets={handleCopyShotAssets}
                   onUpdate={handleUpdateShot}
                   onDelete={handleDeleteShot}
                   onDragStart={() => setDraggedShotId(shot.id)}
