@@ -54,6 +54,8 @@ type BackfillCandidate = {
   createdAt?: string | null;
 };
 
+const PAGE_SIZE = 1000;
+
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   value !== null && typeof value === 'object' && !Array.isArray(value);
 
@@ -165,13 +167,31 @@ const getShotRows = async (
   supabase: AdminSupabaseClient,
   projectId?: string | null
 ) => {
+  const fetchShotPages = async (episodeIds?: string[]) => {
+    const rows: ShotRow[] = [];
+    for (let from = 0; ; from += PAGE_SIZE) {
+      const to = from + PAGE_SIZE - 1;
+      let query = supabase
+        .from('shots')
+        .select('*')
+        .or('video_generation_id.not.is.null,video_url.not.is.null,video_status.in.(queued,processing,completed,failed)')
+        .order('created_at', { ascending: false })
+        .range(from, to);
+
+      if (episodeIds) {
+        query = query.in('episode_id', episodeIds);
+      }
+
+      const { data, error } = await query;
+      if (error) throw error;
+      rows.push(...((data || []) as ShotRow[]));
+      if (!data || data.length < PAGE_SIZE) break;
+    }
+    return rows;
+  };
+
   if (!projectId) {
-    const { data, error } = await supabase
-      .from('shots')
-      .select('*')
-      .or('video_generation_id.not.is.null,video_url.not.is.null,video_status.in.(queued,processing,completed,failed)');
-    if (error) throw error;
-    return (data || []) as ShotRow[];
+    return fetchShotPages();
   }
 
   const { data: episodes, error: episodeError } = await supabase
@@ -182,13 +202,7 @@ const getShotRows = async (
   const episodeIds = (episodes || []).map((episode) => episode.id);
   if (episodeIds.length === 0) return [];
 
-  const { data, error } = await supabase
-    .from('shots')
-    .select('*')
-    .in('episode_id', episodeIds)
-    .or('video_generation_id.not.is.null,video_url.not.is.null,video_status.in.(queued,processing,completed,failed)');
-  if (error) throw error;
-  return (data || []) as ShotRow[];
+  return fetchShotPages(episodeIds);
 };
 
 const collectRedisCandidates = async (windowMs: number): Promise<BackfillCandidate[]> => {
@@ -238,15 +252,29 @@ const collectTaskCandidates = async (
   supabase: AdminSupabaseClient,
   sinceIso: string
 ): Promise<BackfillCandidate[]> => {
-  const { data, error } = await supabase
-    .from('tasks')
-    .select('id, type, status, payload, result, error, created_at, updated_at')
-    .gte('created_at', sinceIso)
-    .order('created_at', { ascending: false })
-    .limit(1000);
-  if (error) return [];
+  const tasks: Array<{
+    id: string;
+    type?: string | null;
+    status?: string | null;
+    payload?: unknown;
+    result?: unknown;
+    error?: string | null;
+    created_at?: string | null;
+    updated_at?: string | null;
+  }> = [];
+  for (let from = 0; ; from += PAGE_SIZE) {
+    const { data, error } = await supabase
+      .from('tasks')
+      .select('id, type, status, payload, result, error, created_at, updated_at')
+      .gte('created_at', sinceIso)
+      .order('created_at', { ascending: false })
+      .range(from, from + PAGE_SIZE - 1);
+    if (error) return [];
+    tasks.push(...(data || []));
+    if (!data || data.length < PAGE_SIZE) break;
+  }
 
-  return (data || [])
+  return tasks
     .map((task): BackfillCandidate | null => {
       const root = {
         payload: task.payload,
@@ -257,7 +285,7 @@ const collectTaskCandidates = async (
       const taskId = readNestedString(root, ['task_id', 'taskId', 'videoId', 'video_generation_id', 'id']);
       const shotId = readNestedString(root, ['shotId', 'shot_id', 'jobId']);
       const videoUrl = readNestedString(root, ['video_url', 'videoUrl', 'url']);
-      const status = normalizeStatus(readNestedString(root, ['videoStatus', 'video_status', 'status']) || task.status);
+      const status = normalizeStatus(readNestedString(root, ['videoStatus', 'video_status', 'status']) || task.status || '');
       if (!taskId && !videoUrl) return null;
       return {
         source: 'task-record',
@@ -292,6 +320,7 @@ export async function POST(req: Request) {
     const projectId = typeof body.projectId === 'string' ? body.projectId : null;
     const windowHours = Math.max(1, Math.min(24, Number(body.windowHours || 24)));
     const dryRun = Boolean(body.dryRun);
+    const resolveProviderStatus = Boolean(body.resolveProviderStatus);
     const windowMs = windowHours * 60 * 60 * 1000;
     const sinceIso = new Date(Date.now() - windowMs).toISOString();
     const supabase = createAdminClient();
@@ -329,7 +358,11 @@ export async function POST(req: Request) {
       seen.add(key);
 
       try {
-        const taskSnapshot = candidate.taskId
+        const shouldResolveProviderStatus =
+          resolveProviderStatus ||
+          candidate.source === 'redis-active' ||
+          candidate.source === 'redis-history';
+        const taskSnapshot = candidate.taskId && shouldResolveProviderStatus
           ? await getTaskSnapshot(candidate.taskId, shot.video_generation_metadata || {})
           : null;
         const status =

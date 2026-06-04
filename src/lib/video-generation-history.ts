@@ -298,18 +298,21 @@ export const upsertVideoGenerationAttempt = (
   }
 ): VideoGenerationMetadata => {
   const history = normalizeVideoGenerationHistory(metadata);
-  if (params.generationId) {
-    const existing = history.items.find((item) => item.generationId === params.generationId);
-    if (existing) {
-      return updateVideoGenerationAttempt(metadata, {
-        status: params.status,
-        generationId: params.generationId,
-        videoUrl: params.videoUrl,
-        provider: params.provider,
-        model: params.model,
-        error: params.error,
-      });
-    }
+  const existingIndex = params.generationId
+    ? history.items.findIndex((item) => item.generationId === params.generationId)
+    : params.videoUrl
+      ? history.items.findIndex((item) => item.videoUrl === params.videoUrl)
+      : -1;
+  if (existingIndex >= 0) {
+    const existing = history.items[existingIndex];
+    return updateVideoGenerationAttempt(metadata, {
+      status: params.status,
+      generationId: params.generationId ?? existing.generationId,
+      videoUrl: params.videoUrl ?? existing.videoUrl,
+      provider: params.provider,
+      model: params.model,
+      error: params.error,
+    });
   }
 
   const base: VideoGenerationMetadata = {
