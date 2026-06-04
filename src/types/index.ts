@@ -162,9 +162,30 @@ export interface Shot {
     model?: string;
     requestContentMode?: 'asset_uri' | 'url';
     referenceAssetIds?: string[];
+    aspectRatio?: '9:16' | '16:9' | string;
+    resolution?: string;
     rawStatus?: string;
     usage?: Record<string, unknown>;
     error?: Record<string, unknown> | string | null;
+    videoHistory?: {
+      totalAttempts: number;
+      activeAttemptId?: string;
+      cumulativeDescription: string;
+      items: Array<{
+        id: string;
+        attemptNumber: number;
+        startedAt: string;
+        updatedAt: string;
+        status: 'pending' | 'queued' | 'processing' | 'completed' | 'failed';
+        generationId?: string | null;
+        videoUrl?: string | null;
+        prompt?: string;
+        description?: string;
+        provider?: string;
+        model?: string;
+        error?: Record<string, unknown> | string | null;
+      }>;
+    };
   };
   
   // 支持单镜头多角色描述 (最多3个)

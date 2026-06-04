@@ -45,6 +45,11 @@ import {
   inferVideoTaskProvider,
   shouldUseSeedance2ForProject,
 } from '@/lib/volcengine/video-compat';
+import {
+  ensureVideoGenerationAttempt,
+  updateVideoGenerationAttempt,
+  buildVideoGenerationAttemptDescription,
+} from '@/lib/video-generation-history';
 
 export const maxDuration = 120;
 
@@ -109,6 +114,33 @@ const getLegacyVideoStatusError = (result: unknown) => {
       root.Error ||
       root.message
   );
+};
+
+const getBlockingAssetLabel = (asset: {
+  name?: string | null;
+  id?: string;
+  blockingAssetId?: string;
+}) => asset.name || asset.id || asset.blockingAssetId || 'reference';
+
+const formatBlockingAssets = (
+  pendingAssets: Array<{
+    name?: string | null;
+    id?: string;
+    blockingAssetId?: string;
+    reason: string;
+  }>
+) => pendingAssets
+  .map((asset) => `${getBlockingAssetLabel(asset)}:${asset.reason}`)
+  .join(', ');
+
+const hasTerminalAssetFailure = (
+  pendingAssets: Array<{ reason: string }>
+) => pendingAssets.some((asset) => asset.reason === 'failed' || asset.reason === 'missing-source');
+
+const getGenerationFailureMessage = (error: unknown) => {
+  if (error instanceof AIAPIError) return error.details || error.message;
+  if (error instanceof Error) return error.message;
+  return String(error);
 };
 
 const getShotAspectRatio = (shot: { video_generation_metadata?: unknown }) => {
@@ -306,9 +338,14 @@ export async function POST(req: Request) {
                 },
               });
               if (resolvedReferences.requiresAssetReadiness) {
-                const blockingMessage = resolvedReferences.pendingAssets
-                  .map((asset) => `${asset.name || asset.id || asset.blockingAssetId || 'reference'}:${asset.reason}`)
-                  .join(', ');
+                const blockingMessage = formatBlockingAssets(resolvedReferences.pendingAssets);
+                if (hasTerminalAssetFailure(resolvedReferences.pendingAssets)) {
+                  throw new AIAPIError(
+                    'Seedance 2.0 参考素材同步失败，视频生成已停止',
+                    422,
+                    blockingMessage
+                  );
+                }
                 throw new AIAPIError(
                   'Seedance 2.0 参考素材尚未全部进入 Active，任务将继续排队等待',
                   409,
@@ -367,6 +404,20 @@ export async function POST(req: Request) {
         const videoStatus = useSeedance2
           ? volcengineSnapshot?.videoStatus || 'processing'
           : (['completed', 'succeeded', 'success'].includes(status) ? 'completed' : 'processing');
+        const submissionMetadata = {
+          ...((claimedShot.video_generation_metadata || {}) as VideoGenerationMetadata),
+          ...(useSeedance2 ? (result.__volcengineMetadata as VideoGenerationMetadata) : {}),
+        };
+        const nextSubmissionMetadata = taskId
+          ? updateVideoGenerationAttempt(submissionMetadata, {
+              status: videoStatus,
+              generationId: taskId,
+              videoUrl: directUrl || null,
+              provider: useSeedance2 ? 'volcengine' : 'legacy',
+              model: useSeedance2 ? resolvedSeedanceModel : undefined,
+              error: null,
+            })
+          : submissionMetadata;
 
         if (taskId) {
           await supabase
@@ -375,7 +426,7 @@ export async function POST(req: Request) {
               video_generation_id: taskId,
               video_status: videoStatus,
               ...(directUrl ? { video_url: directUrl } : {}),
-              ...(useSeedance2 ? { video_generation_metadata: result.__volcengineMetadata } : {}),
+              video_generation_metadata: nextSubmissionMetadata,
             })
             .eq('id', claimedShot.id)
             .eq('user_id', user.id);
@@ -391,8 +442,8 @@ export async function POST(req: Request) {
           videoGenerationId: taskId || null,
           videoUrl: directUrl || null,
           providerStatus: status,
-          ...(useSeedance2 ? { videoGenerationMetadata: result.__volcengineMetadata } : {}),
-          ...getErrorResponseFields(result.__volcengineMetadata?.error),
+          videoGenerationMetadata: nextSubmissionMetadata,
+          ...getErrorResponseFields(nextSubmissionMetadata.error),
         });
       } catch (error) {
         if (error instanceof AIAPIError && (error.status === 429 || error.status === 409)) {
@@ -401,18 +452,18 @@ export async function POST(req: Request) {
             .update({
               video_generation_id: null,
               video_status: 'queued',
-              ...(useSeedance2
-                ? {
-                    video_generation_metadata: {
-                      provider: 'volcengine',
-                      model: resolvedSeedanceModel || undefined,
-                      aspectRatio,
-                      resolution: DEFAULT_SEEDANCE_2_RESOLUTION,
-                      rawStatus: 'waiting_for_assets',
-                      error: error.details || error.message,
-                    },
-                  }
-                : {}),
+              video_generation_metadata: updateVideoGenerationAttempt(
+                (claimedShot.video_generation_metadata || {}) as VideoGenerationMetadata,
+                {
+                  status: 'queued',
+                  provider: useSeedance2 ? 'volcengine' : 'legacy',
+                  model: useSeedance2 ? resolvedSeedanceModel || undefined : undefined,
+                  aspectRatio,
+                  resolution: DEFAULT_SEEDANCE_2_RESOLUTION,
+                  rawStatus: useSeedance2 ? 'waiting_for_assets' : undefined,
+                  error: error.details || error.message,
+                }
+              ),
             })
             .eq('id', claimedShot.id)
             .eq('user_id', user.id)
@@ -426,12 +477,18 @@ export async function POST(req: Request) {
             ...(useSeedance2
               ? {
                   videoGenerationMetadata: {
-                    provider: 'volcengine',
-                    model: resolvedSeedanceModel || undefined,
-                    aspectRatio,
-                    resolution: DEFAULT_SEEDANCE_2_RESOLUTION,
-                    rawStatus: 'waiting_for_assets',
-                    error: error.details || error.message,
+                    ...updateVideoGenerationAttempt(
+                      (claimedShot.video_generation_metadata || {}) as VideoGenerationMetadata,
+                      {
+                        status: 'queued',
+                        provider: 'volcengine',
+                        model: resolvedSeedanceModel || undefined,
+                        aspectRatio,
+                        resolution: DEFAULT_SEEDANCE_2_RESOLUTION,
+                        rawStatus: 'waiting_for_assets',
+                        error: error.details || error.message,
+                      }
+                    ),
                   },
                 }
               : {}),
@@ -443,17 +500,18 @@ export async function POST(req: Request) {
           .update({
             video_generation_id: null,
             video_status: 'failed',
-            video_generation_metadata: {
-              provider: useSeedance2 ? 'volcengine' : 'legacy',
-              ...(useSeedance2 && resolvedSeedanceModel
-                ? { model: resolvedSeedanceModel }
-                : {}),
-              ...(useSeedance2
-                ? { aspectRatio, resolution: DEFAULT_SEEDANCE_2_RESOLUTION }
-                : {}),
-              ...(useSeedance2 ? { rawStatus: 'failed' } : {}),
-              error: error instanceof Error ? error.message : String(error),
-            },
+            video_generation_metadata: updateVideoGenerationAttempt(
+              (claimedShot.video_generation_metadata || {}) as VideoGenerationMetadata,
+              {
+                status: 'failed',
+                provider: useSeedance2 ? 'volcengine' : 'legacy',
+                model: useSeedance2 && resolvedSeedanceModel ? resolvedSeedanceModel : undefined,
+                aspectRatio: useSeedance2 ? aspectRatio : undefined,
+                resolution: useSeedance2 ? DEFAULT_SEEDANCE_2_RESOLUTION : undefined,
+                rawStatus: useSeedance2 ? 'failed' : undefined,
+                error: getGenerationFailureMessage(error),
+              }
+            ),
           })
           .eq('id', claimedShot.id)
           .eq('user_id', user.id)
@@ -487,7 +545,25 @@ export async function POST(req: Request) {
       });
     }
 
-    const metadata = (shot.video_generation_metadata || {}) as VideoGenerationMetadata;
+    const metadata = ensureVideoGenerationAttempt(
+      (shot.video_generation_metadata || {}) as VideoGenerationMetadata,
+      {
+        prompt: shot.video_prompt,
+        description: buildVideoGenerationAttemptDescription({
+          videoPrompt: shot.video_prompt,
+          description: shot.description,
+          sceneLabel: shot.scene_label,
+          characterAction: shot.character_action,
+          emotion: shot.emotion,
+          lightingAtmosphere: shot.lighting_atmosphere,
+          camera: shot.camera,
+          size: shot.size,
+          dialogue: shot.dialogue,
+          soundEffect: shot.sound_effect,
+        }),
+        aspectRatio: resolveVideoAspectRatio(shot, null),
+      }
+    ) as VideoGenerationMetadata;
     const isVolcengineTask = inferVideoTaskProvider(videoId, metadata) === 'volcengine';
     const result = isVolcengineTask ? await getSeedance2VideoTask(videoId) : await getAIVideoStatus(videoId);
     const statusInfo = result.data || result;
@@ -516,7 +592,7 @@ export async function POST(req: Request) {
     } else {
       videoStatus = 'processing';
     }
-    const nextMetadata: VideoGenerationMetadata = isVolcengineTask
+    const polledMetadata: VideoGenerationMetadata = isVolcengineTask
       ? mergeVolcengineTaskMetadata(metadata, result)
       : videoStatus === 'failed'
         ? {
@@ -526,15 +602,21 @@ export async function POST(req: Request) {
             error: providerError || metadata.error || null,
           }
         : metadata;
+    const nextMetadata = updateVideoGenerationAttempt(polledMetadata, {
+      status: videoStatus,
+      generationId: videoId,
+      videoUrl: directUrl || shot.video_url || null,
+      provider: isVolcengineTask ? 'volcengine' : metadata.provider || 'legacy',
+      rawStatus: status || metadata.rawStatus,
+      error: videoStatus === 'failed' ? providerError || metadata.error || null : null,
+    });
 
     await supabase
       .from('shots')
       .update({
         video_status: videoStatus,
         ...(directUrl ? { video_url: directUrl } : {}),
-        ...(videoStatus === 'failed' || isVolcengineTask
-          ? { video_generation_metadata: nextMetadata }
-          : {}),
+        video_generation_metadata: nextMetadata,
       })
       .eq('id', shot.id)
       .eq('user_id', user.id);

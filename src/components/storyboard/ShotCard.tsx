@@ -8,7 +8,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Input } from '@/components/ui/input';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { Save, Trash2, Plus, Box, Maximize2, Download, Copy, Shield, Video, Loader2, GripVertical, ClipboardCopy, ClipboardPaste } from 'lucide-react';
+import { Save, Trash2, Plus, Box, Maximize2, Download, Copy, Shield, Video, Loader2, GripVertical, ClipboardCopy, ClipboardPaste, History, ExternalLink } from 'lucide-react';
 import { toPng } from 'html-to-image';
 import { ShotDetailDialog } from './ShotDetailDialog';
 import { normalizeShotDurationSeconds } from '@/lib/duration';
@@ -16,6 +16,7 @@ import {
   getVideoGenerationErrorMessage,
   normalizeVideoGenerationError,
 } from '@/lib/video-generation-error';
+import { normalizeVideoGenerationHistory } from '@/lib/video-generation-history';
 
 interface ShotCardProps {
   shot: Shot;
@@ -96,6 +97,24 @@ export function ShotCard({
   const isGeneratingVideo = current.videoStatus === 'queued' || (current.videoStatus === 'processing' && !current.videoGenerationId);
   const [queuePosition, setQueuePosition] = useState<number | null>(null);
   const videoErrorMessage = getVideoGenerationErrorMessage(current.videoGenerationMetadata?.error);
+  const videoHistory = normalizeVideoGenerationHistory(current.videoGenerationMetadata);
+  const videoHistoryItems = [...videoHistory.items].sort((a, b) => b.attemptNumber - a.attemptNumber);
+  const historicalVideoUrls = new Set(
+    videoHistory.items
+      .map((item) => item.videoUrl)
+      .filter((url): url is string => Boolean(url))
+  );
+  const generatedAttemptCount = Math.max(
+    videoHistory.totalAttempts,
+    current.videoUrl && historicalVideoUrls.size === 0 ? 1 : 0
+  );
+  const formatHistoryTime = (value: string) =>
+    new Intl.DateTimeFormat('zh-CN', {
+      month: '2-digit',
+      day: '2-digit',
+      hour: '2-digit',
+      minute: '2-digit',
+    }).format(new Date(value));
   
   const currentRef = useRef(current);
   const onUpdateRef = useRef(onUpdate);
@@ -329,6 +348,13 @@ export function ShotCard({
       if (data.status === 'queued') {
         // API confirms it is queued
         setQueuePosition(data.position || null);
+        if (data.videoGenerationMetadata) {
+          onUpdate({
+            ...current,
+            videoStatus: 'queued',
+            videoGenerationMetadata: data.videoGenerationMetadata,
+          });
+        }
         return;
       }
 
@@ -666,9 +692,113 @@ ${current.videoPrompt || 'None'}
               <div className="p-4 border-b border-gray-100 bg-white">
                 <div className="flex items-center justify-between mb-3">
                   <label className="text-[10px] uppercase tracking-widest text-gray-400 font-bold">视频预览</label>
-                  {current.videoStatus === 'completed' && (
-                    <Badge variant="secondary" className="text-[9px] bg-green-50 text-green-600 border-green-200">已生成</Badge>
-                  )}
+                  <div className="exclude-from-export flex items-center gap-2">
+                    {generatedAttemptCount > 0 && (
+                      <Dialog>
+                        <DialogTrigger asChild>
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            className="h-6 gap-1.5 rounded-md px-2 text-[10px] text-gray-500"
+                          >
+                            <History className="h-3 w-3" />
+                            {generatedAttemptCount} 次
+                          </Button>
+                        </DialogTrigger>
+                        <DialogContent className="max-w-2xl">
+                          <DialogHeader>
+                            <DialogTitle>镜头 #{current.sequence} 视频历史</DialogTitle>
+                          </DialogHeader>
+                          <div className="space-y-4">
+                            <div className="grid grid-cols-2 gap-3 text-sm">
+                              <div className="rounded-md border bg-gray-50 p-3">
+                                <div className="text-[10px] font-bold uppercase tracking-widest text-gray-400">生成次数</div>
+                                <div className="mt-1 font-mono text-xl text-gray-900">{generatedAttemptCount}</div>
+                              </div>
+                              <div className="rounded-md border bg-gray-50 p-3">
+                                <div className="text-[10px] font-bold uppercase tracking-widest text-gray-400">视频链接</div>
+                                <div className="mt-1 font-mono text-xl text-gray-900">
+                                  {Math.max(historicalVideoUrls.size, current.videoUrl ? 1 : 0)}
+                                </div>
+                              </div>
+                            </div>
+                            <div className="space-y-2">
+                              <div className="text-[10px] font-bold uppercase tracking-widest text-gray-400">累计描述</div>
+                              <div className="max-h-32 overflow-auto whitespace-pre-wrap rounded-md border bg-white p-3 text-xs leading-relaxed text-gray-600">
+                                {videoHistory.cumulativeDescription || current.description || '暂无描述'}
+                              </div>
+                            </div>
+                            <div className="space-y-2">
+                              <div className="text-[10px] font-bold uppercase tracking-widest text-gray-400">生成记录</div>
+                              <ScrollArea className="max-h-[320px] rounded-md border">
+                                <div className="divide-y">
+                                  {videoHistoryItems.length > 0 ? (
+                                    videoHistoryItems.map((item) => (
+                                      <div key={item.id} className="space-y-2 p-3">
+                                        <div className="flex flex-wrap items-center justify-between gap-2">
+                                          <div className="flex items-center gap-2">
+                                            <Badge variant="secondary" className="rounded-sm text-[10px]">
+                                              第 {item.attemptNumber} 次
+                                            </Badge>
+                                            <span className="text-xs text-gray-500">
+                                              {formatHistoryTime(item.updatedAt)}
+                                            </span>
+                                          </div>
+                                          <Badge variant="outline" className="rounded-sm text-[10px]">
+                                            {item.status}
+                                          </Badge>
+                                        </div>
+                                        {item.videoUrl && (
+                                          <a
+                                            href={item.videoUrl}
+                                            target="_blank"
+                                            rel="noreferrer"
+                                            className="inline-flex max-w-full items-center gap-1 truncate text-xs text-indigo-600 hover:text-indigo-700"
+                                          >
+                                            <ExternalLink className="h-3 w-3 shrink-0" />
+                                            <span className="truncate">{item.videoUrl}</span>
+                                          </a>
+                                        )}
+                                        {item.generationId && (
+                                          <div className="truncate font-mono text-[10px] text-gray-400">
+                                            {item.generationId}
+                                          </div>
+                                        )}
+                                        {item.description && (
+                                          <p className="line-clamp-3 text-xs leading-relaxed text-gray-600">
+                                            {item.description}
+                                          </p>
+                                        )}
+                                      </div>
+                                    ))
+                                  ) : current.videoUrl ? (
+                                    <div className="space-y-2 p-3">
+                                      <Badge variant="secondary" className="rounded-sm text-[10px]">旧记录</Badge>
+                                      <a
+                                        href={current.videoUrl}
+                                        target="_blank"
+                                        rel="noreferrer"
+                                        className="inline-flex max-w-full items-center gap-1 truncate text-xs text-indigo-600 hover:text-indigo-700"
+                                      >
+                                        <ExternalLink className="h-3 w-3 shrink-0" />
+                                        <span className="truncate">{current.videoUrl}</span>
+                                      </a>
+                                    </div>
+                                  ) : (
+                                    <div className="p-3 text-xs text-gray-400">暂无记录</div>
+                                  )}
+                                </div>
+                              </ScrollArea>
+                            </div>
+                          </div>
+                        </DialogContent>
+                      </Dialog>
+                    )}
+                    {current.videoStatus === 'completed' && (
+                      <Badge variant="secondary" className="text-[9px] bg-green-50 text-green-600 border-green-200">已生成</Badge>
+                    )}
+                  </div>
                 </div>
                 <div className="w-full bg-gray-100/50 rounded-lg border border-gray-200 flex flex-col items-center justify-center min-h-[240px] relative overflow-hidden group/video shadow-inner">
                   {isGeneratingVideo && (

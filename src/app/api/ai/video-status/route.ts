@@ -11,6 +11,7 @@ import {
   mergeVolcengineTaskMetadata,
 } from '@/lib/volcengine/video-client';
 import { inferVideoTaskProvider } from '@/lib/volcengine/video-compat';
+import { updateVideoGenerationAttempt } from '@/lib/video-generation-history';
 
 export const maxDuration = 120;
 
@@ -103,17 +104,24 @@ export async function POST(req: Request) {
         statusInfo.content?.video_url ||
         (statusInfo.data && (statusInfo.data.url || statusInfo.data.video_url || statusInfo.data.content?.video_url)) ||
         `/api/ai/download-video?videoId=${videoId}`;
+      nextMetadata = updateVideoGenerationAttempt(
+        isVolcengineTask ? mergeVolcengineTaskMetadata(metadata, result) : metadata,
+        {
+          status: 'completed',
+          generationId: videoId,
+          videoUrl: directUrl,
+          provider: isVolcengineTask ? 'volcengine' : metadata.provider || 'legacy',
+          rawStatus: status || metadata.rawStatus,
+          error: null,
+        }
+      );
 
       const { error: updateError } = await supabase
         .from('shots')
         .update({
           video_status: 'completed',
           video_url: directUrl,
-          ...(isVolcengineTask
-            ? {
-                video_generation_metadata: mergeVolcengineTaskMetadata(metadata, result),
-              }
-            : {}),
+          video_generation_metadata: nextMetadata,
         })
         .eq('video_generation_id', videoId)
         .eq('user_id', user.id)
@@ -122,16 +130,24 @@ export async function POST(req: Request) {
       if (updateError) {
           console.error('Failed to persist completed video status:', updateError);
         }
-      nextMetadata = isVolcengineTask ? mergeVolcengineTaskMetadata(metadata, result) : metadata;
     } else if ((isVolcengineTask && mappedVolcengineStatus === 'failed') || (!isVolcengineTask && ['failed', 'error'].includes(status))) {
-      nextMetadata = isVolcengineTask
-        ? mergeVolcengineTaskMetadata(metadata, result)
-        : {
-            ...metadata,
-            provider: metadata.provider || 'legacy',
-            rawStatus: status || metadata.rawStatus || 'failed',
-            error: providerError || metadata.error || null,
-          };
+      nextMetadata = updateVideoGenerationAttempt(
+        isVolcengineTask
+          ? mergeVolcengineTaskMetadata(metadata, result)
+          : {
+              ...metadata,
+              provider: metadata.provider || 'legacy',
+              rawStatus: status || metadata.rawStatus || 'failed',
+              error: providerError || metadata.error || null,
+            },
+        {
+          status: 'failed',
+          generationId: videoId,
+          provider: isVolcengineTask ? 'volcengine' : metadata.provider || 'legacy',
+          rawStatus: status || metadata.rawStatus || 'failed',
+          error: providerError || metadata.error || null,
+        }
+      );
       const { error: updateError } = await supabase
         .from('shots')
         .update({

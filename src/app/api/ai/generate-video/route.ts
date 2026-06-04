@@ -4,6 +4,10 @@ import {
   DEFAULT_SEEDANCE_2_RESOLUTION,
   normalizeSeedance2AspectRatio,
 } from '@/lib/volcengine/video-payload';
+import {
+  buildVideoGenerationAttemptDescription,
+  startVideoGenerationAttempt,
+} from '@/lib/video-generation-history';
 
 export const maxDuration = 300;
 
@@ -27,18 +31,45 @@ export async function POST(req: Request) {
         : undefined
     );
 
+    let queuedMetadata: ReturnType<typeof startVideoGenerationAttempt> | null = null;
+
     if (shotId) {
+      const { data: shot } = await supabase
+        .from('shots')
+        .select('id, video_generation_metadata, description, scene_label, character_action, emotion, lighting_atmosphere, camera, size, dialogue, sound_effect, video_prompt')
+        .eq('id', shotId)
+        .eq('user_id', user.id)
+        .maybeSingle();
+      const nextMetadata = startVideoGenerationAttempt(
+        shot?.video_generation_metadata,
+        {
+          prompt,
+          description: buildVideoGenerationAttemptDescription({
+            videoPrompt: prompt,
+            description: shot?.description,
+            sceneLabel: shot?.scene_label,
+            characterAction: shot?.character_action,
+            emotion: shot?.emotion,
+            lightingAtmosphere: shot?.lighting_atmosphere,
+            camera: shot?.camera,
+            size: shot?.size,
+            dialogue: shot?.dialogue,
+            soundEffect: shot?.sound_effect,
+          }),
+          aspectRatio,
+          resolution: DEFAULT_SEEDANCE_2_RESOLUTION,
+        }
+      );
+      queuedMetadata = nextMetadata;
       const { error: queueError } = await supabase
         .from('shots')
         .update({
           video_status: 'queued',
           video_generation_id: null,
-          video_generation_metadata: {
-            aspectRatio,
-            resolution: DEFAULT_SEEDANCE_2_RESOLUTION,
-          },
+          video_generation_metadata: nextMetadata,
         })
         .eq('id', shotId)
+        .eq('user_id', user.id)
         .select('id');
 
       if (queueError) {
@@ -51,6 +82,8 @@ export async function POST(req: Request) {
       message: 'Added to background queue',
       task_id: null,
       position: null,
+      shotId: shotId || null,
+      ...(queuedMetadata ? { videoGenerationMetadata: queuedMetadata } : {}),
     });
   } catch (error) {
     const err = error as { message?: string };

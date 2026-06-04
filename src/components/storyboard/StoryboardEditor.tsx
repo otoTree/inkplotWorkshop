@@ -460,6 +460,13 @@ export function StoryboardEditor({ projectId }: StoryboardEditorProps) {
           
           if (data.status === 'queued') {
             // DB is already updated to queued by the API (or by us before calling), just count it as success
+            if (data.videoGenerationMetadata) {
+              const updatedQueuedShot: Shot = {
+                ...queuedShot,
+                videoGenerationMetadata: data.videoGenerationMetadata,
+              };
+              setShots(prev => prev.map(s => s.id === updatedQueuedShot.id ? updatedQueuedShot : s));
+            }
             successCount++;
           } else {
             const taskId = data.task_id || data.id || data.data?.task_id || data.data?.id;

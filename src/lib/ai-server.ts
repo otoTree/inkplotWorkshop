@@ -225,6 +225,11 @@ const getKey = (config: AIAPIConfig) =>
 const getVideoTaskMapKey = (config: AIAPIConfig, taskId: string) =>
   `video_task_map:${getKey(config)}:${taskId}`;
 
+export const getVideoTaskHistoryKey = (config: AIAPIConfig) =>
+  `video_task_history:${getKey(config)}`;
+
+export const VIDEO_TASK_HISTORY_TTL_SECONDS = 60 * 60 * 24;
+
 const getSemaphore = (config: AIAPIConfig) => {
   const key = getKey(config);
   const existing = semaphoreByKey.get(key);
@@ -638,7 +643,12 @@ export const tryAcquireVideoSlot = async (config: AIAPIConfig, jobId: string): P
         try {
           if (realTaskId) {
             await redis.zadd(activeKey, { score: Date.now() + 15 * 60 * 1000, member: realTaskId });
-            await redis.set(getVideoTaskMapKey(config, realTaskId), jobId, { ex: 60 * 60 * 24 });
+            await redis.set(getVideoTaskMapKey(config, realTaskId), jobId, { ex: VIDEO_TASK_HISTORY_TTL_SECONDS });
+            await redis.zadd(getVideoTaskHistoryKey(config), {
+              score: Date.now(),
+              member: JSON.stringify({ taskId: realTaskId, shotId: jobId }),
+            });
+            await redis.expire(getVideoTaskHistoryKey(config), VIDEO_TASK_HISTORY_TTL_SECONDS);
           }
           await redis.zrem(activeKey, placeholderId);
         } catch (err) {
@@ -687,7 +697,6 @@ export const completeVideoTask = async (taskId: string) => {
     const redis = Redis.fromEnv();
     const activeKey = `video_concurrency:${getKey(config)}:active`;
     await redis.zrem(activeKey, taskId);
-    await redis.del(getVideoTaskMapKey(config, taskId));
   } catch (err) {
     console.error('Failed to complete video task:', err);
   }

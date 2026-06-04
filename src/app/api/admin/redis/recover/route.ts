@@ -2,6 +2,55 @@ import { NextResponse } from 'next/server';
 import { checkAdminAuth } from '@/lib/admin/auth';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { getAIVideoStatus, completeVideoTask, getShotIdByVideoTaskId } from '@/lib/ai-server';
+import {
+  buildVideoGenerationAttemptDescription,
+  upsertVideoGenerationAttempt,
+} from '@/lib/video-generation-history';
+import type { Shot } from '@/types';
+
+type RecoverShotRow = {
+  id: string;
+  description?: string | null;
+  scene_label?: string | null;
+  character_action?: string | null;
+  emotion?: string | null;
+  lighting_atmosphere?: string | null;
+  camera?: string | null;
+  size?: string | null;
+  dialogue?: string | null;
+  sound_effect?: string | null;
+  video_prompt?: string | null;
+  video_generation_metadata?: Shot['videoGenerationMetadata'] | null;
+};
+
+const buildRecoveredMetadata = (
+  shot: RecoverShotRow,
+  params: {
+    videoId: string;
+    dbStatus: NonNullable<Shot['videoStatus']>;
+    videoUrl: string | null;
+  }
+) =>
+  upsertVideoGenerationAttempt(shot.video_generation_metadata || {}, {
+    status: params.dbStatus,
+    generationId: params.videoId,
+    videoUrl: params.videoUrl,
+    prompt: shot.video_prompt,
+    description: buildVideoGenerationAttemptDescription({
+      videoPrompt: shot.video_prompt,
+      description: shot.description,
+      sceneLabel: shot.scene_label,
+      characterAction: shot.character_action,
+      emotion: shot.emotion,
+      lightingAtmosphere: shot.lighting_atmosphere,
+      camera: shot.camera,
+      size: shot.size,
+      dialogue: shot.dialogue,
+      soundEffect: shot.sound_effect,
+    }),
+    provider: 'legacy',
+    updatedAt: new Date().toISOString(),
+  });
 
 export async function POST(req: Request) {
   if (!(await checkAdminAuth())) {
@@ -71,7 +120,7 @@ export async function POST(req: Request) {
         const statusInfo = providerStatus.data || providerStatus;
         const status = (statusInfo.status || '').toLowerCase();
         
-        let dbStatus = 'processing';
+        let dbStatus: NonNullable<Shot['videoStatus']> = 'processing';
         let videoUrl = null;
         const mappedShotId = await getShotIdByVideoTaskId(videoId);
 
@@ -90,12 +139,25 @@ export async function POST(req: Request) {
         let updatedShotsCount = 0;
         if (dbStatus !== 'processing') {
           if (mappedShotId) {
+            const { data: shotForHistory } = await supabase
+              .from('shots')
+              .select('id, description, scene_label, character_action, emotion, lighting_atmosphere, camera, size, dialogue, sound_effect, video_prompt, video_generation_metadata')
+              .eq('id', mappedShotId)
+              .maybeSingle();
             const { data: updatedShots, error: dbError } = await supabase
               .from('shots')
               .update({
                 video_generation_id: videoId,
                 video_status: dbStatus,
-                ...(videoUrl ? { video_url: videoUrl } : {})
+                ...(videoUrl ? { video_url: videoUrl } : {}),
+                ...(shotForHistory
+                  ? {
+                      video_generation_metadata: buildRecoveredMetadata(
+                        shotForHistory as RecoverShotRow,
+                        { videoId, dbStatus, videoUrl }
+                      ),
+                    }
+                  : {}),
               })
               .eq('id', mappedShotId)
               .select('id');
@@ -107,6 +169,16 @@ export async function POST(req: Request) {
 
           if (updatedShotsCount === 0) {
             // Fallback for legacy records where we only stored video_generation_id in shots.
+            const { data: shotsForHistory } = await supabase
+              .from('shots')
+              .select('id, description, scene_label, character_action, emotion, lighting_atmosphere, camera, size, dialogue, sound_effect, video_prompt, video_generation_metadata')
+              .eq('video_generation_id', videoId);
+            const historyMetadataByShotId = new Map(
+              ((shotsForHistory || []) as RecoverShotRow[]).map((shot) => [
+                shot.id,
+                buildRecoveredMetadata(shot, { videoId, dbStatus, videoUrl }),
+              ])
+            );
             const { data: updatedShots, error: dbError } = await supabase
               .from('shots')
               .update({
@@ -118,6 +190,16 @@ export async function POST(req: Request) {
 
             if (!dbError) {
                updatedShotsCount = updatedShots?.length || 0;
+               await Promise.all(
+                 (updatedShots || []).map((shot) => {
+                   const metadata = historyMetadataByShotId.get(shot.id);
+                   if (!metadata) return Promise.resolve();
+                   return supabase
+                     .from('shots')
+                     .update({ video_generation_metadata: metadata })
+                     .eq('id', shot.id);
+                 })
+               );
             }
           }
 
@@ -134,8 +216,12 @@ export async function POST(req: Request) {
           mappedShotId
         });
 
-      } catch (err: any) {
-        results.push({ videoId, success: false, error: err.message });
+      } catch (err: unknown) {
+        results.push({
+          videoId,
+          success: false,
+          error: err instanceof Error ? err.message : String(err),
+        });
       }
     }
 
