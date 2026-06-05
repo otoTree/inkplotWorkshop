@@ -16,7 +16,10 @@ import {
   getVideoGenerationErrorMessage,
   normalizeVideoGenerationError,
 } from '@/lib/video-generation-error';
-import { normalizeVideoGenerationHistory } from '@/lib/video-generation-history';
+import {
+  getVideoGenerationAccess,
+  normalizeVideoGenerationHistory,
+} from '@/lib/video-generation-history';
 
 interface ShotCardProps {
   shot: Shot;
@@ -98,6 +101,7 @@ export function ShotCard({
   const [queuePosition, setQueuePosition] = useState<number | null>(null);
   const videoErrorMessage = getVideoGenerationErrorMessage(current.videoGenerationMetadata?.error);
   const videoHistory = normalizeVideoGenerationHistory(current.videoGenerationMetadata);
+  const videoGenerationAccess = getVideoGenerationAccess(current.videoGenerationMetadata);
   const videoHistoryItems = [...videoHistory.items].sort((a, b) => b.attemptNumber - a.attemptNumber);
   const historicalVideoUrls = new Set(
     videoHistory.items
@@ -295,6 +299,10 @@ export function ShotCard({
   const handleGenerateVideo = async () => {
     if (isGeneratingVideo || current.videoStatus === 'processing') {
       return; // Prevent duplicate clicks
+    }
+    if (videoGenerationAccess.isLocked) {
+      alert(`该分镜已生成 ${videoGenerationAccess.attempts} 次。请联系管理员解禁一次生成机会后再试。`);
+      return;
     }
 
     const fullPrompt = (current.videoPrompt || '').trim();
@@ -649,22 +657,32 @@ ${current.videoPrompt || 'None'}
                     size="sm"
                     variant="outline"
                     className={`h-7 gap-1 px-2 text-xs transition-colors ${
-                      isGeneratingVideo || current.videoStatus === 'processing'
+                      isGeneratingVideo || current.videoStatus === 'processing' || videoGenerationAccess.isLocked
                         ? 'bg-indigo-50 text-indigo-400 border-indigo-200 cursor-not-allowed opacity-80'
                         : 'text-indigo-600 border-indigo-200 hover:bg-indigo-50'
                     }`}
                     onClick={handleGenerateVideo}
-                    disabled={isGeneratingVideo || current.videoStatus === 'processing'}
+                    disabled={isGeneratingVideo || current.videoStatus === 'processing' || videoGenerationAccess.isLocked}
                   >
                     {(isGeneratingVideo || current.videoStatus === 'processing') ? (
                       <Loader2 className="w-3 h-3 animate-spin" />
                     ) : (
                       <Video className="w-3 h-3" />
                     )}
-                    {(isGeneratingVideo || current.videoStatus === 'processing') ? '生成中...' : '生成视频'}
+                    {(isGeneratingVideo || current.videoStatus === 'processing')
+                      ? '生成中...'
+                      : videoGenerationAccess.isLocked
+                        ? '需解禁'
+                        : '生成视频'}
                   </Button>
                 </div>
               </div>
+              {videoGenerationAccess.isLocked && (
+                <div className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-700">
+                  已生成 {videoGenerationAccess.attempts} 次，默认上限 {videoGenerationAccess.baseLimit} 次。
+                  管理员解禁后可再生成 1 次。
+                </div>
+              )}
               <Textarea
                 value={current.videoPrompt || ''}
                 onChange={(e) => updateDraft({ videoPrompt: e.target.value })}

@@ -22,6 +22,9 @@ type TopShot = {
   taskId?: string | null;
   label: string;
   createdAt?: string | null;
+  isLocked: boolean;
+  remainingAttempts: number;
+  allowedAttempts: number;
 };
 
 type ProjectSummary = {
@@ -36,6 +39,7 @@ type ProjectSummary = {
   repeatedShots: number;
   maxAttempts: number;
   videoUrls: number;
+  lockedShots: number;
   statuses: Record<StatusKey, number>;
   topShots: TopShot[];
 };
@@ -58,6 +62,7 @@ type VideoHistoryStats = {
     repeatedShots: number;
     maxAttempts: number;
     videoUrls: number;
+    lockedShots: number;
     statuses: Record<StatusKey, number>;
   };
   projects: ProjectSummary[];
@@ -133,6 +138,28 @@ export default function AdminVideoHistoryPage() {
     fetchStats();
   }, [fetchStats]);
 
+  const unlockShotOnce = async (shot: TopShot) => {
+    if (!confirm(`确定给分镜 ${shot.shotId} 解禁 1 次生成机会吗？`)) return;
+
+    try {
+      const res = await fetch('/api/admin/video-history', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ shotId: shot.shotId }),
+      });
+      const json = await res.json();
+      if (!res.ok) {
+        alert(json.error || '解禁失败');
+        return;
+      }
+      alert('已解禁 1 次生成机会');
+      fetchStats();
+    } catch (err) {
+      console.error(err);
+      alert('网络错误');
+    }
+  };
+
   const projects = useMemo(() => {
     const rows = data?.projects || [];
     return showOnlyRepeated ? rows.filter((project) => project.repeatedShots > 0) : rows;
@@ -173,7 +200,7 @@ export default function AdminVideoHistoryPage() {
 
       {data && (
         <>
-          <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+          <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-5">
             <StatCard
               label="视频任务分镜"
               value={formatNumber(data.totals.videoTaskShots)}
@@ -193,6 +220,11 @@ export default function AdminVideoHistoryPage() {
               label="重复生成分镜"
               value={formatNumber(data.totals.repeatedShots)}
               helper={`最高 ${formatNumber(data.totals.maxAttempts)} 次`}
+            />
+            <StatCard
+              label="已锁定分镜"
+              value={formatNumber(data.totals.lockedShots)}
+              helper="管理员每次解禁只放行 1 次"
             />
           </div>
 
@@ -306,6 +338,7 @@ export default function AdminVideoHistoryPage() {
                                 <span>完成 {formatNumber(project.statuses.completed)}</span>
                                 <span>失败 {formatNumber(project.statuses.failed)}</span>
                                 <span>处理中 {formatNumber(project.statuses.processing + project.statuses.queued)}</span>
+                                <span>锁定 {formatNumber(project.lockedShots)}</span>
                               </div>
                             </TableCell>
                           </TableRow>
@@ -327,12 +360,13 @@ export default function AdminVideoHistoryPage() {
                                           <TableHead className="text-right">链接</TableHead>
                                           <TableHead>状态</TableHead>
                                           <TableHead>任务</TableHead>
+                                          <TableHead>操作</TableHead>
                                         </TableRow>
                                       </TableHeader>
                                       <TableBody>
                                         {project.topShots.length === 0 ? (
                                           <TableRow>
-                                            <TableCell colSpan={6} className="py-4 text-center text-gray-500">
+                                            <TableCell colSpan={7} className="py-4 text-center text-gray-500">
                                               暂无视频历史
                                             </TableCell>
                                           </TableRow>
@@ -358,6 +392,17 @@ export default function AdminVideoHistoryPage() {
                                               </TableCell>
                                               <TableCell className="max-w-[220px] truncate font-mono text-xs text-gray-500">
                                                 {shot.taskId || '-'}
+                                              </TableCell>
+                                              <TableCell>
+                                                {shot.isLocked ? (
+                                                  <Button size="sm" onClick={() => unlockShotOnce(shot)}>
+                                                    解禁一次
+                                                  </Button>
+                                                ) : (
+                                                  <span className="text-xs text-gray-500">
+                                                    剩 {shot.remainingAttempts} / {shot.allowedAttempts}
+                                                  </span>
+                                                )}
                                               </TableCell>
                                             </TableRow>
                                           ))

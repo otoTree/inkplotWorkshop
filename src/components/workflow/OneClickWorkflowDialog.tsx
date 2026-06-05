@@ -35,6 +35,7 @@ import {
   getVideoGenerationErrorMessage,
   normalizeVideoGenerationError,
 } from '@/lib/video-generation-error';
+import { getVideoGenerationAccess } from '@/lib/video-generation-history';
 
 interface OneClickWorkflowDialogProps {
   projectId: string;
@@ -499,8 +500,17 @@ export function OneClickWorkflowDialog({ projectId, open, onOpenChange }: OneCli
           log(`共找到 ${shotsToGenerate.length} 个镜头需要生成视频...`);
           let completedVideos = 0;
           let successVideos = 0;
+          let skippedLockedVideos = 0;
           
           const processVideo = async (currentShot: Shot) => {
+            const access = getVideoGenerationAccess(currentShot.videoGenerationMetadata);
+            if (access.isLocked) {
+              skippedLockedVideos++;
+              completedVideos++;
+              setProgress(80 + ((completedVideos / shotsToGenerate.length) * 20)); // Up to 100%
+              return;
+            }
+
             const fullPrompt = [
               currentShot.videoPrompt ? `[Video Prompt] ${currentShot.videoPrompt}` : '',
               currentShot.description ? `[Visual Description] ${currentShot.description}` : '',
@@ -600,7 +610,7 @@ export function OneClickWorkflowDialog({ projectId, open, onOpenChange }: OneCli
             const chunk = shotsToGenerate.slice(i, i + videoChunkSize);
             await Promise.allSettled(chunk.map(shot => processVideo(shot)));
           }
-          log(`成功发起 ${successVideos}/${shotsToGenerate.length} 个视频生成任务。`);
+          log(`成功发起 ${successVideos}/${shotsToGenerate.length} 个视频生成任务。${skippedLockedVideos > 0 ? `已跳过 ${skippedLockedVideos} 个超限镜头。` : ''}`);
         } else {
           log('所有镜头已生成视频或正在生成中。');
           setProgress(100);

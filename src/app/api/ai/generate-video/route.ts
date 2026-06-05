@@ -6,6 +6,7 @@ import {
 } from '@/lib/volcengine/video-payload';
 import {
   buildVideoGenerationAttemptDescription,
+  getVideoGenerationAccess,
   startVideoGenerationAttempt,
 } from '@/lib/video-generation-history';
 
@@ -40,6 +41,20 @@ export async function POST(req: Request) {
         .eq('id', shotId)
         .eq('user_id', user.id)
         .maybeSingle();
+      if (!shot) {
+        return NextResponse.json({ error: 'Shot not found' }, { status: 404 });
+      }
+      const access = getVideoGenerationAccess(shot.video_generation_metadata);
+      if (access.isLocked) {
+        return NextResponse.json(
+          {
+            error: `该分镜已生成 ${access.attempts} 次，超过默认 ${access.baseLimit} 次限制。请联系管理员解禁一次生成机会。`,
+            videoGenerationLocked: true,
+            videoGenerationAccess: access,
+          },
+          { status: 403 }
+        );
+      }
       const nextMetadata = startVideoGenerationAttempt(
         shot?.video_generation_metadata,
         {

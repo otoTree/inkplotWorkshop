@@ -26,6 +26,7 @@ export interface VideoGenerationHistory {
 
 type VideoGenerationMetadata = NonNullable<Shot['videoGenerationMetadata']>;
 
+export const DEFAULT_VIDEO_GENERATION_ATTEMPT_LIMIT = 3;
 const MAX_HISTORY_ITEMS = 30;
 const MAX_DESCRIPTION_LENGTH = 900;
 
@@ -127,6 +128,81 @@ const writeHistory = (
     items: history.items.slice(-MAX_HISTORY_ITEMS),
   },
 });
+
+export const normalizeVideoGenerationControl = (
+  metadata: Shot['videoGenerationMetadata'] | null | undefined
+) => {
+  const rawControl = isRecord(metadata) ? metadata.videoGenerationControl : null;
+  const extraAttempts =
+    isRecord(rawControl) && Number.isFinite(Number(rawControl.extraAttempts))
+      ? Math.max(0, Math.floor(Number(rawControl.extraAttempts)))
+      : 0;
+  const unlockCount =
+    isRecord(rawControl) && Number.isFinite(Number(rawControl.unlockCount))
+      ? Math.max(0, Math.floor(Number(rawControl.unlockCount)))
+      : extraAttempts;
+
+  return {
+    extraAttempts,
+    unlockCount,
+    lastUnlockedAt:
+      isRecord(rawControl) && typeof rawControl.lastUnlockedAt === 'string'
+        ? rawControl.lastUnlockedAt
+        : undefined,
+    lastUnlockedBy:
+      isRecord(rawControl) &&
+      (typeof rawControl.lastUnlockedBy === 'string' || rawControl.lastUnlockedBy === null)
+        ? rawControl.lastUnlockedBy
+        : undefined,
+  };
+};
+
+export const getVideoGenerationAccess = (
+  metadata: Shot['videoGenerationMetadata'] | null | undefined
+) => {
+  const history = normalizeVideoGenerationHistory(metadata);
+  const control = normalizeVideoGenerationControl(metadata);
+  const allowedAttempts = DEFAULT_VIDEO_GENERATION_ATTEMPT_LIMIT + control.extraAttempts;
+  const remainingAttempts = Math.max(0, allowedAttempts - history.totalAttempts);
+
+  return {
+    attempts: history.totalAttempts,
+    baseLimit: DEFAULT_VIDEO_GENERATION_ATTEMPT_LIMIT,
+    extraAttempts: control.extraAttempts,
+    allowedAttempts,
+    remainingAttempts,
+    isLocked: remainingAttempts <= 0,
+    unlockCount: control.unlockCount,
+    lastUnlockedAt: control.lastUnlockedAt,
+    lastUnlockedBy: control.lastUnlockedBy,
+  };
+};
+
+export const grantVideoGenerationAttempt = (
+  metadata: Shot['videoGenerationMetadata'] | null | undefined,
+  params?: { adminUserId?: string | null }
+): VideoGenerationMetadata => {
+  const base: VideoGenerationMetadata = {
+    ...(isRecord(metadata) ? metadata : {}),
+  };
+  const history = normalizeVideoGenerationHistory(metadata);
+  const control = normalizeVideoGenerationControl(metadata);
+  const nextExtraAttempts = Math.max(
+    control.extraAttempts + 1,
+    history.totalAttempts - DEFAULT_VIDEO_GENERATION_ATTEMPT_LIMIT + 1
+  );
+
+  return {
+    ...base,
+    videoGenerationControl: {
+      ...control,
+      extraAttempts: nextExtraAttempts,
+      unlockCount: control.unlockCount + 1,
+      lastUnlockedAt: new Date().toISOString(),
+      lastUnlockedBy: params?.adminUserId ?? null,
+    },
+  };
+};
 
 export const buildVideoGenerationAttemptDescription = (shot: {
   videoPrompt?: string | null;

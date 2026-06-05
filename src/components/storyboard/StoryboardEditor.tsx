@@ -34,6 +34,7 @@ import {
   getVideoGenerationErrorMessage,
   normalizeVideoGenerationError,
 } from '@/lib/video-generation-error';
+import { getVideoGenerationAccess } from '@/lib/video-generation-history';
 
 interface StoryboardEditorProps {
   projectId: string;
@@ -406,6 +407,15 @@ export function StoryboardEditor({ projectId }: StoryboardEditorProps) {
 
     try {
       const processShot = async (currentShot: Shot) => {
+        const access = getVideoGenerationAccess(currentShot.videoGenerationMetadata);
+        if (access.isLocked) {
+          console.warn(`镜头 ${currentShot.sequence} 已生成 ${access.attempts} 次，跳过。`);
+          failedCount++;
+          completedCount++;
+          setVideoGenerationCurrent(completedCount);
+          return;
+        }
+
         const fullPrompt = (currentShot.videoPrompt || '').trim();
 
         if (!fullPrompt.trim()) {

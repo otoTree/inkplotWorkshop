@@ -186,6 +186,12 @@ export interface Shot {
         error?: Record<string, unknown> | string | null;
       }>;
     };
+    videoGenerationControl?: {
+      extraAttempts?: number;
+      unlockCount?: number;
+      lastUnlockedAt?: string;
+      lastUnlockedBy?: string | null;
+    };
   };
   
   // 支持单镜头多角色描述 (最多3个)

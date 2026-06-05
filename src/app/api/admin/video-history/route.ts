@@ -1,6 +1,10 @@
 import { NextResponse } from 'next/server';
 import { checkAdminAuth } from '@/lib/admin/auth';
 import { createAdminClient } from '@/lib/supabase/admin';
+import {
+  getVideoGenerationAccess,
+  grantVideoGenerationAttempt,
+} from '@/lib/video-generation-history';
 import type { Shot } from '@/types';
 
 export const dynamic = 'force-dynamic';
@@ -50,6 +54,7 @@ type ProjectSummary = {
   repeatedShots: number;
   maxAttempts: number;
   videoUrls: number;
+  lockedShots: number;
   statuses: Record<StatusKey, number>;
   topShots: Array<{
     shotId: string;
@@ -63,6 +68,9 @@ type ProjectSummary = {
     taskId?: string | null;
     label: string;
     createdAt?: string | null;
+    isLocked: boolean;
+    remainingAttempts: number;
+    allowedAttempts: number;
   }>;
 };
 
@@ -163,6 +171,7 @@ const createSummary = (project: ProjectRow): ProjectSummary => ({
   repeatedShots: 0,
   maxAttempts: 0,
   videoUrls: 0,
+  lockedShots: 0,
   statuses: emptyStatuses(),
   topShots: [],
 });
@@ -195,6 +204,7 @@ export async function GET(req: Request) {
     let globalRepeatedShots = 0;
     let globalVideoUrls = 0;
     let globalMaxAttempts = 0;
+    let globalLockedShots = 0;
 
     shots.forEach((shot) => {
       const episode = episodesById.get(shot.episode_id);
@@ -219,6 +229,7 @@ export async function GET(req: Request) {
       const attempts = getAttempts(shot.video_generation_metadata);
       const urlCount = getHistoryVideoUrlCount(shot.video_generation_metadata);
       const status = (shot.video_status || 'unknown') as StatusKey;
+      const access = getVideoGenerationAccess(shot.video_generation_metadata);
 
       summary.videoTaskShots += 1;
       summary.totalAttempts += attempts;
@@ -227,6 +238,7 @@ export async function GET(req: Request) {
       summary.statuses[status] = (summary.statuses[status] || 0) + 1;
       if (attempts > 0) summary.shotsWithHistory += 1;
       if (attempts > 1) summary.repeatedShots += 1;
+      if (access.isLocked) summary.lockedShots += 1;
 
       globalVideoTaskShots += 1;
       globalAttempts += attempts;
@@ -235,6 +247,7 @@ export async function GET(req: Request) {
       globalStatuses[status] = (globalStatuses[status] || 0) + 1;
       if (attempts > 0) globalShotsWithHistory += 1;
       if (attempts > 1) globalRepeatedShots += 1;
+      if (access.isLocked) globalLockedShots += 1;
 
       if (attempts > 0) {
         summary.topShots.push({
@@ -249,6 +262,9 @@ export async function GET(req: Request) {
           taskId: shot.video_generation_id,
           label: getShotLabel(shot),
           createdAt: shot.created_at,
+          isLocked: access.isLocked,
+          remainingAttempts: access.remainingAttempts,
+          allowedAttempts: access.allowedAttempts,
         });
       }
     });
@@ -287,6 +303,7 @@ export async function GET(req: Request) {
         repeatedShots: globalRepeatedShots,
         maxAttempts: globalMaxAttempts,
         videoUrls: globalVideoUrls,
+        lockedShots: globalLockedShots,
         statuses: globalStatuses,
       },
       projects: projectSummaries,
@@ -294,6 +311,51 @@ export async function GET(req: Request) {
   } catch (err) {
     const error = err as Error;
     console.error('Error fetching video history stats:', error);
+    return NextResponse.json({ error: error.message || 'Internal Error' }, { status: 500 });
+  }
+}
+
+export async function POST(req: Request) {
+  if (!(await checkAdminAuth())) {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  }
+
+  try {
+    const body = await req.json();
+    const shotId = typeof body.shotId === 'string' ? body.shotId : '';
+    if (!shotId) {
+      return NextResponse.json({ error: 'Missing shotId' }, { status: 400 });
+    }
+
+    const supabase = createAdminClient();
+    const { data: shot, error: shotError } = await supabase
+      .from('shots')
+      .select('id, video_generation_metadata')
+      .eq('id', shotId)
+      .maybeSingle();
+
+    if (shotError) throw shotError;
+    if (!shot) {
+      return NextResponse.json({ error: 'Shot not found' }, { status: 404 });
+    }
+
+    const nextMetadata = grantVideoGenerationAttempt(shot.video_generation_metadata, {
+      adminUserId: null,
+    });
+    const { error: updateError } = await supabase
+      .from('shots')
+      .update({ video_generation_metadata: nextMetadata })
+      .eq('id', shotId);
+    if (updateError) throw updateError;
+
+    return NextResponse.json({
+      success: true,
+      shotId,
+      videoGenerationAccess: getVideoGenerationAccess(nextMetadata),
+    });
+  } catch (err) {
+    const error = err as Error;
+    console.error('Error unlocking video generation:', error);
     return NextResponse.json({ error: error.message || 'Internal Error' }, { status: 500 });
   }
 }
