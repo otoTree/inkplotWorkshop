@@ -39,6 +39,17 @@ const compactText = (value: unknown) =>
 const limitText = (value: string, limit = MAX_DESCRIPTION_LENGTH) =>
   value.length > limit ? `${value.slice(0, limit - 1)}...` : value;
 
+const isFailedHistoryStatus = (status: unknown) => {
+  const normalized = compactText(status).toLowerCase();
+  return normalized === 'failed' || normalized === 'error';
+};
+
+const isCountableHistoryItem = (item: VideoGenerationHistoryItem) =>
+  !isFailedHistoryStatus(item.status);
+
+const getNextAttemptNumber = (items: VideoGenerationHistoryItem[]) =>
+  Math.max(0, ...items.map((item) => item.attemptNumber || 0)) + 1;
+
 const makeAttemptId = () => {
   if (globalThis.crypto && typeof globalThis.crypto.randomUUID === 'function') {
     return globalThis.crypto.randomUUID();
@@ -90,12 +101,10 @@ export const normalizeVideoGenerationHistory = (
   const items = rawItems
     .map(toHistoryItem)
     .filter((item): item is VideoGenerationHistoryItem => Boolean(item))
+    .filter(isCountableHistoryItem)
     .sort((a, b) => a.attemptNumber - b.attemptNumber)
     .slice(-MAX_HISTORY_ITEMS);
-  const totalAttempts =
-    isRecord(rawHistory) && Number.isFinite(Number(rawHistory.totalAttempts))
-      ? Math.max(Number(rawHistory.totalAttempts), items.length)
-      : items.length;
+  const totalAttempts = items.length;
 
   return {
     totalAttempts,
@@ -120,14 +129,25 @@ const buildCumulativeDescription = (items: VideoGenerationHistoryItem[]) =>
 const writeHistory = (
   metadata: VideoGenerationMetadata,
   history: VideoGenerationHistory
-): VideoGenerationMetadata => ({
-  ...metadata,
-  videoHistory: {
-    ...history,
-    cumulativeDescription: buildCumulativeDescription(history.items),
-    items: history.items.slice(-MAX_HISTORY_ITEMS),
-  },
-});
+): VideoGenerationMetadata => {
+  const items = history.items
+    .filter(isCountableHistoryItem)
+    .sort((a, b) => a.attemptNumber - b.attemptNumber)
+    .slice(-MAX_HISTORY_ITEMS);
+
+  return {
+    ...metadata,
+    videoHistory: {
+      ...history,
+      totalAttempts: items.length,
+      activeAttemptId: items.some((item) => item.id === history.activeAttemptId)
+        ? history.activeAttemptId
+        : undefined,
+      cumulativeDescription: buildCumulativeDescription(items),
+      items,
+    },
+  };
+};
 
 export const normalizeVideoGenerationControl = (
   metadata: Shot['videoGenerationMetadata'] | null | undefined
@@ -254,7 +274,7 @@ export const startVideoGenerationAttempt = (
   };
   const history = normalizeVideoGenerationHistory(metadata);
   const now = new Date().toISOString();
-  const nextAttemptNumber = history.totalAttempts + 1;
+  const nextAttemptNumber = getNextAttemptNumber(history.items);
   const item: VideoGenerationHistoryItem = {
     id: makeAttemptId(),
     attemptNumber: nextAttemptNumber,
@@ -398,7 +418,7 @@ export const upsertVideoGenerationAttempt = (
     ...('error' in params ? { error: params.error } : {}),
   };
   const now = new Date().toISOString();
-  const nextAttemptNumber = history.totalAttempts + 1;
+  const nextAttemptNumber = getNextAttemptNumber(history.items);
   const item: VideoGenerationHistoryItem = {
     id: makeAttemptId(),
     attemptNumber: nextAttemptNumber,

@@ -4,6 +4,7 @@ import { createAdminClient } from '@/lib/supabase/admin';
 import {
   getVideoGenerationAccess,
   grantVideoGenerationAttempt,
+  normalizeVideoGenerationHistory,
 } from '@/lib/video-generation-history';
 import type { Shot } from '@/types';
 
@@ -136,10 +137,8 @@ const loadShotsForEpisodes = async (
 };
 
 const getAttempts = (metadata: Shot['videoGenerationMetadata'] | null | undefined) => {
-  const history = metadata?.videoHistory;
-  const total = Number(history?.totalAttempts || 0);
-  const items = Array.isArray(history?.items) ? history.items.length : 0;
-  return Math.max(total, items);
+  const history = normalizeVideoGenerationHistory(metadata);
+  return history.totalAttempts;
 };
 
 const getHistoryVideoUrlCount = (metadata: Shot['videoGenerationMetadata'] | null | undefined) =>
@@ -226,9 +225,15 @@ export async function GET(req: Request) {
       );
       if (!hasVideoTask) return;
 
+      const status = (shot.video_status || 'unknown') as StatusKey;
+      if (status === 'failed') {
+        summary.statuses[status] = (summary.statuses[status] || 0) + 1;
+        globalStatuses[status] = (globalStatuses[status] || 0) + 1;
+        return;
+      }
+
       const attempts = getAttempts(shot.video_generation_metadata);
       const urlCount = getHistoryVideoUrlCount(shot.video_generation_metadata);
-      const status = (shot.video_status || 'unknown') as StatusKey;
       const access = getVideoGenerationAccess(shot.video_generation_metadata);
 
       summary.videoTaskShots += 1;
