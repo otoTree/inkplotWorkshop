@@ -31,7 +31,7 @@ interface ShotCardProps {
   copiedAssetIds: string[];
   copiedAssetSourceSequence?: number;
   onCopyAssets: (shot: Shot) => void;
-  onUpdate: (shot: Shot) => void;
+  onUpdate: (shot: Shot) => void | Promise<void>;
   onDelete: (id: string) => void;
   onDragStart?: () => void;
   onDragOver?: (event: DragEvent<HTMLDivElement>) => void;
@@ -58,6 +58,7 @@ export function ShotCard({
   const [isEditing, setIsEditing] = useState(false);
   const [isDetailOpen, setIsDetailOpen] = useState(false);
   const [draft, setDraft] = useState<Shot | null>(null);
+  const [isSaving, setIsSaving] = useState(false);
   const [isReducing, setIsReducing] = useState(false);
   const [compareOpen, setCompareOpen] = useState(false);
   const [compareData, setCompareData] = useState<{
@@ -416,9 +417,17 @@ export function ShotCard({
   };
 
   const save = async () => {
-    onUpdate(current);
-    setIsEditing(false);
-    setDraft(null);
+    setIsSaving(true);
+    try {
+      await onUpdate(current);
+      setIsEditing(false);
+      setDraft(null);
+    } catch (error) {
+      console.error('Failed to save shot:', error);
+      alert(error instanceof Error ? error.message : '保存分镜失败，请稍后重试。');
+    } finally {
+      setIsSaving(false);
+    }
   };
 
   const deleteShot = async () => {
@@ -618,8 +627,8 @@ ${current.videoPrompt || 'None'}
                 <Maximize2 className="w-3.5 h-3.5" />
             </Button>
             {isEditing ? (
-              <Button size="sm" onClick={save} className="h-7 gap-2 ml-1">
-                <Save className="w-3 h-3" /> 保存
+              <Button size="sm" onClick={save} className="h-7 gap-2 ml-1" disabled={isSaving}>
+                <Save className="w-3 h-3" /> {isSaving ? '保存中...' : '保存'}
               </Button>
             ) : (
             //   <Button size="sm" variant="ghost" className="h-7" onClick={() => {
@@ -695,8 +704,10 @@ ${current.videoPrompt || 'None'}
             <div className="exclude-from-export pt-2 flex justify-end">
                 {isEditing && (
                     <div className="flex gap-2">
-                         <Button size="sm" variant="outline" onClick={() => { setIsEditing(false); setDraft(null); }}>取消</Button>
-                         <Button size="sm" className="bg-black text-white hover:bg-gray-800" onClick={save}>保存更改</Button>
+                         <Button size="sm" variant="outline" onClick={() => { setIsEditing(false); setDraft(null); }} disabled={isSaving}>取消</Button>
+                         <Button size="sm" className="bg-black text-white hover:bg-gray-800" onClick={save} disabled={isSaving}>
+                           {isSaving ? '保存中...' : '保存更改'}
+                         </Button>
                     </div>
                 )}
             </div>
@@ -990,7 +1001,7 @@ ${current.videoPrompt || 'None'}
         <ShotDetailDialog 
           open={isDetailOpen} 
           onOpenChange={setIsDetailOpen}
-          shot={shot}
+          shot={current}
           assets={assets}
           onSave={onUpdate}
         />

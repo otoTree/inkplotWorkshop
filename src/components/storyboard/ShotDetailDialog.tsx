@@ -22,12 +22,13 @@ interface ShotDetailDialogProps {
   onOpenChange: (open: boolean) => void;
   shot: Shot;
   assets: Asset[];
-  onSave: (shot: Shot) => void;
+  onSave: (shot: Shot) => void | Promise<void>;
 }
 
 export function ShotDetailDialog({ open, onOpenChange, shot, assets, onSave }: ShotDetailDialogProps) {
-    const [data, setData] = useState<Shot>(shot);
+  const [data, setData] = useState<Shot>(shot);
   const [assetSearch, setAssetSearch] = useState('');
+  const [isSaving, setIsSaving] = useState(false);
 
   const sensitivityOptions = [
     { value: '0', label: '无' },
@@ -36,9 +37,17 @@ export function ShotDetailDialog({ open, onOpenChange, shot, assets, onSave }: S
     { value: '3', label: '强' },
   ];
 
-  const handleSave = () => {
-    onSave(data);
-    onOpenChange(false);
+  const handleSave = async () => {
+    setIsSaving(true);
+    try {
+      await onSave(data);
+      onOpenChange(false);
+    } catch (error) {
+      console.error('Failed to save shot:', error);
+      alert(error instanceof Error ? error.message : '保存分镜失败，请稍后重试。');
+    } finally {
+      setIsSaving(false);
+    }
   };
 
   const handleOpenChange = (nextOpen: boolean) => {
@@ -247,9 +256,9 @@ export function ShotDetailDialog({ open, onOpenChange, shot, assets, onSave }: S
         </div>
 
         <DialogFooter className="p-4 border-t bg-white shrink-0 z-10">
-          <Button variant="outline" size="lg" onClick={() => onOpenChange(false)}>取消</Button>
-          <Button onClick={handleSave} size="lg" className="bg-black text-white hover:bg-black/90 min-w-[120px]">
-            保存更改
+          <Button variant="outline" size="lg" onClick={() => onOpenChange(false)} disabled={isSaving}>取消</Button>
+          <Button onClick={handleSave} size="lg" className="bg-black text-white hover:bg-black/90 min-w-[120px]" disabled={isSaving}>
+            {isSaving ? '保存中...' : '保存更改'}
           </Button>
         </DialogFooter>
       </DialogContent>
