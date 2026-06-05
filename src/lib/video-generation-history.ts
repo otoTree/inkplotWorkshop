@@ -50,6 +50,71 @@ const isCountableHistoryItem = (item: VideoGenerationHistoryItem) =>
 const getNextAttemptNumber = (items: VideoGenerationHistoryItem[]) =>
   Math.max(0, ...items.map((item) => item.attemptNumber || 0)) + 1;
 
+const getHistoryDedupeKey = (item: VideoGenerationHistoryItem) => {
+  const generationId = compactText(item.generationId);
+  const videoUrl = compactText(item.videoUrl);
+  if (generationId && videoUrl) return `generation:${generationId}|${videoUrl}`;
+  if (!generationId && videoUrl) return `url:${videoUrl}`;
+  return '';
+};
+
+const getTimeValue = (value?: string) => {
+  const time = value ? Date.parse(value) : NaN;
+  return Number.isFinite(time) ? time : 0;
+};
+
+const getItemCompletenessScore = (item: VideoGenerationHistoryItem) =>
+  [
+    item.generationId,
+    item.videoUrl,
+    item.prompt,
+    item.description,
+    item.provider,
+    item.model,
+    item.error,
+  ].filter(Boolean).length;
+
+const chooseHistoryItem = (
+  current: VideoGenerationHistoryItem,
+  candidate: VideoGenerationHistoryItem
+) => {
+  const scoreDelta = getItemCompletenessScore(candidate) - getItemCompletenessScore(current);
+  if (scoreDelta !== 0) return scoreDelta > 0 ? candidate : current;
+  return getTimeValue(candidate.updatedAt || candidate.startedAt) >=
+    getTimeValue(current.updatedAt || current.startedAt)
+    ? candidate
+    : current;
+};
+
+const normalizeAttemptNumbers = (items: VideoGenerationHistoryItem[]) =>
+  items
+    .slice()
+    .sort((a, b) => {
+      const timeDelta = getTimeValue(a.startedAt || a.updatedAt) - getTimeValue(b.startedAt || b.updatedAt);
+      return timeDelta || a.attemptNumber - b.attemptNumber;
+    })
+    .map((item, index) => ({
+      ...item,
+      attemptNumber: index + 1,
+    }));
+
+const dedupeHistoryItems = (items: VideoGenerationHistoryItem[]) => {
+  const keyed = new Map<string, VideoGenerationHistoryItem>();
+  const unkeyed: VideoGenerationHistoryItem[] = [];
+
+  items.forEach((item) => {
+    const key = getHistoryDedupeKey(item);
+    if (!key) {
+      unkeyed.push(item);
+      return;
+    }
+    const current = keyed.get(key);
+    keyed.set(key, current ? chooseHistoryItem(current, item) : item);
+  });
+
+  return normalizeAttemptNumbers([...unkeyed, ...Array.from(keyed.values())]);
+};
+
 const makeAttemptId = () => {
   if (globalThis.crypto && typeof globalThis.crypto.randomUUID === 'function') {
     return globalThis.crypto.randomUUID();
@@ -102,21 +167,21 @@ export const normalizeVideoGenerationHistory = (
     .map(toHistoryItem)
     .filter((item): item is VideoGenerationHistoryItem => Boolean(item))
     .filter(isCountableHistoryItem)
-    .sort((a, b) => a.attemptNumber - b.attemptNumber)
+    .sort((a, b) => a.attemptNumber - b.attemptNumber);
+  const dedupedItems = dedupeHistoryItems(items)
     .slice(-MAX_HISTORY_ITEMS);
-  const totalAttempts = items.length;
+  const totalAttempts = dedupedItems.length;
 
   return {
     totalAttempts,
     activeAttemptId:
-      isRecord(rawHistory) && typeof rawHistory.activeAttemptId === 'string'
+      isRecord(rawHistory) &&
+      typeof rawHistory.activeAttemptId === 'string' &&
+      dedupedItems.some((item) => item.id === rawHistory.activeAttemptId)
         ? rawHistory.activeAttemptId
         : undefined,
-    cumulativeDescription:
-      isRecord(rawHistory) && typeof rawHistory.cumulativeDescription === 'string'
-        ? rawHistory.cumulativeDescription
-        : buildCumulativeDescription(items),
-    items,
+    cumulativeDescription: buildCumulativeDescription(dedupedItems),
+    items: dedupedItems,
   };
 };
 
@@ -132,19 +197,20 @@ const writeHistory = (
 ): VideoGenerationMetadata => {
   const items = history.items
     .filter(isCountableHistoryItem)
-    .sort((a, b) => a.attemptNumber - b.attemptNumber)
+    .sort((a, b) => a.attemptNumber - b.attemptNumber);
+  const dedupedItems = dedupeHistoryItems(items)
     .slice(-MAX_HISTORY_ITEMS);
 
   return {
     ...metadata,
     videoHistory: {
       ...history,
-      totalAttempts: items.length,
-      activeAttemptId: items.some((item) => item.id === history.activeAttemptId)
+      totalAttempts: dedupedItems.length,
+      activeAttemptId: dedupedItems.some((item) => item.id === history.activeAttemptId)
         ? history.activeAttemptId
         : undefined,
-      cumulativeDescription: buildCumulativeDescription(items),
-      items,
+      cumulativeDescription: buildCumulativeDescription(dedupedItems),
+      items: dedupedItems,
     },
   };
 };
