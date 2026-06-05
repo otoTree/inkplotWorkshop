@@ -44,6 +44,62 @@ type ProjectSummary = {
   topShots: TopShot[];
 };
 
+type ShotHistoryItem = {
+  id: string;
+  attemptNumber: number;
+  startedAt: string;
+  updatedAt: string;
+  status: string;
+  generationId?: string | null;
+  videoUrl?: string | null;
+  provider?: string;
+  model?: string;
+};
+
+type ShotHistoryDetail = {
+  shotId: string;
+  episodeId: string;
+  sequence: number | null;
+  label: string;
+  status?: string | null;
+  taskId?: string | null;
+  videoUrl?: string | null;
+  attempts: number;
+  urls: number;
+  failedAttemptsExcluded: number;
+  isLocked: boolean;
+  remainingAttempts: number;
+  allowedAttempts: number;
+  createdAt?: string | null;
+  historyItems: ShotHistoryItem[];
+};
+
+type EpisodeHistoryDetail = {
+  episodeId: string;
+  episodeNumber: number | null;
+  episodeTitle?: string | null;
+  totalShots: number;
+  videoTaskShots: number;
+  shotsWithHistory: number;
+  totalAttempts: number;
+  repeatedShots: number;
+  maxAttempts: number;
+  videoUrls: number;
+  lockedShots: number;
+  failedAttemptsExcluded: number;
+  statuses: Record<StatusKey, number>;
+  shots: ShotHistoryDetail[];
+};
+
+type ProjectHistoryDetail = ProjectSummary & {
+  episodes: EpisodeHistoryDetail[];
+};
+
+type UnlockableShot = Pick<
+  ShotHistoryDetail,
+  'shotId' | 'isLocked' | 'remainingAttempts' | 'allowedAttempts'
+>;
+
 type VideoHistoryStats = {
   generatedAt: string;
   pagination: {
@@ -111,6 +167,9 @@ export default function AdminVideoHistoryPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [expandedProjectId, setExpandedProjectId] = useState<string | null>(null);
+  const [expandedEpisodeId, setExpandedEpisodeId] = useState<string | null>(null);
+  const [projectDetails, setProjectDetails] = useState<Record<string, ProjectHistoryDetail>>({});
+  const [loadingProjectId, setLoadingProjectId] = useState<string | null>(null);
   const [showOnlyRepeated, setShowOnlyRepeated] = useState(false);
   const [page, setPage] = useState(1);
   const pageSize = 20;
@@ -138,7 +197,42 @@ export default function AdminVideoHistoryPage() {
     fetchStats();
   }, [fetchStats]);
 
-  const unlockShotOnce = async (shot: TopShot) => {
+  const loadProjectDetail = useCallback(
+    async (projectId: string, force = false) => {
+      if (!force && projectDetails[projectId]) return;
+
+      setLoadingProjectId(projectId);
+      try {
+        const res = await fetch(`/api/admin/video-history?projectId=${projectId}`);
+        const json = await res.json();
+        if (!res.ok) {
+          setError(json.error || '项目详情加载失败');
+          return;
+        }
+        setProjectDetails((prev) => ({
+          ...prev,
+          [projectId]: json.project,
+        }));
+      } catch (err) {
+        console.error(err);
+        setError('项目详情网络错误');
+      } finally {
+        setLoadingProjectId(null);
+      }
+    },
+    [projectDetails]
+  );
+
+  const toggleProject = (projectId: string) => {
+    const nextProjectId = expandedProjectId === projectId ? null : projectId;
+    setExpandedProjectId(nextProjectId);
+    setExpandedEpisodeId(null);
+    if (nextProjectId) {
+      loadProjectDetail(nextProjectId);
+    }
+  };
+
+  const unlockShotOnce = async (shot: UnlockableShot) => {
     if (!confirm(`确定给分镜 ${shot.shotId} 解禁 1 次生成机会吗？`)) return;
 
     try {
@@ -154,6 +248,9 @@ export default function AdminVideoHistoryPage() {
       }
       alert('已解禁 1 次生成机会');
       fetchStats();
+      if (expandedProjectId) {
+        loadProjectDetail(expandedProjectId, true);
+      }
     } catch (err) {
       console.error(err);
       alert('网络错误');
@@ -291,6 +388,8 @@ export default function AdminVideoHistoryPage() {
                   ) : (
                     projects.map((project) => {
                       const isExpanded = expandedProjectId === project.projectId;
+                      const projectDetail = projectDetails[project.projectId];
+                      const isProjectLoading = loadingProjectId === project.projectId;
                       return (
                         <Fragment key={project.projectId}>
                           <TableRow key={project.projectId}>
@@ -299,7 +398,7 @@ export default function AdminVideoHistoryPage() {
                                 variant="ghost"
                                 size="icon"
                                 className="h-7 w-7"
-                                onClick={() => setExpandedProjectId(isExpanded ? null : project.projectId)}
+                                onClick={() => toggleProject(project.projectId)}
                               >
                                 {isExpanded ? (
                                   <ChevronDown className="h-4 w-4" />
@@ -346,71 +445,224 @@ export default function AdminVideoHistoryPage() {
                             <TableRow key={`${project.projectId}-details`}>
                               <TableCell />
                               <TableCell colSpan={7} className="bg-gray-50">
-                                <div className="py-3">
-                                  <div className="mb-2 text-xs font-medium text-gray-500">
-                                    重试最多的分镜
-                                  </div>
-                                  <div className="rounded-md border bg-white">
-                                    <Table>
-                                      <TableHeader>
-                                        <TableRow>
-                                          <TableHead>分镜</TableHead>
-                                          <TableHead>场景</TableHead>
-                                          <TableHead className="text-right">次数</TableHead>
-                                          <TableHead className="text-right">链接</TableHead>
-                                          <TableHead>状态</TableHead>
-                                          <TableHead>任务</TableHead>
-                                          <TableHead>操作</TableHead>
-                                        </TableRow>
-                                      </TableHeader>
-                                      <TableBody>
-                                        {project.topShots.length === 0 ? (
+                                {isProjectLoading ? (
+                                  <div className="py-6 text-center text-sm text-gray-500">加载项目详情...</div>
+                                ) : !projectDetail ? (
+                                  <div className="py-6 text-center text-sm text-gray-500">暂无项目详情</div>
+                                ) : (
+                                  <div className="space-y-3 py-3">
+                                    <div className="flex flex-wrap items-center justify-between gap-2">
+                                      <div className="text-xs font-medium text-gray-600">
+                                        剧集级历史记录 · {formatNumber(projectDetail.episodes.length)} 集 ·
+                                        {formatNumber(projectDetail.totalAttempts)} 次生成
+                                      </div>
+                                      <Button
+                                        variant="outline"
+                                        size="sm"
+                                        onClick={() => loadProjectDetail(project.projectId, true)}
+                                        disabled={isProjectLoading}
+                                      >
+                                        刷新详情
+                                      </Button>
+                                    </div>
+                                    <div className="rounded-md border bg-white">
+                                      <Table>
+                                        <TableHeader>
                                           <TableRow>
-                                            <TableCell colSpan={7} className="py-4 text-center text-gray-500">
-                                              暂无视频历史
-                                            </TableCell>
+                                            <TableHead className="w-8" />
+                                            <TableHead>剧集</TableHead>
+                                            <TableHead className="text-right">分镜</TableHead>
+                                            <TableHead className="text-right">视频任务</TableHead>
+                                            <TableHead className="text-right">生成次数</TableHead>
+                                            <TableHead className="text-right">重复</TableHead>
+                                            <TableHead className="text-right">状态</TableHead>
                                           </TableRow>
-                                        ) : (
-                                          project.topShots.map((shot) => (
-                                            <TableRow key={shot.shotId}>
-                                              <TableCell className="font-mono text-xs">
-                                                Ep {shot.episodeNumber ?? '-'} / #{shot.sequence ?? '-'}
-                                                <div className="mt-1 text-[10px] text-gray-400">{shot.shotId}</div>
-                                              </TableCell>
-                                              <TableCell className="max-w-sm">
-                                                <div className="truncate text-sm">{shot.label || '-'}</div>
-                                                <div className="text-[10px] text-gray-400">
-                                                  {shot.episodeTitle || '-'} · {formatDate(shot.createdAt)}
-                                                </div>
-                                              </TableCell>
-                                              <TableCell className="text-right font-mono">{shot.attempts}</TableCell>
-                                              <TableCell className="text-right font-mono">{shot.urls}</TableCell>
-                                              <TableCell>
-                                                <Badge variant={statusBadgeVariant(shot.status)}>
-                                                  {shot.status || 'unknown'}
-                                                </Badge>
-                                              </TableCell>
-                                              <TableCell className="max-w-[220px] truncate font-mono text-xs text-gray-500">
-                                                {shot.taskId || '-'}
-                                              </TableCell>
-                                              <TableCell>
-                                                {shot.isLocked ? (
-                                                  <Button size="sm" onClick={() => unlockShotOnce(shot)}>
-                                                    解禁一次
-                                                  </Button>
-                                                ) : (
-                                                  <span className="text-xs text-gray-500">
-                                                    剩 {shot.remainingAttempts} / {shot.allowedAttempts}
-                                                  </span>
+                                        </TableHeader>
+                                        <TableBody>
+                                          {projectDetail.episodes.map((episode) => {
+                                            const isEpisodeExpanded = expandedEpisodeId === episode.episodeId;
+                                            return (
+                                              <Fragment key={episode.episodeId}>
+                                                <TableRow>
+                                                  <TableCell>
+                                                    <Button
+                                                      variant="ghost"
+                                                      size="icon"
+                                                      className="h-7 w-7"
+                                                      onClick={() =>
+                                                        setExpandedEpisodeId(
+                                                          isEpisodeExpanded ? null : episode.episodeId
+                                                        )
+                                                      }
+                                                    >
+                                                      {isEpisodeExpanded ? (
+                                                        <ChevronDown className="h-4 w-4" />
+                                                      ) : (
+                                                        <ChevronRight className="h-4 w-4" />
+                                                      )}
+                                                    </Button>
+                                                  </TableCell>
+                                                  <TableCell>
+                                                    <div className="font-medium">
+                                                      Ep {episode.episodeNumber ?? '-'} · {episode.episodeTitle || '-'}
+                                                    </div>
+                                                    <div className="mt-1 font-mono text-[10px] text-gray-400">
+                                                      {episode.episodeId}
+                                                    </div>
+                                                  </TableCell>
+                                                  <TableCell className="text-right font-mono">
+                                                    {formatNumber(episode.totalShots)}
+                                                  </TableCell>
+                                                  <TableCell className="text-right font-mono">
+                                                    {formatNumber(episode.videoTaskShots)}
+                                                    <div className="text-[10px] text-gray-400">
+                                                      历史 {formatNumber(episode.shotsWithHistory)}
+                                                    </div>
+                                                  </TableCell>
+                                                  <TableCell className="text-right font-mono">
+                                                    {formatNumber(episode.totalAttempts)}
+                                                    <div className="text-[10px] text-gray-400">
+                                                      max {episode.maxAttempts}
+                                                    </div>
+                                                  </TableCell>
+                                                  <TableCell className="text-right font-mono">
+                                                    {formatNumber(episode.repeatedShots)}
+                                                  </TableCell>
+                                                  <TableCell className="text-right">
+                                                    <div className="flex flex-col items-end gap-1 text-[10px] text-gray-500">
+                                                      <span>完成 {formatNumber(episode.statuses.completed)}</span>
+                                                      <span>失败 {formatNumber(episode.statuses.failed)}</span>
+                                                      <span>
+                                                        处理中{' '}
+                                                        {formatNumber(
+                                                          episode.statuses.processing + episode.statuses.queued
+                                                        )}
+                                                      </span>
+                                                      <span>锁定 {formatNumber(episode.lockedShots)}</span>
+                                                    </div>
+                                                  </TableCell>
+                                                </TableRow>
+                                                {isEpisodeExpanded && (
+                                                  <TableRow>
+                                                    <TableCell />
+                                                    <TableCell colSpan={6} className="bg-gray-50">
+                                                      <div className="py-3">
+                                                        <div className="mb-2 text-xs font-medium text-gray-500">
+                                                          全部镜头历史 · {formatNumber(episode.shots.length)} 个分镜
+                                                          {episode.failedAttemptsExcluded > 0
+                                                            ? ` · 已剔除失败 ${formatNumber(episode.failedAttemptsExcluded)} 次`
+                                                            : ''}
+                                                        </div>
+                                                        <div className="rounded-md border bg-white">
+                                                          <Table>
+                                                            <TableHeader>
+                                                              <TableRow>
+                                                                <TableHead>镜头</TableHead>
+                                                                <TableHead>场景</TableHead>
+                                                                <TableHead className="text-right">次数</TableHead>
+                                                                <TableHead>历史记录</TableHead>
+                                                                <TableHead>状态</TableHead>
+                                                                <TableHead>操作</TableHead>
+                                                              </TableRow>
+                                                            </TableHeader>
+                                                            <TableBody>
+                                                              {episode.shots.map((shot) => (
+                                                                <TableRow key={shot.shotId}>
+                                                                  <TableCell className="font-mono text-xs">
+                                                                    #{shot.sequence ?? '-'}
+                                                                    <div className="mt-1 text-[10px] text-gray-400">
+                                                                      {shot.shotId}
+                                                                    </div>
+                                                                  </TableCell>
+                                                                  <TableCell className="max-w-[220px]">
+                                                                    <div className="truncate text-sm">
+                                                                      {shot.label || '-'}
+                                                                    </div>
+                                                                    <div className="mt-1 text-[10px] text-gray-400">
+                                                                      {formatDate(shot.createdAt)}
+                                                                    </div>
+                                                                  </TableCell>
+                                                                  <TableCell className="text-right font-mono">
+                                                                    {formatNumber(shot.attempts)}
+                                                                    <div className="text-[10px] text-gray-400">
+                                                                      剩 {shot.remainingAttempts} / {shot.allowedAttempts}
+                                                                    </div>
+                                                                    {shot.failedAttemptsExcluded > 0 && (
+                                                                      <div className="text-[10px] text-amber-600">
+                                                                        剔除失败 {shot.failedAttemptsExcluded}
+                                                                      </div>
+                                                                    )}
+                                                                  </TableCell>
+                                                                  <TableCell className="min-w-[360px]">
+                                                                    {shot.historyItems.length === 0 ? (
+                                                                      <span className="text-xs text-gray-400">暂无历史</span>
+                                                                    ) : (
+                                                                      <div className="space-y-1">
+                                                                        {shot.historyItems.map((item) => (
+                                                                          <div
+                                                                            key={item.id}
+                                                                            className="flex flex-wrap items-center gap-2 text-xs"
+                                                                          >
+                                                                            <Badge variant={statusBadgeVariant(item.status)}>
+                                                                              #{item.attemptNumber} {item.status}
+                                                                            </Badge>
+                                                                            <span className="font-mono text-gray-500">
+                                                                              {item.generationId || '-'}
+                                                                            </span>
+                                                                            <span className="text-gray-400">
+                                                                              {formatDate(item.updatedAt)}
+                                                                            </span>
+                                                                            {item.videoUrl && (
+                                                                              <a
+                                                                                href={item.videoUrl}
+                                                                                target="_blank"
+                                                                                rel="noreferrer"
+                                                                                className="text-indigo-600 hover:text-indigo-700"
+                                                                              >
+                                                                                视频
+                                                                              </a>
+                                                                            )}
+                                                                          </div>
+                                                                        ))}
+                                                                      </div>
+                                                                    )}
+                                                                  </TableCell>
+                                                                  <TableCell>
+                                                                    <Badge variant={statusBadgeVariant(shot.status)}>
+                                                                      {shot.status || 'unknown'}
+                                                                    </Badge>
+                                                                  </TableCell>
+                                                                  <TableCell>
+                                                                    {shot.isLocked ? (
+                                                                      <Button
+                                                                        size="sm"
+                                                                        onClick={() => unlockShotOnce(shot)}
+                                                                      >
+                                                                        解禁一次
+                                                                      </Button>
+                                                                    ) : (
+                                                                      <span className="text-xs text-gray-500">
+                                                                        可生成
+                                                                      </span>
+                                                                    )}
+                                                                  </TableCell>
+                                                                </TableRow>
+                                                              ))}
+                                                            </TableBody>
+                                                          </Table>
+                                                        </div>
+                                                      </div>
+                                                    </TableCell>
+                                                  </TableRow>
                                                 )}
-                                              </TableCell>
-                                            </TableRow>
-                                          ))
-                                        )}
-                                      </TableBody>
-                                    </Table>
+                                              </Fragment>
+                                            );
+                                          })}
+                                        </TableBody>
+                                      </Table>
+                                    </div>
                                   </div>
-                                </div>
+                                )}
                               </TableCell>
                             </TableRow>
                           )}

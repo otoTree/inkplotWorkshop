@@ -75,6 +75,57 @@ type ProjectSummary = {
   }>;
 };
 
+type ShotHistoryItem = {
+  id: string;
+  attemptNumber: number;
+  startedAt: string;
+  updatedAt: string;
+  status: string;
+  generationId?: string | null;
+  videoUrl?: string | null;
+  provider?: string;
+  model?: string;
+};
+
+type ShotHistoryDetail = {
+  shotId: string;
+  episodeId: string;
+  sequence: number | null;
+  label: string;
+  status: Shot['videoStatus'] | null;
+  taskId?: string | null;
+  videoUrl?: string | null;
+  attempts: number;
+  urls: number;
+  failedAttemptsExcluded: number;
+  isLocked: boolean;
+  remainingAttempts: number;
+  allowedAttempts: number;
+  createdAt?: string | null;
+  historyItems: ShotHistoryItem[];
+};
+
+type EpisodeHistoryDetail = {
+  episodeId: string;
+  episodeNumber: number | null;
+  episodeTitle?: string | null;
+  totalShots: number;
+  videoTaskShots: number;
+  shotsWithHistory: number;
+  totalAttempts: number;
+  repeatedShots: number;
+  maxAttempts: number;
+  videoUrls: number;
+  lockedShots: number;
+  failedAttemptsExcluded: number;
+  statuses: Record<StatusKey, number>;
+  shots: ShotHistoryDetail[];
+};
+
+type ProjectHistoryDetail = ProjectSummary & {
+  episodes: EpisodeHistoryDetail[];
+};
+
 const fetchAllPages = async <T>(buildQuery: (
   from: number,
   to: number
@@ -142,8 +193,15 @@ const getAttempts = (metadata: Shot['videoGenerationMetadata'] | null | undefine
 };
 
 const getHistoryVideoUrlCount = (metadata: Shot['videoGenerationMetadata'] | null | undefined) =>
+  normalizeVideoGenerationHistory(metadata).items.filter((item) => Boolean(item.videoUrl)).length;
+
+const getExcludedFailedAttemptCount = (
+  metadata: Shot['videoGenerationMetadata'] | null | undefined
+) =>
   Array.isArray(metadata?.videoHistory?.items)
-    ? metadata.videoHistory.items.filter((item) => Boolean(item.videoUrl)).length
+    ? metadata.videoHistory.items.filter((item) =>
+        item && ['failed', 'error'].includes(String(item.status || '').toLowerCase())
+      ).length
     : 0;
 
 const getShotLabel = (shot: ShotRow) =>
@@ -175,6 +233,193 @@ const createSummary = (project: ProjectRow): ProjectSummary => ({
   topShots: [],
 });
 
+const createEpisodeDetail = (episode: EpisodeRow): EpisodeHistoryDetail => ({
+  episodeId: episode.id,
+  episodeNumber: episode.episode_number,
+  episodeTitle: episode.title,
+  totalShots: 0,
+  videoTaskShots: 0,
+  shotsWithHistory: 0,
+  totalAttempts: 0,
+  repeatedShots: 0,
+  maxAttempts: 0,
+  videoUrls: 0,
+  lockedShots: 0,
+  failedAttemptsExcluded: 0,
+  statuses: emptyStatuses(),
+  shots: [],
+});
+
+const hasVideoTask = (shot: ShotRow) =>
+  Boolean(
+    shot.video_generation_id ||
+      shot.video_url ||
+      shot.video_status === 'queued' ||
+      shot.video_status === 'processing' ||
+      shot.video_status === 'completed' ||
+      shot.video_status === 'failed'
+  );
+
+const toHistoryItems = (
+  metadata: Shot['videoGenerationMetadata'] | null | undefined
+): ShotHistoryItem[] =>
+  normalizeVideoGenerationHistory(metadata).items.map((item) => ({
+    id: item.id,
+    attemptNumber: item.attemptNumber,
+    startedAt: item.startedAt,
+    updatedAt: item.updatedAt,
+    status: item.status,
+    generationId: item.generationId,
+    videoUrl: item.videoUrl,
+    provider: item.provider,
+    model: item.model,
+  }));
+
+const applyShotStats = (
+  target: Pick<
+    ProjectSummary | EpisodeHistoryDetail,
+    | 'videoTaskShots'
+    | 'shotsWithHistory'
+    | 'totalAttempts'
+    | 'repeatedShots'
+    | 'maxAttempts'
+    | 'videoUrls'
+    | 'lockedShots'
+    | 'statuses'
+  >,
+  shot: ShotRow,
+  attempts: number,
+  urlCount: number,
+  access: ReturnType<typeof getVideoGenerationAccess>
+) => {
+  const status = (shot.video_status || 'unknown') as StatusKey;
+  target.videoTaskShots += 1;
+  target.totalAttempts += attempts;
+  target.videoUrls += urlCount;
+  target.maxAttempts = Math.max(target.maxAttempts, attempts);
+  target.statuses[status] = (target.statuses[status] || 0) + 1;
+  if (attempts > 0) target.shotsWithHistory += 1;
+  if (attempts > 1) target.repeatedShots += 1;
+  if (access.isLocked) target.lockedShots += 1;
+};
+
+const finalizeProjectSummary = <T extends ProjectSummary>(summary: T): T => ({
+  ...summary,
+  historyCoverage:
+    summary.videoTaskShots > 0
+      ? Math.round((summary.shotsWithHistory / summary.videoTaskShots) * 1000) / 10
+      : 0,
+  topShots: summary.topShots
+    .sort((a, b) => b.attempts - a.attempts || b.urls - a.urls)
+    .slice(0, 8),
+});
+
+const loadProjectDetail = async (
+  supabase: AdminSupabaseClient,
+  projectId: string
+): Promise<ProjectHistoryDetail | null> => {
+  const { data: project, error: projectError } = await supabase
+    .from('projects')
+    .select('id, title, updated_at')
+    .eq('id', projectId)
+    .maybeSingle();
+  if (projectError) throw projectError;
+  if (!project) return null;
+
+  const episodes = await loadEpisodesForProjects(supabase, [project.id]);
+  const shots = await loadShotsForEpisodes(supabase, episodes.map((episode) => episode.id));
+  const episodesById = new Map(episodes.map((episode) => [episode.id, episode]));
+  const detail: ProjectHistoryDetail = {
+    ...createSummary(project as ProjectRow),
+    episodes: episodes
+      .slice()
+      .sort((a, b) => (a.episode_number || 0) - (b.episode_number || 0))
+      .map(createEpisodeDetail),
+  };
+  const episodeDetailsById = new Map(detail.episodes.map((episode) => [episode.episodeId, episode]));
+
+  shots
+    .slice()
+    .sort((a, b) => {
+      const episodeA = episodesById.get(a.episode_id)?.episode_number || 0;
+      const episodeB = episodesById.get(b.episode_id)?.episode_number || 0;
+      return episodeA - episodeB || (a.sequence_number || 0) - (b.sequence_number || 0);
+    })
+    .forEach((shot) => {
+      const episode = episodesById.get(shot.episode_id);
+      const episodeDetail = episodeDetailsById.get(shot.episode_id);
+      if (!episode || !episodeDetail) return;
+
+      detail.totalShots += 1;
+      episodeDetail.totalShots += 1;
+
+      const attempts = getAttempts(shot.video_generation_metadata);
+      const urlCount = getHistoryVideoUrlCount(shot.video_generation_metadata);
+      const access = getVideoGenerationAccess(shot.video_generation_metadata);
+      const failedAttemptsExcluded = getExcludedFailedAttemptCount(shot.video_generation_metadata);
+      const status = (shot.video_status || 'unknown') as StatusKey;
+      if (failedAttemptsExcluded > 0) {
+        episodeDetail.failedAttemptsExcluded += failedAttemptsExcluded;
+      }
+
+      const shotDetail: ShotHistoryDetail = {
+        shotId: shot.id,
+        episodeId: episode.id,
+        sequence: shot.sequence_number,
+        label: getShotLabel(shot),
+        status: shot.video_status || null,
+        taskId: shot.video_generation_id,
+        videoUrl: shot.video_url,
+        attempts,
+        urls: urlCount,
+        failedAttemptsExcluded,
+        isLocked: access.isLocked,
+        remainingAttempts: access.remainingAttempts,
+        allowedAttempts: access.allowedAttempts,
+        createdAt: shot.created_at,
+        historyItems: toHistoryItems(shot.video_generation_metadata),
+      };
+      episodeDetail.shots.push(shotDetail);
+
+      if (!hasVideoTask(shot)) return;
+
+      if (status === 'failed') {
+        detail.statuses[status] = (detail.statuses[status] || 0) + 1;
+        episodeDetail.statuses[status] = (episodeDetail.statuses[status] || 0) + 1;
+        return;
+      }
+
+      applyShotStats(detail, shot, attempts, urlCount, access);
+      applyShotStats(episodeDetail, shot, attempts, urlCount, access);
+
+      if (attempts > 0) {
+        detail.topShots.push({
+          shotId: shot.id,
+          episodeId: episode.id,
+          episodeNumber: episode.episode_number,
+          episodeTitle: episode.title,
+          sequence: shot.sequence_number,
+          attempts,
+          urls: urlCount,
+          status: shot.video_status || null,
+          taskId: shot.video_generation_id,
+          label: getShotLabel(shot),
+          createdAt: shot.created_at,
+          isLocked: access.isLocked,
+          remainingAttempts: access.remainingAttempts,
+          allowedAttempts: access.allowedAttempts,
+        });
+      }
+    });
+
+  detail.episodes = detail.episodes.map((episode) => ({
+    ...episode,
+    shots: episode.shots.sort((a, b) => (a.sequence || 0) - (b.sequence || 0)),
+  }));
+
+  return finalizeProjectSummary(detail);
+};
+
 export async function GET(req: Request) {
   if (!(await checkAdminAuth())) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
@@ -182,9 +427,23 @@ export async function GET(req: Request) {
 
   try {
     const url = new URL(req.url);
+    const projectId = url.searchParams.get('projectId');
     const page = Math.max(1, Number(url.searchParams.get('page') || '1'));
     const pageSize = Math.min(50, Math.max(5, Number(url.searchParams.get('pageSize') || '20')));
     const supabase = createAdminClient();
+
+    if (projectId) {
+      const project = await loadProjectDetail(supabase, projectId);
+      if (!project) {
+        return NextResponse.json({ error: 'Project not found' }, { status: 404 });
+      }
+
+      return NextResponse.json({
+        generatedAt: new Date().toISOString(),
+        project,
+      });
+    }
+
     const { projects, totalProjects } = await loadProjectPage(supabase, page, pageSize);
     const episodes = await loadEpisodesForProjects(supabase, projects.map((project) => project.id));
     const shots = await loadShotsForEpisodes(supabase, episodes.map((episode) => episode.id));
