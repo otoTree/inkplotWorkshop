@@ -407,7 +407,7 @@ const getVideoReferenceLabel = (
 
 const VIDEO_PROMPT_SECTION_LABELS: Record<string, string> = {
   'scene heading': '镜头场景',
-  'video prompt': '视频分镜',
+  'video prompt': '视频提示词',
   'visual description': '画面描述',
   'shot action': '主体动作',
   emotion: '情绪落点',
@@ -417,31 +417,27 @@ const VIDEO_PROMPT_SECTION_LABELS: Record<string, string> = {
   'sound design': '声音设计',
 };
 
-const STRUCTURED_VIDEO_PROMPT_TITLES = [
-  '资产参考',
-  '分镜提示词',
-  '台词约束',
-  '全局美术风格',
-];
-
-const extractStructuredVideoPromptSection = (prompt: string, title: string) => {
-  const titlePattern = STRUCTURED_VIDEO_PROMPT_TITLES.join('|');
-  const pattern = new RegExp(`【${title}】\\s*([\\s\\S]*?)(?=\\n?【(?:${titlePattern})】|$)`);
-  return prompt.match(pattern)?.[1]?.trim() || '';
-};
-
-const stripStructuredVideoPromptSections = (prompt: string) => {
-  let result = prompt;
-  for (const title of STRUCTURED_VIDEO_PROMPT_TITLES) {
-    const titlePattern = STRUCTURED_VIDEO_PROMPT_TITLES.join('|');
-    const pattern = new RegExp(`\\n?【${title}】\\s*[\\s\\S]*?(?=\\n?【(?:${titlePattern})】|$)`, 'g');
-    result = result.replace(pattern, '');
-  }
-  return result.trim();
-};
-
 const mapVideoPromptSectionLabel = (label: string) =>
   VIDEO_PROMPT_SECTION_LABELS[label.trim().toLowerCase()] || label.trim();
+
+const getVideoPromptSectionValue = (sections: VideoPromptSection[], label: string) =>
+  sections.find((section) => section.label.trim().toLowerCase() === label.toLowerCase())?.value || '';
+
+const formatDialogueDirective = (dialogue: string) => {
+  const trimmedDialogue = dialogue.trim();
+  if (!trimmedDialogue) {
+    return '无台词，只保留环境声、呼吸声和动作声。';
+  }
+
+  if (
+    /【台词】|同步内心独白|旁白/.test(trimmedDialogue) ||
+    /[\u4e00-\u9fa5A-Za-z0-9_]+[：:]/.test(trimmedDialogue)
+  ) {
+    return `当前镜头对白/旁白原文：${trimmedDialogue}。对白必须作为语音指令处理，使用【台词】【角色名】：“对白内容。”或同步内心独白【角色名】：独白内容。不得新增、删减、改写或翻译。`;
+  }
+
+  return `当前镜头对白原文：${trimmedDialogue}。请按剧情说话人处理为【台词】【角色名】：“对白内容。”，不得新增、删减、改写或翻译。`;
+};
 
 const buildVideoGenerationMetadata = (
   metadata?: Record<string, unknown>,
@@ -507,20 +503,9 @@ export const buildVideoGenerationPrompt = (
     }))
     .filter((section) => section.label && section.value);
 
-  const promptLines = normalizedSections.map(
-    (section) => `${mapVideoPromptSectionLabel(section.label)}：${section.value}`
-  );
-
-  const promptText = promptLines.join('\n');
   const normalizedAssets = normalizeVideoReferenceAssets(referenceAssets);
-  const generatedAssetSection = extractStructuredVideoPromptSection(promptText, '资产参考');
-  const generatedStoryboardSection = extractStructuredVideoPromptSection(promptText, '分镜提示词');
-  const generatedDialogueSection = extractStructuredVideoPromptSection(promptText, '台词约束');
-  const generatedStyleSection = extractStructuredVideoPromptSection(promptText, '全局美术风格');
-  const unstructuredPromptText = stripStructuredVideoPromptSections(promptText);
-  const dialogueValue =
-    normalizedSections.find((section) => section.label.trim().toLowerCase() === 'dialogue')
-      ?.value || '';
+  const videoPromptValue = getVideoPromptSectionValue(normalizedSections, 'video prompt');
+  const dialogueValue = getVideoPromptSectionValue(normalizedSections, 'dialogue');
 
   const assetLines: string[] = [];
   if (normalizedAssets.length > 0) {
@@ -535,27 +520,22 @@ export const buildVideoGenerationPrompt = (
   } else {
     assetLines.push('未提供外部参考图；严格依据本镜头文字描述保持人物、服装、道具和场景前后一致。');
   }
-  if (generatedAssetSection) {
-    assetLines.push(`镜头资产状态：${generatedAssetSection}`);
-  }
+  const supplementalLines = normalizedSections
+    .filter((section) => section.label.trim().toLowerCase() !== 'video prompt')
+    .map((section) => `${mapVideoPromptSectionLabel(section.label)}：${section.value}`);
 
-  const storyboardContent =
-    generatedStoryboardSection || unstructuredPromptText || promptText || '按当前镜头信息生成连续、可执行的视频画面。';
-  const dialogueConstraint =
-    generatedDialogueSection ||
-    (dialogueValue
-      ? `严格按照当前镜头标注的台词播放：${dialogueValue}。对白必须作为语音指令按 {角色名: 对白内容} 的大括号格式理解；对白语言保留原文，不得新增、删减、改写或翻译台词；不得把对白生成成字幕或任何屏幕文字。`
-      : '无台词，只保留环境声、呼吸声和动作声；不得生成任何新增对白、字幕或屏幕文字。');
-  const styleContent =
-    generatedStyleSection ||
-    '统一项目画面美术风格，写实电影质感，保持镜头质感、色调、光影、材质、人物外貌、服装、年龄、发型、道具和场景连续一致；4K 高清，动作自然流畅，面部稳定不变形，五官清晰，人体结构正常，无卡顿、无闪烁；禁止现代元素错入、媒介风格漂移、脸部变形、字幕、屏幕文字、标题、标语、下三分之一字幕、对白字幕、logo 和水印。';
+  const storyboardPrompt =
+    videoPromptValue ||
+    supplementalLines.join('\n') ||
+    '·【现代中景/当前场景】按当前镜头信息生成连续、可执行的视频画面，写清主体动作、镜头路径、环境反馈和结束状态。';
 
   return appendNoSubtitleDirective(
     [
-      `【资产参考】\n${assetLines.join('\n')}`,
-      `【分镜提示词】\n${storyboardContent}`,
-      `【台词约束】\n${dialogueConstraint}`,
-      `【全局美术风格】\n${styleContent}`,
+      `·【参考图/一致性/当前镜头】${assetLines.join(' ')}`,
+      storyboardPrompt,
+      supplementalLines.length > 0 ? `·【镜头补充/连续性/执行约束】${supplementalLines.join('；')}。` : '',
+      `·【台词与声音/语音约束/当前镜头】${formatDialogueDirective(dialogueValue)} 台词和内心独白只作为语音指令，不代表画面文字。`,
+      '·【全局质感/写实电影/负面约束】保持项目统一画面风格、镜头质感、色调、光影、材质、人物外貌、服装、年龄、发型、道具和场景连续一致；4K 高清，动作自然流畅，面部稳定不变形，五官清晰，人体结构正常，无卡顿、无闪烁；禁止现代元素错入、媒介风格漂移、脸部变形、logo 和水印。',
     ].join('\n\n')
   );
 };
