@@ -23,6 +23,21 @@ import { getImageGenerationPrompt } from '@/lib/prompts';
 import { buildVisualStyleRequestPayload, resolveArtStyleConfig } from '@/lib/project-visual-style';
 import { DEFAULT_IMAGE_GENERATION_MODEL, IMAGE_GENERATION_MODEL_LABELS } from '@/lib/image-generation-models';
 
+type VolcengineSyncResult = {
+  synced?: number;
+  refreshed?: number;
+  active?: number;
+  processing?: number;
+  failed?: number;
+  errors?: number;
+  skipped?: number;
+};
+
+type VolcengineSyncNotice = {
+  type: 'success' | 'warning' | 'error';
+  message: string;
+};
+
 export function AssetGallery({ projectId }: { projectId: string }) {
   const [assets, setAssets] = useState<Asset[]>([]);
   const [episodes, setEpisodes] = useState<Episode[]>([]);
@@ -32,6 +47,7 @@ export function AssetGallery({ projectId }: { projectId: string }) {
   const [episodeFilter, setEpisodeFilter] = useState('all');
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [isSyncingVolcengineAssets, setIsSyncingVolcengineAssets] = useState(false);
+  const [volcengineSyncNotice, setVolcengineSyncNotice] = useState<VolcengineSyncNotice | null>(null);
   
   // Dialog State
   const [dialogOpen, setDialogOpen] = useState(false);
@@ -116,6 +132,83 @@ export function AssetGallery({ projectId }: { projectId: string }) {
     }).format(date);
   };
 
+  const getVolcengineErrorMessage = (value: unknown): string | null => {
+    if (!value) return null;
+    if (typeof value === 'string') return value;
+    if (value instanceof Error) return value.message;
+    if (Array.isArray(value)) {
+      return value.map(getVolcengineErrorMessage).filter(Boolean).join('；') || null;
+    }
+    if (typeof value !== 'object') return String(value);
+
+    const error = value as Record<string, unknown>;
+    const message =
+      error.Message ||
+      error.message ||
+      error.ErrorMessage ||
+      error.error_message ||
+      error.details ||
+      error.Detail;
+    const code = error.Code || error.code || error.ErrorCode || error.error_code;
+    const nested = error.Error || error.error || error.cause || error.Cause;
+    const nestedMessage = nested ? getVolcengineErrorMessage(nested) : null;
+
+    if (message && code) return `${String(code)}：${String(message)}`;
+    if (message) return String(message);
+    if (nestedMessage) return nestedMessage;
+
+    try {
+      return JSON.stringify(error);
+    } catch {
+      return null;
+    }
+  };
+
+  const formatVolcengineSyncNotice = (
+    result: VolcengineSyncResult,
+    action: 'sync' | 'refresh-status' | 'retry-processing'
+  ): VolcengineSyncNotice => {
+    const total = result.synced ?? result.refreshed ?? 0;
+    const failed = result.failed ?? 0;
+    const errors = result.errors ?? 0;
+    const active = result.active ?? 0;
+    const processing = result.processing ?? 0;
+    const skipped = result.skipped ?? 0;
+    const actionLabel =
+      action === 'refresh-status'
+        ? '刷新'
+        : action === 'retry-processing'
+          ? '重试提交'
+          : '同步';
+    const details = [
+      total > 0 ? `${actionLabel} ${total} 个` : null,
+      active > 0 ? `已可用 ${active}` : null,
+      processing > 0 ? `处理中 ${processing}` : null,
+      failed > 0 ? `失败 ${failed}` : null,
+      errors > 0 ? `查询异常 ${errors}` : null,
+      skipped > 0 ? `跳过 ${skipped}` : null,
+    ].filter(Boolean);
+
+    if (failed > 0 || errors > 0) {
+      return {
+        type: 'error',
+        message: `${actionLabel}完成，但有素材失败：${details.join('，')}。请查看下方素材卡片里的失败原因。`,
+      };
+    }
+
+    if (processing > 0) {
+      return {
+        type: 'warning',
+        message: `${actionLabel}已提交：${details.join('，')}。素材仍在火山处理中，稍后可刷新状态。`,
+      };
+    }
+
+    return {
+      type: 'success',
+      message: details.length > 0 ? `${actionLabel}完成：${details.join('，')}。` : `${actionLabel}完成。`,
+    };
+  };
+
   const resetVolcengineAssetSync = (): Partial<Asset> => ({
     volcengineAssetId: null,
     volcengineAssetStatus: null,
@@ -198,10 +291,13 @@ export function AssetGallery({ projectId }: { projectId: string }) {
         if (!response.ok) {
           throw new Error(data.error || '刷新素材状态失败');
         }
+        setVolcengineSyncNotice(formatVolcengineSyncNotice(data, 'refresh-status'));
       }
       await fetchData();
     } catch (error) {
-      alert(error instanceof Error ? error.message : '刷新素材状态失败');
+      const message = error instanceof Error ? error.message : '刷新素材状态失败';
+      setVolcengineSyncNotice({ type: 'error', message });
+      alert(message);
     } finally {
       setIsRefreshing(false);
     }
@@ -226,9 +322,12 @@ export function AssetGallery({ projectId }: { projectId: string }) {
         throw new Error(data.error || '同步失败，请稍后重试');
       }
 
+      setVolcengineSyncNotice(formatVolcengineSyncNotice(data, 'sync'));
       await fetchData();
     } catch (error) {
-      alert(error instanceof Error ? error.message : '同步失败，请稍后重试');
+      const message = error instanceof Error ? error.message : '同步失败，请稍后重试';
+      setVolcengineSyncNotice({ type: 'error', message });
+      alert(message);
     } finally {
       setIsSyncingVolcengineAssets(false);
     }
@@ -257,9 +356,12 @@ export function AssetGallery({ projectId }: { projectId: string }) {
         throw new Error(data.error || '重试处理中素材失败，请稍后再试');
       }
 
+      setVolcengineSyncNotice(formatVolcengineSyncNotice(data, 'retry-processing'));
       await fetchData();
     } catch (error) {
-      alert(error instanceof Error ? error.message : '重试处理中素材失败，请稍后再试');
+      const message = error instanceof Error ? error.message : '重试处理中素材失败，请稍后再试';
+      setVolcengineSyncNotice({ type: 'error', message });
+      alert(message);
     } finally {
       setIsSyncingVolcengineAssets(false);
     }
@@ -625,6 +727,12 @@ export function AssetGallery({ projectId }: { projectId: string }) {
         : selectedEpisode
           ? `第 ${selectedEpisode.episodeNumber} 集`
           : '剧集分类';
+  const volcengineSyncNoticeClassName =
+    volcengineSyncNotice?.type === 'error'
+      ? 'border-red-200 bg-red-50 text-red-700'
+      : volcengineSyncNotice?.type === 'warning'
+        ? 'border-amber-200 bg-amber-50 text-amber-700'
+        : 'border-emerald-200 bg-emerald-50 text-emerald-700';
 
   return (
     <div className="mx-auto max-w-6xl p-4 sm:p-8">
@@ -780,6 +888,11 @@ export function AssetGallery({ projectId }: { projectId: string }) {
             <span>素材组 {project.volcengineVideoSettings.assetGroupId}</span>
           )}
         </div>
+        {volcengineSyncNotice && (
+          <div className={`mt-3 rounded-md border px-3 py-2 text-xs ${volcengineSyncNoticeClassName}`}>
+            {volcengineSyncNotice.message}
+          </div>
+        )}
       </div>
 
       <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as AssetType)} className="w-full">
@@ -830,6 +943,7 @@ export function AssetGallery({ projectId }: { projectId: string }) {
 
                 {visibleAssets.map((asset) => {
                   const episodeLabel = getEpisodeLabel(asset);
+                  const volcengineErrorMessage = getVolcengineErrorMessage(asset.volcengineAssetError);
                   return (
                     <Card 
                         key={asset.id} 
@@ -907,6 +1021,11 @@ export function AssetGallery({ projectId }: { projectId: string }) {
                                         </span>
                                     )}
                                 </div>
+                            )}
+                            {asset.imageUrl && volcengineErrorMessage && (
+                                <p className="mt-2 line-clamp-3 rounded-md border border-red-100 bg-red-50 px-2 py-1 text-[11px] leading-5 text-red-700">
+                                    失败原因：{volcengineErrorMessage}
+                                </p>
                             )}
                             {episodeLabel && (
                                 <p className="mt-2 inline-flex rounded bg-black/[0.04] px-2 py-1 text-[11px] text-black/50">

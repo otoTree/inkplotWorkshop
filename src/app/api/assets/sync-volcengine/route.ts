@@ -160,7 +160,7 @@ export async function POST(req: Request) {
 
     const { data: assets, error: assetsError } = await supabase
       .from('assets')
-      .select('id, name, type, image_url, volcengine_asset_id, volcengine_asset_status, volcengine_asset_group_id, volcengine_asset_project_name, volcengine_asset_type, volcengine_asset_synced_at')
+      .select('id, name, type, image_url, volcengine_asset_id, volcengine_asset_status, volcengine_asset_group_id, volcengine_asset_project_name, volcengine_asset_type, volcengine_asset_error, volcengine_asset_synced_at')
       .eq('project_id', projectId)
       .eq('user_id', user.id);
 
