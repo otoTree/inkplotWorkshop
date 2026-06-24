@@ -82,7 +82,6 @@ type AssetRow = {
 type PlanConfig = {
   episodeFrom: number;
   episodeTo?: number;
-  episodesPerRun: number;
   skipExistingShots: boolean;
   autoQueueVideo: boolean;
   requireReview: boolean;
@@ -103,7 +102,6 @@ export type ProductionTickOptions = {
 
 const DEFAULT_PLAN_CONFIG: PlanConfig = {
   episodeFrom: 1,
-  episodesPerRun: 1,
   skipExistingShots: true,
   autoQueueVideo: true,
   requireReview: false,
@@ -115,6 +113,7 @@ const STORYBOARD_JOB_TYPES = [
   'storyboard_finalize_plan',
   'storyboard_generate_shot',
 ];
+const PRODUCTION_JOB_TYPES = [...STORYBOARD_JOB_TYPES, 'queue_episode_videos'];
 
 const getErrorMessage = (error: unknown) =>
   error instanceof Error ? error.message : String(error);
@@ -131,7 +130,6 @@ const getPlanConfig = (plan: ProductionPlanRow): PlanConfig => {
   return {
     episodeFrom,
     episodeTo,
-    episodesPerRun: Math.max(1, Math.min(5, Number(config.episodesPerRun) || 1)),
     skipExistingShots: config.skipExistingShots !== false,
     autoQueueVideo: config.autoQueueVideo !== false,
     requireReview: config.requireReview === true,
@@ -265,6 +263,26 @@ const hasExistingStoryboardWork = async (
   return Boolean(data && data.length > 0);
 };
 
+const getActivePlanBacklog = async (
+  supabase: SupabaseAdmin,
+  planId: string
+) => {
+  const { data, error } = await supabase
+    .from('production_jobs')
+    .select('id, episode_id, type, status')
+    .eq('plan_id', planId)
+    .in('type', PRODUCTION_JOB_TYPES)
+    .in('status', ['pending', 'running']);
+  if (error) throw error;
+
+  return {
+    jobs: data || [],
+    activeEpisodeIds: Array.from(
+      new Set((data || []).map((job) => job.episode_id).filter(Boolean))
+    ),
+  };
+};
+
 const createStoryboardPlanJobs = async (
   supabase: SupabaseAdmin,
   plan: ProductionPlanRow,
@@ -296,6 +314,18 @@ const createStoryboardPlanJobs = async (
 
 const schedulePlan = async (supabase: SupabaseAdmin, plan: ProductionPlanRow) => {
   const config = getPlanConfig(plan);
+  const backlog = await getActivePlanBacklog(supabase, plan.id);
+  if (backlog.jobs.length > 0) {
+    return {
+      planId: plan.id,
+      createdJobs: 0,
+      skipped: true,
+      reason: 'active_backlog',
+      activeJobs: backlog.jobs.length,
+      activeEpisodes: backlog.activeEpisodeIds.length,
+    };
+  }
+
   const nextEpisodeNumber = getPlanCursorEpisode(plan, config);
   const { data: episodes, error } = await supabase
     .from('episodes')
@@ -303,14 +333,14 @@ const schedulePlan = async (supabase: SupabaseAdmin, plan: ProductionPlanRow) =>
     .eq('project_id', plan.project_id)
     .gte('episode_number', nextEpisodeNumber)
     .order('episode_number', { ascending: true })
-    .limit(config.episodesPerRun * 5);
+    .limit(10);
   if (error) throw error;
 
   let createdJobs = 0;
   let advancedTo = nextEpisodeNumber;
   const eligibleEpisodes = ((episodes || []) as EpisodeRow[])
     .filter((episode) => !config.episodeTo || episode.episode_number <= config.episodeTo)
-    .slice(0, config.episodesPerRun);
+    .slice(0, 1);
 
   for (const episode of eligibleEpisodes) {
     advancedTo = episode.episode_number + 1;
@@ -919,12 +949,12 @@ const processJob = async (
 
 export const runProductionTick = async (options: ProductionTickOptions = {}) => {
   const supabase = createAdminClient();
-  const maxRuntimeMs = options.maxRuntimeMs ?? 250_000;
+  const maxRuntimeMs = Math.min(options.maxRuntimeMs ?? 270_000, 270_000);
   const deadlineMs = Date.now() + maxRuntimeMs;
 
   const { data: lockAcquired, error: lockError } = await supabase.rpc('try_acquire_cron_lock', {
     lock_name: 'production_tick',
-    lock_for_seconds: 55,
+    lock_for_seconds: 285,
   });
   if (lockError) throw lockError;
   if (!lockAcquired) {

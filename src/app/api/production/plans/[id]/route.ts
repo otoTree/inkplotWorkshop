@@ -11,7 +11,6 @@ const normalizeConfig = (value: unknown) => {
   const config: Record<string, unknown> = {};
   if (input.episodeFrom !== undefined) config.episodeFrom = Math.max(1, Number(input.episodeFrom) || 1);
   if (input.episodeTo !== undefined) config.episodeTo = Number(input.episodeTo) || undefined;
-  if (input.episodesPerRun !== undefined) config.episodesPerRun = Math.max(1, Math.min(5, Number(input.episodesPerRun) || 1));
   if (input.skipExistingShots !== undefined) config.skipExistingShots = input.skipExistingShots !== false;
   if (input.autoQueueVideo !== undefined) config.autoQueueVideo = input.autoQueueVideo !== false;
   if (input.requireReview !== undefined) config.requireReview = input.requireReview === true;

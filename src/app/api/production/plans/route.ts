@@ -23,7 +23,6 @@ const normalizeConfig = (value: unknown) => {
   return {
     episodeFrom: Math.max(1, Number(input.episodeFrom) || 1),
     episodeTo: Number(input.episodeTo) || undefined,
-    episodesPerRun: Math.max(1, Math.min(5, Number(input.episodesPerRun) || 1)),
     skipExistingShots: input.skipExistingShots !== false,
     autoQueueVideo: input.autoQueueVideo !== false,
     requireReview: input.requireReview === true,

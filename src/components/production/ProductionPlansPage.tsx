@@ -55,7 +55,6 @@ type ProductionPlan = {
   config?: {
     episodeFrom?: number;
     episodeTo?: number;
-    episodesPerRun?: number;
     skipExistingShots?: boolean;
     autoQueueVideo?: boolean;
     requireReview?: boolean;
@@ -199,7 +198,6 @@ export function ProductionPlansPage({ projectId }: { projectId: string }) {
     intervalStartAt: getDefaultFutureDateTime(60),
     episodeFrom: 1,
     episodeTo: 1,
-    episodesPerRun: 1,
     skipExistingShots: true,
     autoQueueVideo: true,
     runNow: true,
@@ -275,7 +273,6 @@ export function ProductionPlansPage({ projectId }: { projectId: string }) {
           config: {
             episodeFrom: form.episodeFrom,
             episodeTo: form.episodeTo,
-            episodesPerRun: form.episodesPerRun,
             skipExistingShots: form.skipExistingShots,
             autoQueueVideo: form.mode === 'storyboard_then_video' ? form.autoQueueVideo : false,
             onceRunAt: form.onceRunAt,
@@ -383,7 +380,7 @@ export function ProductionPlansPage({ projectId }: { projectId: string }) {
             <div>
               <CardTitle className="text-lg font-serif">创建计划</CardTitle>
               <p className="mt-1 text-xs text-black/45">
-                外部定时器每分钟触发 <span className="font-mono">POST /api/cron/production</span> 后会消费到期计划
+                外部定时器每分钟触发 <span className="font-mono">POST /api/cron/production</span>，单次 tick 控制在 5 分钟内
               </p>
             </div>
             <Badge variant="outline" className="rounded-md px-2 py-1 font-mono">
@@ -450,16 +447,6 @@ export function ProductionPlansPage({ projectId }: { projectId: string }) {
                 min={form.episodeFrom}
                 value={form.episodeTo}
                 onChange={(event) => setForm({ ...form, episodeTo: Number(event.target.value) })}
-              />
-            </div>
-            <div className="space-y-2">
-              <Label>每次处理集数</Label>
-              <Input
-                type="number"
-                min={1}
-                max={5}
-                value={form.episodesPerRun}
-                onChange={(event) => setForm({ ...form, episodesPerRun: Number(event.target.value) })}
               />
             </div>
             {form.scheduleType === 'once' && (
@@ -563,7 +550,11 @@ export function ProductionPlansPage({ projectId }: { projectId: string }) {
               </div>
               <div className="flex justify-between gap-3">
                 <span>处理节奏</span>
-                <span className="text-black/80">每次 {form.episodesPerRun} 集</span>
+                <span className="text-right text-black/80">按集稳态生产，当前集入队后再推进下一集</span>
+              </div>
+              <div className="flex justify-between gap-3">
+                <span>执行边界</span>
+                <span className="text-right text-black/80">每分钟推进一小步，不常驻运行</span>
               </div>
               <div className="flex justify-between gap-3">
                 <span>启动方式</span>

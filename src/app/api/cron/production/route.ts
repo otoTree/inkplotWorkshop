@@ -21,7 +21,7 @@ export async function POST(req: Request) {
       maxQueueJobsPerTick: Number(body.maxQueueJobsPerTick) || 3,
       maxVideoProcessingShots: Number(body.maxVideoProcessingShots) || 50,
       maxVideoQueuedShots: Number(body.maxVideoQueuedShots) || 10,
-      maxRuntimeMs: Number(body.maxRuntimeMs) || 250_000,
+      maxRuntimeMs: Math.min(Number(body.maxRuntimeMs) || 270_000, 270_000),
     });
 
     return NextResponse.json(result);
