@@ -3,7 +3,7 @@
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useEffect, useState } from 'react';
-import { BookOpen, Users, Film, Download, ArrowLeft, Rocket, LayoutDashboard } from 'lucide-react';
+import { BookOpen, Users, Film, Download, ArrowLeft, Rocket, LayoutDashboard, CalendarClock } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
@@ -31,6 +31,7 @@ export function Sidebar({ projectId }: { projectId: string }) {
     { href: `/project/${projectId}`, label: '剧本', icon: BookOpen },
     { href: `/project/${projectId}/assets`, label: '设定', icon: Users },
     { href: `/project/${projectId}/storyboard`, label: '分镜', icon: Film },
+    { href: `/project/${projectId}/production`, label: '生产计划', icon: CalendarClock },
     { href: `/project/${projectId}/export`, label: '导出', icon: Download },
   ];
 
