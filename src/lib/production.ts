@@ -87,6 +87,9 @@ type PlanConfig = {
   autoQueueVideo: boolean;
   requireReview: boolean;
   videoAspectRatio?: '9:16' | '16:9' | string;
+  dailyTime: string;
+  onceRunAt?: string;
+  intervalStartAt?: string;
 };
 
 export type ProductionTickOptions = {
@@ -104,6 +107,7 @@ const DEFAULT_PLAN_CONFIG: PlanConfig = {
   skipExistingShots: true,
   autoQueueVideo: true,
   requireReview: false,
+  dailyTime: '09:00',
 };
 
 const STORYBOARD_JOB_TYPES = [
@@ -132,6 +136,12 @@ const getPlanConfig = (plan: ProductionPlanRow): PlanConfig => {
     autoQueueVideo: config.autoQueueVideo !== false,
     requireReview: config.requireReview === true,
     videoAspectRatio: typeof config.videoAspectRatio === 'string' ? config.videoAspectRatio : undefined,
+    dailyTime:
+      typeof config.dailyTime === 'string' && /^\d{2}:\d{2}$/.test(config.dailyTime)
+        ? config.dailyTime
+        : DEFAULT_PLAN_CONFIG.dailyTime,
+    onceRunAt: typeof config.onceRunAt === 'string' ? config.onceRunAt : undefined,
+    intervalStartAt: typeof config.intervalStartAt === 'string' ? config.intervalStartAt : undefined,
   };
 };
 
@@ -140,14 +150,34 @@ const getPlanCursorEpisode = (plan: ProductionPlanRow, config: PlanConfig) => {
   return Math.max(config.episodeFrom, Number(cursor.nextEpisodeNumber) || config.episodeFrom);
 };
 
-const getNextRunAt = (plan: ProductionPlanRow) => {
+const getNextDailyRunAt = (dailyTime: string) => {
+  const [hour, minute] = dailyTime.split(':').map(Number);
+  const now = new Date();
+  const localNowMs = now.getTime() + 8 * 60 * 60_000;
+  const localNow = new Date(localNowMs);
+  const localRun = new Date(Date.UTC(
+    localNow.getUTCFullYear(),
+    localNow.getUTCMonth(),
+    localNow.getUTCDate(),
+    Number.isFinite(hour) ? hour : 9,
+    Number.isFinite(minute) ? minute : 0,
+    0,
+    0
+  ));
+  if (localRun.getTime() <= localNowMs) {
+    localRun.setUTCDate(localRun.getUTCDate() + 1);
+  }
+  return new Date(localRun.getTime() - 8 * 60 * 60_000).toISOString();
+};
+
+const getNextRunAt = (plan: ProductionPlanRow, config: PlanConfig) => {
   const now = new Date();
   if (plan.schedule_type === 'interval') {
     const minutes = Math.max(1, Number(plan.interval_minutes) || 60);
     return new Date(now.getTime() + minutes * 60_000).toISOString();
   }
   if (plan.schedule_type === 'daily') {
-    return new Date(now.getTime() + 24 * 60 * 60_000).toISOString();
+    return getNextDailyRunAt(config.dailyTime);
   }
   return null;
 };
@@ -332,8 +362,9 @@ const schedulePlan = async (supabase: SupabaseAdmin, plan: ProductionPlanRow) =>
   const exhausted =
     eligibleEpisodes.length === 0 ||
     (config.episodeTo !== undefined && advancedTo > config.episodeTo);
-  const status = exhausted ? 'completed' : plan.status;
-  const nextRunAt = exhausted ? null : getNextRunAt(plan);
+  const shouldStopScheduling = exhausted || plan.schedule_type === 'once';
+  const status = shouldStopScheduling ? 'completed' : plan.status;
+  const nextRunAt = shouldStopScheduling ? null : getNextRunAt(plan, config);
 
   const { error: updateError } = await supabase
     .from('production_plans')

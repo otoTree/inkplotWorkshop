@@ -16,7 +16,22 @@ const normalizeConfig = (value: unknown) => {
   if (input.autoQueueVideo !== undefined) config.autoQueueVideo = input.autoQueueVideo !== false;
   if (input.requireReview !== undefined) config.requireReview = input.requireReview === true;
   if (typeof input.videoAspectRatio === 'string') config.videoAspectRatio = input.videoAspectRatio;
+  if (typeof input.dailyTime === 'string' && /^\d{2}:\d{2}$/.test(input.dailyTime)) {
+    config.dailyTime = input.dailyTime;
+  }
+  if (typeof input.onceRunAt === 'string') config.onceRunAt = input.onceRunAt;
+  if (typeof input.intervalStartAt === 'string') config.intervalStartAt = input.intervalStartAt;
   return config;
+};
+
+const parseClientDateTime = (value: unknown) => {
+  if (typeof value !== 'string' || !value.trim()) return null;
+  const trimmed = value.trim();
+  const isoLike = /(?:Z|[+-]\d{2}:\d{2})$/.test(trimmed)
+    ? trimmed
+    : `${trimmed}:00+08:00`;
+  const date = new Date(isoLike);
+  return Number.isNaN(date.getTime()) ? null : date.toISOString();
 };
 
 export async function PATCH(
@@ -43,14 +58,14 @@ export async function PATCH(
     if (['storyboard_only', 'storyboard_then_video', 'video_only'].includes(body.mode)) {
       updates.mode = body.mode;
     }
-    if (['manual', 'interval', 'daily'].includes(body.scheduleType)) {
+    if (['manual', 'once', 'interval', 'daily'].includes(body.scheduleType)) {
       updates.schedule_type = body.scheduleType;
     }
     if (body.intervalMinutes !== undefined) {
       updates.interval_minutes = Math.max(1, Number(body.intervalMinutes) || 60);
     }
     if (body.nextRunAt !== undefined) {
-      updates.next_run_at = body.nextRunAt ? String(body.nextRunAt) : null;
+      updates.next_run_at = body.nextRunAt ? parseClientDateTime(body.nextRunAt) || String(body.nextRunAt) : null;
     }
     if (body.runNow === true) {
       updates.status = 'active';
