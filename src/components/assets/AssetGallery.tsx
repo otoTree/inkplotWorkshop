@@ -38,6 +38,8 @@ type VolcengineSyncNotice = {
   message: string;
 };
 
+type VolcengineSyncAction = 'sync' | 'refresh-status' | 'retry-processing' | 'force-resync';
+
 export function AssetGallery({ projectId }: { projectId: string }) {
   const [assets, setAssets] = useState<Asset[]>([]);
   const [episodes, setEpisodes] = useState<Episode[]>([]);
@@ -166,7 +168,7 @@ export function AssetGallery({ projectId }: { projectId: string }) {
 
   const formatVolcengineSyncNotice = (
     result: VolcengineSyncResult,
-    action: 'sync' | 'refresh-status' | 'retry-processing'
+    action: VolcengineSyncAction
   ): VolcengineSyncNotice => {
     const total = result.synced ?? result.refreshed ?? 0;
     const failed = result.failed ?? 0;
@@ -179,7 +181,9 @@ export function AssetGallery({ projectId }: { projectId: string }) {
         ? '刷新'
         : action === 'retry-processing'
           ? '重试提交'
-          : '同步';
+          : action === 'force-resync'
+            ? '完全重新同步'
+            : '同步';
     const details = [
       total > 0 ? `${actionLabel} ${total} 个` : null,
       active > 0 ? `已可用 ${active}` : null,
@@ -360,6 +364,49 @@ export function AssetGallery({ projectId }: { projectId: string }) {
       await fetchData();
     } catch (error) {
       const message = error instanceof Error ? error.message : '重试处理中素材失败，请稍后再试';
+      setVolcengineSyncNotice({ type: 'error', message });
+      alert(message);
+    } finally {
+      setIsSyncingVolcengineAssets(false);
+    }
+  };
+
+  const handleForceResyncVolcengineAssets = async () => {
+    if (!volcengineSyncEnabled) {
+      alert('请先在项目设置中开启“同步素材到火山素材库”。');
+      return;
+    }
+
+    if (syncableAssets.length === 0) {
+      alert('当前没有带图片的资产可同步。');
+      return;
+    }
+
+    if (
+      !confirm(
+        `将清空 ${syncableAssets.length} 个资产的旧火山素材记录，并重新创建素材组后全部重传。旧素材不会从火山素材库删除，是否继续？`
+      )
+    ) {
+      return;
+    }
+
+    setIsSyncingVolcengineAssets(true);
+    try {
+      const response = await fetch('/api/assets/sync-volcengine', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ projectId, action: 'force-resync' }),
+      });
+      const data = await response.json().catch(() => ({}));
+
+      if (!response.ok) {
+        throw new Error(data.error || '完全重新同步失败，请稍后再试');
+      }
+
+      setVolcengineSyncNotice(formatVolcengineSyncNotice(data, 'force-resync'));
+      await fetchData();
+    } catch (error) {
+      const message = error instanceof Error ? error.message : '完全重新同步失败，请稍后再试';
       setVolcengineSyncNotice({ type: 'error', message });
       alert(message);
     } finally {
@@ -856,6 +903,22 @@ export function AssetGallery({ projectId }: { projectId: string }) {
                 重试处理中 ({processingAssetCount})
               </Button>
             )}
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={handleForceResyncVolcengineAssets}
+              disabled={!volcengineSyncEnabled || isSyncingVolcengineAssets || syncableAssets.length === 0}
+              className="w-fit border-amber-200 bg-amber-50 text-amber-700 hover:bg-amber-100"
+              title={
+                volcengineSyncEnabled
+                  ? '清空当前同步记录，创建新素材组后全部重新提交'
+                  : '请先在项目设置中开启素材库同步'
+              }
+            >
+              <RefreshCw className={`mr-2 h-4 w-4 ${isSyncingVolcengineAssets ? 'animate-spin' : ''}`} />
+              完全重新同步 ({syncableAssets.length})
+            </Button>
           </div>
         </div>
         <div className="mt-4 grid grid-cols-2 gap-3 md:grid-cols-5">

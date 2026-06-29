@@ -121,11 +121,13 @@ export const resolveVolcengineReferenceAssets = async ({
   settings,
   persistence,
   client,
+  forceCreateAssetGroup = false,
 }: {
   references: LocalReferenceAsset[];
   settings?: VolcengineVideoSettings | null;
   persistence?: AssetPersistence;
   client?: AssetClient;
+  forceCreateAssetGroup?: boolean;
 }): Promise<{
   references: ResolvedReferenceAsset[];
   requestContentMode: 'asset_uri' | 'url';
@@ -159,7 +161,7 @@ export const resolveVolcengineReferenceAssets = async ({
   );
   let effectiveGroupId = groupId;
 
-  if (syncEnabled && needsUpload && !effectiveGroupId) {
+  if (syncEnabled && needsUpload && (!effectiveGroupId || forceCreateAssetGroup)) {
     const createdGroup = await assetClient.createAssetGroup({
       Name: `project-${projectName}-assets`.slice(0, 128),
       Description: `Assets for project ${projectName}`.slice(0, 256),

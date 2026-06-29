@@ -20,6 +20,8 @@ type AssetRow = Record<string, unknown> & {
   volcengine_asset_synced_at?: string | null;
 };
 
+type SyncAction = 'sync' | 'refresh-status' | 'retry-processing' | 'force-resync';
+
 const getProjectName = (settings: VolcengineVideoSettings) =>
   settings.projectName ||
   process.env.ARTS_ASSET_PROJECT_NAME ||
@@ -34,6 +36,8 @@ const shouldResyncAsset = (asset: AssetRow) => {
 
 const shouldRetryProcessingAsset = (asset: AssetRow) =>
   !!asset.image_url && !!asset.volcengine_asset_id && asset.volcengine_asset_status === 'Processing';
+
+const shouldForceResyncAsset = (asset: AssetRow) => !!asset.image_url;
 
 const shouldRefreshAsset = (asset: AssetRow) =>
   !!asset.volcengine_asset_id && asset.volcengine_asset_status !== 'Active';
@@ -133,9 +137,17 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    const { projectId, action = 'sync' } = await req.json();
+    const { projectId, action = 'sync' } = await req.json() as { projectId?: unknown; action?: SyncAction };
     if (!projectId || typeof projectId !== 'string') {
       return NextResponse.json({ error: 'Missing projectId' }, { status: 400 });
+    }
+    if (
+      action !== 'sync' &&
+      action !== 'refresh-status' &&
+      action !== 'retry-processing' &&
+      action !== 'force-resync'
+    ) {
+      return NextResponse.json({ error: 'Invalid action' }, { status: 400 });
     }
 
     const { data: project, error: projectError } = await supabase
@@ -180,10 +192,28 @@ export async function POST(req: Request) {
     }
 
     const forceRecreateProcessing = action === 'retry-processing';
+    const forceFullResync = action === 'force-resync';
     const targets = assetRows.filter(
-      forceRecreateProcessing ? shouldRetryProcessingAsset : shouldResyncAsset
+      forceFullResync
+        ? shouldForceResyncAsset
+        : forceRecreateProcessing
+          ? shouldRetryProcessingAsset
+          : shouldResyncAsset
     );
     if (targets.length === 0) {
+      if (forceFullResync) {
+        await supabase
+          .from('projects')
+          .update({
+            volcengine_video_settings: {
+              ...settings,
+              assetGroupId: null,
+            },
+          })
+          .eq('id', projectId)
+          .eq('user_id', user.id);
+      }
+
       return NextResponse.json({
         synced: 0,
         active: 0,
@@ -193,10 +223,51 @@ export async function POST(req: Request) {
       });
     }
 
+    const syncSettings = forceFullResync
+      ? ({
+          ...settings,
+          assetGroupId: undefined,
+        } as VolcengineVideoSettings)
+      : settings;
+
+    if (forceFullResync) {
+      const targetIds = targets.map((asset) => asset.id);
+      const resetPatch = {
+        volcengine_asset_id: null,
+        volcengine_asset_status: null,
+        volcengine_asset_group_id: null,
+        volcengine_asset_project_name: null,
+        volcengine_asset_type: null,
+        volcengine_asset_error: null,
+        volcengine_asset_synced_at: null,
+      };
+
+      const { error: resetError } = await supabase
+        .from('assets')
+        .update(resetPatch)
+        .eq('user_id', user.id)
+        .eq('project_id', projectId)
+        .in('id', targetIds);
+
+      if (resetError) throw resetError;
+
+      await supabase
+        .from('projects')
+        .update({
+          volcengine_video_settings: {
+            ...settings,
+            assetGroupId: null,
+          },
+        })
+        .eq('id', projectId)
+        .eq('user_id', user.id);
+    }
+
     const updates: Array<{ assetId: string; patch: Record<string, unknown> }> = [];
     const resolved = await resolveVolcengineReferenceAssets({
-      references: targets.map((asset) => toResyncReference(asset, forceRecreateProcessing)),
-      settings,
+      references: targets.map((asset) => toResyncReference(asset, forceRecreateProcessing || forceFullResync)),
+      settings: syncSettings,
+      forceCreateAssetGroup: forceFullResync,
       persistence: {
         updateAsset: async (assetId, patch) => {
           updates.push({ assetId, patch });
