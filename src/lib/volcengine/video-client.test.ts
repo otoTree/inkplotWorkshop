@@ -57,7 +57,7 @@ test('mergeVolcengineTaskMetadata keeps unified status metadata shape', () => {
     requestContentMode: 'asset_uri',
     referenceAssetIds: ['asset-1'],
     aspectRatio: '9:16',
-    resolution: '720p',
+    resolution: '480p',
     result: {
       id: 'cgt-test',
       status: 'processing',
