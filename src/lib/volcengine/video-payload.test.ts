@@ -84,12 +84,11 @@ test('buildSeedance2VideoPayload falls back to source URL for non-active asset U
   }
 });
 
-test('buildSeedance2VideoPayload allows explicit resolution override', () => {
+test('buildSeedance2VideoPayload always uses the fixed resolution', () => {
   const payload = buildSeedance2VideoPayload({
     model: 'doubao-seedance-2-0-pro',
-    prompt: '测试显式分辨率覆盖。',
-    resolution: '1080p',
+    prompt: '测试固定分辨率。',
   });
 
-  assert.equal(payload.resolution, '1080p');
+  assert.equal(payload.resolution, DEFAULT_SEEDANCE_2_RESOLUTION);
 });

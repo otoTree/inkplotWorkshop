@@ -399,7 +399,6 @@ export const runVideoGenerationCronTick = async (
                 references: resolvedReferences.references,
                 duration: normalizeShotDurationSeconds(shot.duration),
                 ratio: aspectRatio,
-                resolution: DEFAULT_SEEDANCE_2_RESOLUTION,
                 generateAudio: true,
                 watermark: false,
               });

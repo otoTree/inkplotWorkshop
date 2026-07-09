@@ -8,7 +8,7 @@ export type Seedance2Reference = {
 };
 
 export type Seedance2AspectRatio = '9:16' | '16:9';
-export type Seedance2Resolution = '480p' | '720p' | '1080p';
+export type Seedance2Resolution = '480p';
 export const DEFAULT_SEEDANCE_2_RESOLUTION: Seedance2Resolution = '480p';
 
 export type Seedance2VideoPayload = {
@@ -21,7 +21,7 @@ export type Seedance2VideoPayload = {
   >;
   generate_audio?: boolean;
   ratio?: Seedance2AspectRatio;
-  resolution?: Seedance2Resolution;
+  resolution: Seedance2Resolution;
   duration?: number;
   watermark?: boolean;
 };
@@ -54,7 +54,6 @@ export const buildSeedance2VideoPayload = ({
   references = [],
   duration,
   ratio = '9:16',
-  resolution = DEFAULT_SEEDANCE_2_RESOLUTION,
   generateAudio = true,
   watermark = false,
 }: {
@@ -63,7 +62,6 @@ export const buildSeedance2VideoPayload = ({
   references?: Seedance2Reference[];
   duration?: number;
   ratio?: Seedance2AspectRatio;
-  resolution?: Seedance2Resolution;
   generateAudio?: boolean;
   watermark?: boolean;
 }): Seedance2VideoPayload => {
@@ -104,7 +102,7 @@ export const buildSeedance2VideoPayload = ({
     content,
     generate_audio: generateAudio,
     ratio,
-    resolution,
+    resolution: DEFAULT_SEEDANCE_2_RESOLUTION,
     ...(duration ? { duration } : {}),
     watermark,
   };

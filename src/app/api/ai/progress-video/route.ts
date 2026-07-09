@@ -358,7 +358,6 @@ export async function POST(req: Request) {
                 references: resolvedReferences.references,
                 duration: normalizeShotDurationSeconds(claimedShot.duration),
                 ratio: aspectRatio,
-                resolution: DEFAULT_SEEDANCE_2_RESOLUTION,
                 generateAudio: true,
                 watermark: false,
               });
