@@ -2,7 +2,10 @@ import { isSeedance2Model } from './video-client.ts';
 
 export type ProjectVideoModelPreference = 'legacy' | 'seedance-2.0';
 export type ProjectVideoAspectRatio = '9:16' | '16:9';
-export type ProjectVideoModelSelection = 'legacy' | 'doubao-seedance-2-0-260128';
+export type Seedance2VideoModelSelection =
+  | 'dreamina-seedance-2-0-260128'
+  | 'doubao-seedance-2-0-260128';
+export type ProjectVideoModelSelection = 'legacy' | Seedance2VideoModelSelection;
 
 export type ProjectVideoSettingsLike = {
   syncAssetsToPrivateLibrary?: boolean | null;
@@ -31,7 +34,17 @@ export type VideoGenerationMetadataLike = {
 
 export const DEFAULT_PROJECT_VIDEO_MODEL: ProjectVideoModelPreference = 'legacy';
 export const DEFAULT_SEEDANCE_2_VIDEO_MODEL: ProjectVideoModelSelection =
-  'doubao-seedance-2-0-260128';
+  'dreamina-seedance-2-0-260128';
+export const SEEDANCE_2_VIDEO_MODEL_OPTIONS = [
+  {
+    value: 'dreamina-seedance-2-0-260128' as const,
+    label: 'Seedance 2.0 国际版',
+  },
+  {
+    value: 'doubao-seedance-2-0-260128' as const,
+    label: 'Seedance 2.0 国内版',
+  },
+] satisfies Array<{ value: Seedance2VideoModelSelection; label: string }>;
 export const DEFAULT_VOLCENGINE_PROJECT_NAME = 'default';
 export const DEFAULT_PROJECT_VIDEO_ASPECT_RATIO: ProjectVideoAspectRatio = '9:16';
 export const PROJECT_VIDEO_MODEL_OPTIONS = [
@@ -42,8 +55,13 @@ export const PROJECT_VIDEO_MODEL_OPTIONS = [
   },
   {
     value: DEFAULT_SEEDANCE_2_VIDEO_MODEL,
-    label: 'Seedance 2.0',
-    description: `${DEFAULT_SEEDANCE_2_VIDEO_MODEL}，按项目固定使用该模型。`,
+    label: 'Seedance 2.0 国际版',
+    description: `${DEFAULT_SEEDANCE_2_VIDEO_MODEL}，国际版默认模型。`,
+  },
+  {
+    value: 'doubao-seedance-2-0-260128' as const,
+    label: 'Seedance 2.0 国内版',
+    description: 'doubao-seedance-2-0-260128，国内版模型。',
   },
 ] as const;
 
@@ -52,6 +70,11 @@ const normalizeOptionalString = (value: string | null | undefined) => {
   const trimmed = value.trim();
   return trimmed || undefined;
 };
+
+export const isSupportedSeedance2VideoModel = (
+  value: string | null | undefined
+): value is Seedance2VideoModelSelection =>
+  SEEDANCE_2_VIDEO_MODEL_OPTIONS.some((option) => option.value === value);
 
 export const normalizeProjectVideoModel = (
   value: string | null | undefined
@@ -67,6 +90,9 @@ export const normalizeProjectVideoGenerationModel = (
 ): ProjectVideoModelSelection => {
   const normalizedValue = normalizeOptionalString(value);
   if (normalizedValue === 'legacy') return 'legacy';
+  if (isSupportedSeedance2VideoModel(normalizedValue)) {
+    return normalizedValue;
+  }
   if (normalizedValue && isSeedance2Model(normalizedValue)) {
     return DEFAULT_SEEDANCE_2_VIDEO_MODEL;
   }

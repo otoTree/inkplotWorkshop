@@ -98,7 +98,7 @@ test('getVolcengineVideoConfig prefers ARTS env and normalizes base url', () => 
 
   process.env.ARTS_API_BASE_URL = 'https://apis.artsapi.com/api';
   process.env.ARTS_API_KEY = 'arts-video-key';
-  process.env.ARTS_VIDEO_MODEL = 'doubao-seedance-2-0-260128';
+  process.env.ARTS_VIDEO_MODEL = 'dreamina-seedance-2-0-260128';
   process.env.VOLCENGINE_ARK_VIDEO_BASE_URL = 'https://legacy.example.com/api/v3';
   process.env.VOLCENGINE_ARK_VIDEO_API_KEY = 'legacy-video-key';
   process.env.VOLCENGINE_ARK_VIDEO_MODEL = 'legacy-model';
@@ -107,7 +107,7 @@ test('getVolcengineVideoConfig prefers ARTS env and normalizes base url', () => 
     const config = getVolcengineVideoConfig();
     assert.equal(config.baseUrl, 'https://apis.artsapi.com/api/v3');
     assert.equal(config.apiKey, 'arts-video-key');
-    assert.equal(config.model, 'doubao-seedance-2-0-260128');
+    assert.equal(config.model, 'dreamina-seedance-2-0-260128');
   } finally {
     for (const [key, value] of Object.entries(previous)) {
       if (value === undefined) {

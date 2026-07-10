@@ -19,7 +19,7 @@
 export ARTS_API_BASE_URL="https://apis.artsapi.com/api/v3"
 export ARTS_API_KEY="replace-with-your-arts-bearer-key"
 export ARTS_ASSET_PROJECT_NAME="your-project-name"
-export ARTS_VIDEO_MODEL="doubao-seedance-2-0-260128"
+export ARTS_VIDEO_MODEL="dreamina-seedance-2-0-260128"
 ```
 
 ## 统一约定
@@ -246,7 +246,7 @@ POST ${ARTS_VIDEO_BASE_URL}/contents/generations/tasks
 
 说明：
 
-- `model` 用当前项目默认值 `ARTS_VIDEO_MODEL`
+- `model` 用当前项目默认值 `ARTS_VIDEO_MODEL`；国际版默认 `dreamina-seedance-2-0-260128`，国内版可用 `doubao-seedance-2-0-260128`
 - 项目实际发送字段为：
   - `model`
   - `content`
@@ -318,7 +318,7 @@ curl -X GET "${ARTS_VIDEO_BASE_URL}/contents/generations/tasks/${ARTS_VIDEO_TASK
 ```json
 {
   "id": "cgt_2b1b0f2f8fd44b73a0a6b64f3a6a7f11",
-  "model": "doubao-seedance-2-0-260128",
+  "model": "dreamina-seedance-2-0-260128",
   "status": "processing",
   "updated_at": 1778135602
 }
@@ -329,7 +329,7 @@ curl -X GET "${ARTS_VIDEO_BASE_URL}/contents/generations/tasks/${ARTS_VIDEO_TASK
 ```json
 {
   "id": "cgt_2b1b0f2f8fd44b73a0a6b64f3a6a7f11",
-  "model": "doubao-seedance-2-0-260128",
+  "model": "dreamina-seedance-2-0-260128",
   "status": "succeeded",
   "content": {
     "video_url": "https://cdn.example.com/video/cgt_2b1b0f2f8fd44b73a0a6b64f3a6a7f11.mp4"
@@ -356,7 +356,7 @@ curl -X GET "${ARTS_VIDEO_BASE_URL}/contents/generations/tasks/${ARTS_VIDEO_TASK
 ```json
 {
   "id": "cgt_2b1b0f2f8fd44b73a0a6b64f3a6a7f11",
-  "model": "doubao-seedance-2-0-260128",
+  "model": "dreamina-seedance-2-0-260128",
   "status": "failed",
   "error": {
     "code": "INVALID_PARAMETER",
@@ -386,4 +386,3 @@ CreateAssetGroup
 - 只有 `GetAsset` 返回 `Status=Active` 时再投喂到视频生成
 - `content` 里必须至少有一条文本项
 - 当前项目支持把 `size` 映射成 `ratio`，但直连 curl 建议直接传 `ratio`
-

@@ -6,12 +6,13 @@ import {
   type VolcengineAssetResult,
   type VolcengineAssetStatus,
 } from './asset-client.ts';
+import type { ProjectVideoModelSelection } from './video-compat.ts';
 
 export type VolcengineVideoSettings = {
   syncAssetsToPrivateLibrary?: boolean;
   assetGroupId?: string;
   projectName?: string;
-  model?: 'legacy' | 'doubao-seedance-2-0-260128';
+  model?: ProjectVideoModelSelection;
   preferredVideoModel?: 'seedance-2.0' | 'legacy';
   aspectRatio?: '9:16' | '16:9';
 };

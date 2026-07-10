@@ -1,4 +1,5 @@
 import type { SupportedImageGenerationModel } from '@/lib/image-generation-models';
+import type { ProjectVideoModelSelection } from '@/lib/volcengine/video-compat';
 
 export type ProjectVisualStylePreset =
   | 'overseas-live-action'
@@ -51,7 +52,7 @@ export interface Project {
     syncAssetsToPrivateLibrary?: boolean;
     assetGroupId?: string;
     projectName?: string;
-    model?: 'legacy' | 'doubao-seedance-2-0-260128';
+    model?: ProjectVideoModelSelection;
     preferredVideoModel?: 'seedance-2.0' | 'legacy';
     aspectRatio?: '9:16' | '16:9';
   };
