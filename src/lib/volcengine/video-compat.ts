@@ -33,15 +33,17 @@ export type VideoGenerationMetadataLike = {
 };
 
 export const DEFAULT_PROJECT_VIDEO_MODEL: ProjectVideoModelPreference = 'legacy';
+export const INTERNATIONAL_SEEDANCE_2_VIDEO_MODEL = 'dreamina-seedance-2-0-260128';
+export const DOMESTIC_SEEDANCE_2_VIDEO_MODEL = 'doubao-seedance-2-0-260128';
 export const DEFAULT_SEEDANCE_2_VIDEO_MODEL: ProjectVideoModelSelection =
-  'dreamina-seedance-2-0-260128';
+  INTERNATIONAL_SEEDANCE_2_VIDEO_MODEL;
 export const SEEDANCE_2_VIDEO_MODEL_OPTIONS = [
   {
-    value: 'dreamina-seedance-2-0-260128' as const,
+    value: INTERNATIONAL_SEEDANCE_2_VIDEO_MODEL,
     label: 'Seedance 2.0 国际版',
   },
   {
-    value: 'doubao-seedance-2-0-260128' as const,
+    value: DOMESTIC_SEEDANCE_2_VIDEO_MODEL,
     label: 'Seedance 2.0 国内版',
   },
 ] satisfies Array<{ value: Seedance2VideoModelSelection; label: string }>;
@@ -59,7 +61,7 @@ export const PROJECT_VIDEO_MODEL_OPTIONS = [
     description: `${DEFAULT_SEEDANCE_2_VIDEO_MODEL}，国际版默认模型。`,
   },
   {
-    value: 'doubao-seedance-2-0-260128' as const,
+    value: DOMESTIC_SEEDANCE_2_VIDEO_MODEL,
     label: 'Seedance 2.0 国内版',
     description: 'doubao-seedance-2-0-260128，国内版模型。',
   },
@@ -75,6 +77,9 @@ export const isSupportedSeedance2VideoModel = (
   value: string | null | undefined
 ): value is Seedance2VideoModelSelection =>
   SEEDANCE_2_VIDEO_MODEL_OPTIONS.some((option) => option.value === value);
+
+export const isInternationalSeedance2VideoModel = (value: string | null | undefined) =>
+  value === INTERNATIONAL_SEEDANCE_2_VIDEO_MODEL;
 
 export const normalizeProjectVideoModel = (
   value: string | null | undefined

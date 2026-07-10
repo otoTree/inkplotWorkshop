@@ -123,12 +123,14 @@ export const resolveVolcengineReferenceAssets = async ({
   persistence,
   client,
   forceCreateAssetGroup = false,
+  preferSourceUrls = false,
 }: {
   references: LocalReferenceAsset[];
   settings?: VolcengineVideoSettings | null;
   persistence?: AssetPersistence;
   client?: AssetClient;
   forceCreateAssetGroup?: boolean;
+  preferSourceUrls?: boolean;
 }): Promise<{
   references: ResolvedReferenceAsset[];
   requestContentMode: 'asset_uri' | 'url';
@@ -155,6 +157,23 @@ export const resolveVolcengineReferenceAssets = async ({
     '';
   const resolved: ResolvedReferenceAsset[] = [];
   const pendingAssets: PendingReferenceAsset[] = [];
+
+  if (preferSourceUrls) {
+    for (const asset of references) {
+      const fallback = toResolvedUrl(asset);
+      if (fallback) resolved.push(fallback);
+    }
+
+    return {
+      references: resolved,
+      requestContentMode: 'url',
+      referenceAssetIds: [],
+      requiresAssetReadiness: false,
+      pendingAssets,
+      assetGroupId: groupId || undefined,
+    };
+  }
+
   const needsUpload = references.some(
     (asset) =>
       asset.imageUrl &&

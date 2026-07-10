@@ -42,6 +42,33 @@ test('resolveVolcengineReferenceAssets returns asset URI for active synced asset
   assert.equal(resolved.references[0].mode, 'asset_uri');
 });
 
+test('resolveVolcengineReferenceAssets prefers source URLs for international model requests', async () => {
+  const resolved = await resolveVolcengineReferenceAssets({
+    references: [
+      {
+        id: 'asset-local-1',
+        name: '主角',
+        type: 'character',
+        imageUrl: 'https://example.com/a.png',
+        volcengineAssetId: 'asset-20260424120352-8lkvp',
+        volcengineAssetStatus: 'Active',
+      },
+    ],
+    settings: {
+      syncAssetsToPrivateLibrary: true,
+      assetGroupId: 'group-1',
+      projectName: 'default',
+    },
+    preferSourceUrls: true,
+  });
+
+  assert.equal(resolved.references[0].usableUrl, 'https://example.com/a.png');
+  assert.equal(resolved.references[0].mode, 'url');
+  assert.equal(resolved.requestContentMode, 'url');
+  assert.deepEqual(resolved.referenceAssetIds, []);
+  assert.equal(resolved.requiresAssetReadiness, false);
+});
+
 test('resolveVolcengineReferenceAssets keeps URL while remote asset is still processing', async () => {
   const updates: Array<Record<string, unknown>> = [];
 

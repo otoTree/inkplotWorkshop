@@ -26,6 +26,7 @@ import {
 import {
   normalizeProjectVideoAspectRatio,
   normalizeProjectVideoSettings,
+  isInternationalSeedance2VideoModel,
   resolveProjectVideoGenerationModel,
   type ProjectVideoSettingsLike,
 } from '@/lib/volcengine/video-compat';
@@ -319,6 +320,7 @@ export async function POST(req: Request) {
               const resolvedReferences = await resolveVolcengineReferenceAssets({
                 references: referenceAssets,
                 settings: projectVideoSettings,
+                preferSourceUrls: isInternationalSeedance2VideoModel(videoConfig.model),
                 persistence: {
                   updateAsset: async (assetId, updates) => {
                     await supabase.from('assets').update(updates).eq('id', assetId).eq('user_id', user.id);
