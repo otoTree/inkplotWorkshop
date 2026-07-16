@@ -127,9 +127,9 @@ ARTS_ASSET_GROUP_ID=optional-group-id
 
 素材库 Base URL 归一化规则：
 
-- `https://apis.artsapi.com/api/v3` -> `https://apis.artsapi.com/api`
-- `https://apis.artsapi.com/api` -> `https://apis.artsapi.com/api`
-- `https://apis.artsapi.com` -> `https://apis.artsapi.com/api`
+- `https://apis.artsapi.com/api/v3` -> `https://apis.artsapi.com/api/v3`
+- `https://apis.artsapi.com/api` -> `https://apis.artsapi.com/api/v3`
+- `https://apis.artsapi.com` -> `https://apis.artsapi.com/api/v3`
 
 Legacy AK/SK 模式：
 
@@ -825,7 +825,7 @@ POST {VOLCENGINE_ASSET_BASE_URL}?Action=CreateAssetGroup&Version=2024-01-01
 Curl：
 
 ```bash
-ARTS_ASSET_BASE_URL="${ARTS_API_BASE_URL%/api/v3}/api"
+ARTS_ASSET_BASE_URL="${ARTS_API_BASE_URL%/}"
 
 curl -X POST "$ARTS_ASSET_BASE_URL?Action=CreateAssetGroup&Version=2024-01-01" \
   -H "Authorization: Bearer $ARTS_API_KEY" \

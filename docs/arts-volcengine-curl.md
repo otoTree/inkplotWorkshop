@@ -7,8 +7,8 @@
 当前项目里：
 
 - 火山素材库通过 `ARTS_API_BASE_URL` + `ARTS_API_KEY` 走 Bearer 鉴权
-- 素材库请求路径是 `.../api?Action=<Action>&Version=2024-01-01`
-- 如果 `ARTS_API_BASE_URL` 配的是 `.../api/v3`，素材库请求会自动回退到 `.../api`
+- 素材库请求路径是 `.../api/v3?Action=<Action>&Version=2024-01-01`
+- 如果 `ARTS_API_BASE_URL` 配的是 `.../api`，素材库请求会自动补全为 `.../api/v3`
 - `Seedance 2.0` 视频生成走 `.../contents/generations/tasks`
 - 视频模型默认取 `ARTS_VIDEO_MODEL`
 - 素材上传成功后，要继续轮询到 `Status=Active`，再在视频请求里写 `asset://<asset_id>`
@@ -27,7 +27,7 @@ export ARTS_VIDEO_MODEL="dreamina-seedance-2-0-260128"
 素材库接口根地址：
 
 ```bash
-export ARTS_ASSET_BASE_URL="${ARTS_API_BASE_URL%/api/v3}/api"
+export ARTS_ASSET_BASE_URL="${ARTS_API_BASE_URL%/}"
 ```
 
 视频接口根地址：
@@ -379,7 +379,7 @@ CreateAssetGroup
 ## 7. 关键注意事项
 
 - 素材库和视频都复用 `ARTS_API_KEY`
-- 素材库请求路径是 `.../api`，不是 `.../api/v3`
+- 素材库请求路径保留在 `.../api/v3`
 - 视频请求路径保留在 `.../api/v3/contents/generations/tasks`
 - 当前项目素材库使用 `ProjectName`
 - 用于生成的视频引用建议写 `asset://<asset_id>`

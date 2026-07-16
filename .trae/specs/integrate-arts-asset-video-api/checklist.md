@@ -1,5 +1,5 @@
 - [x] 运行时优先按 `docs/arts-volcengine-curl.md` 约定读取 `ARTS_API_BASE_URL`、`ARTS_API_KEY`、`ARTS_VIDEO_MODEL`
-- [x] 素材库请求统一走 `.../api?Action=<Action>&Version=2024-01-01`，并兼容 `.../api/v3` 到 `.../api` 的回退规则
+- [x] 素材库请求统一走 `.../api/v3?Action=<Action>&Version=2024-01-01`，并兼容 `.../api` 自动补全为 `.../api/v3`
 - [x] 视频任务提交与查询统一走 `.../contents/generations/tasks`
 - [x] 项目级 ARTS 素材组可以被创建、绑定并复用
 - [x] 资产上传后会持续轮询到 `Status=Active` 或 `Status=Failed`，而不是只记录受理成功

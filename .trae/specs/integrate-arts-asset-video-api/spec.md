@@ -4,7 +4,7 @@
 当前项目已经有火山素材库与 Seedance 视频生成的初步实现，但运行时代码仍以 `VOLCENGINE_*` 口径为主，和 `docs/arts-volcengine-curl.md` 中定义的 ARTS Bearer 鉴权、素材库 API 路径、`asset://` 引用规范并不完全一致。用户现在需要把项目按该文档做成资产级全面接入，并让分镜视频生成稳定支持 Seedance 2.0，同时继续兼容旧的视频生成链路。
 
 ## What Changes
-- 统一运行时的 ARTS 接入协议，按文档使用 `ARTS_API_BASE_URL`、`ARTS_API_KEY`、`ARTS_VIDEO_MODEL` 和 `.../api?Action=...&Version=2024-01-01` 的素材库调用方式。
+- 统一运行时的 ARTS 接入协议，按文档使用 `ARTS_API_BASE_URL`、`ARTS_API_KEY`、`ARTS_VIDEO_MODEL` 和 `.../api/v3?Action=...&Version=2024-01-01` 的素材库调用方式。
 - 为项目资产建立完整的素材库生命周期：素材组、素材上传、素材状态轮询、可用态缓存与复用。
 - 将分镜视频生成明确拆分为 `seedance-2.0` 与 `legacy` 两条可兼容链路，并保持项目级模型选择能力。
 - 规定 Seedance 2.0 在引用已接入 ARTS 素材库的资产时必须发送 `asset://<asset_id>` 形式的 URL，不允许回退成普通公网图片 URL。
@@ -21,8 +21,8 @@
 #### Scenario: 素材库请求按 ARTS 协议发送
 - **WHEN** 系统创建素材组、上传素材或查询素材状态
 - **THEN** 系统使用 `ARTS_API_BASE_URL` 和 `ARTS_API_KEY`
-- **AND** 素材库请求路径为 `.../api?Action=<Action>&Version=2024-01-01`
-- **AND** 如果基础地址配置为 `.../api/v3`，系统会按文档规则回退到 `.../api`
+- **AND** 素材库请求路径为 `.../api/v3?Action=<Action>&Version=2024-01-01`
+- **AND** 如果基础地址配置为 `.../api`，系统会自动补全为 `.../api/v3`
 
 #### Scenario: 视频请求按 ARTS 协议发送
 - **WHEN** 系统提交 Seedance 2.0 视频任务或查询任务状态

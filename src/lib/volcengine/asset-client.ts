@@ -32,7 +32,7 @@ const SERVICE = 'ark';
 const DEFAULT_REGION = 'cn-beijing';
 const DEFAULT_VERSION = '2024-01-01';
 const DEFAULT_HOST = 'ark.cn-beijing.volcengineapi.com';
-const DEFAULT_ARTS_BASE_URL = 'https://apis.artsapi.com/api';
+const DEFAULT_ARTS_BASE_URL = 'https://apis.artsapi.com/api/v3';
 
 const getFirstDefinedEnv = (...values: Array<string | undefined>) => {
   for (const value of values) {
@@ -198,9 +198,9 @@ export const getVolcengineAssetConfig = (): VolcengineAssetConfig => {
 
     const normalizedBaseUrl = (() => {
       const trimmed = (artsBaseUrl || DEFAULT_ARTS_BASE_URL).replace(/\/+$/, '');
-      if (/\/api\/v\d+$/i.test(trimmed)) return trimmed.replace(/\/v\d+$/i, '');
-      if (/\/api$/i.test(trimmed)) return trimmed;
-      return `${trimmed}/api`;
+      if (/\/api\/v\d+$/i.test(trimmed)) return trimmed;
+      if (/\/api$/i.test(trimmed)) return `${trimmed}/v3`;
+      return `${trimmed}/api/v3`;
     })();
 
     return {

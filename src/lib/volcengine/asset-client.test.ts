@@ -61,7 +61,7 @@ test('createAsset signs OpenAPI request and parses Result.Id', async () => {
   }
 });
 
-test('getVolcengineAssetConfig prefers ARTS bearer config and normalizes /api/v3 to /api', () => {
+test('getVolcengineAssetConfig prefers ARTS bearer config and preserves /api/v3', () => {
   const previous = {
     ARTS_API_BASE_URL: process.env.ARTS_API_BASE_URL,
     ARTS_API_KEY: process.env.ARTS_API_KEY,
@@ -81,10 +81,33 @@ test('getVolcengineAssetConfig prefers ARTS bearer config and normalizes /api/v3
   try {
     const resolved = getVolcengineAssetConfig();
     assert.equal(resolved.authMode, 'arts');
-    assert.equal(resolved.baseUrl, 'https://apis.artsapi.com/api');
+    assert.equal(resolved.baseUrl, 'https://apis.artsapi.com/api/v3');
     assert.equal(resolved.apiKey, 'arts-key');
     assert.equal(resolved.projectName, 'arts-project');
     assert.equal(resolved.groupId, 'arts-group');
+  } finally {
+    for (const [key, value] of Object.entries(previous)) {
+      if (value === undefined) {
+        delete process.env[key];
+      } else {
+        process.env[key] = value;
+      }
+    }
+  }
+});
+
+test('getVolcengineAssetConfig appends /v3 to an /api base URL', () => {
+  const previous = {
+    ARTS_API_BASE_URL: process.env.ARTS_API_BASE_URL,
+    ARTS_API_KEY: process.env.ARTS_API_KEY,
+  };
+
+  process.env.ARTS_API_BASE_URL = 'https://qimu-aigc.tezign.com/qimu-aigc/api';
+  process.env.ARTS_API_KEY = 'arts-key';
+
+  try {
+    const resolved = getVolcengineAssetConfig();
+    assert.equal(resolved.baseUrl, 'https://qimu-aigc.tezign.com/qimu-aigc/api/v3');
   } finally {
     for (const [key, value] of Object.entries(previous)) {
       if (value === undefined) {
@@ -114,9 +137,11 @@ test('createAsset rejects non-public URLs', async () => {
 
 test('getAsset normalizes ARTS-style lowercase payload fields', async () => {
   const originalFetch = globalThis.fetch;
+  let requestedUrl = '';
 
-  globalThis.fetch = (async () =>
-    new Response(
+  globalThis.fetch = (async (input: RequestInfo | URL) => {
+    requestedUrl = String(input);
+    return new Response(
       JSON.stringify({
         result: {
           id: 'asset_arts_1',
@@ -134,12 +159,13 @@ test('getAsset normalizes ARTS-style lowercase payload fields', async () => {
         status: 200,
         headers: { 'Content-Type': 'application/json' },
       }
-    )) as typeof fetch;
+    );
+  }) as typeof fetch;
 
   try {
     const result = await getAsset({ Id: 'asset_arts_1', ProjectName: 'arts-project' }, {
       region: 'cn-beijing',
-      baseUrl: 'https://apis.artsapi.com/api',
+      baseUrl: 'https://apis.artsapi.com/api/v3',
       version: '2024-01-01',
       projectName: 'arts-project',
       groupId: 'ag_1',
@@ -152,6 +178,10 @@ test('getAsset normalizes ARTS-style lowercase payload fields', async () => {
     assert.equal(result.GroupId, 'ag_1');
     assert.equal(result.ProjectName, 'arts-project');
     assert.equal(result.AssetType, 'Image');
+    assert.equal(
+      requestedUrl,
+      'https://apis.artsapi.com/api/v3?Action=GetAsset&Version=2024-01-01'
+    );
     assert.deepEqual(result.Error, {
       Code: 'IGNORED',
       Message: 'ignored when active',
