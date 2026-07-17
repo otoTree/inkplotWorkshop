@@ -33,7 +33,7 @@ const DEFAULT_REGION = 'cn-beijing';
 const DEFAULT_VERSION = '2024-01-01';
 const DEFAULT_HOST = 'ark.cn-beijing.volcengineapi.com';
 const DEFAULT_ARTS_BASE_URL = 'https://apis.artsapi.com/api/v3';
-const DEFAULT_ASSET_TIMEOUT_MS = 20000;
+const DEFAULT_ASSET_TIMEOUT_MS = 45000;
 
 const getFirstDefinedEnv = (...values: Array<string | undefined>) => {
   for (const value of values) {
@@ -47,21 +47,47 @@ const getAssetTimeoutMs = () => {
   return Number.isFinite(parsed) && parsed > 0 ? parsed : DEFAULT_ASSET_TIMEOUT_MS;
 };
 
-const fetchAssetApi = async (url: string, init: RequestInit, action: string) => {
-  const controller = new AbortController();
-  const timeoutMs = getAssetTimeoutMs();
-  const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+const getAssetRequestAttempts = (action: string) => {
+  if (action === 'GetAsset' || action === 'ListAssets') return 3;
+  if (action === 'CreateAssetGroup') return 2;
+  return 1;
+};
 
-  try {
-    return await fetch(url, { ...init, signal: controller.signal });
-  } catch (error) {
-    if (controller.signal.aborted) {
-      throw new AIAPIError(`火山素材库 ${action} 请求超时`, 504, `${timeoutMs}ms`);
+const waitForRetry = (attempt: number) =>
+  new Promise((resolve) => setTimeout(resolve, Math.min(250 * 2 ** attempt, 1000)));
+
+const fetchAssetApi = async (url: string, init: RequestInit, action: string) => {
+  const timeoutMs = getAssetTimeoutMs();
+  const attempts = getAssetRequestAttempts(action);
+
+  for (let attempt = 0; attempt < attempts; attempt += 1) {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+
+    try {
+      const response = await fetch(url, { ...init, signal: controller.signal });
+      const retryableStatus = [429, 502, 503, 504].includes(response.status);
+      if (retryableStatus && attempt + 1 < attempts) {
+        await response.body?.cancel().catch(() => undefined);
+        await waitForRetry(attempt);
+        continue;
+      }
+      return response;
+    } catch (error) {
+      if (attempt + 1 < attempts) {
+        await waitForRetry(attempt);
+        continue;
+      }
+      if (controller.signal.aborted) {
+        throw new AIAPIError(`火山素材库 ${action} 请求超时`, 504, `${timeoutMs}ms`);
+      }
+      throw error;
+    } finally {
+      clearTimeout(timeoutId);
     }
-    throw error;
-  } finally {
-    clearTimeout(timeoutId);
   }
+
+  throw new AIAPIError(`火山素材库 ${action} 请求失败`, 502);
 };
 
 export const getVolcengineAssetProjectName = (override?: string | null) => {

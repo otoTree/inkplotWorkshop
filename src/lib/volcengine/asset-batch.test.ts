@@ -31,6 +31,6 @@ test('selectVolcengineAssetBatch returns stable cursor batches', () => {
 test('normalizeVolcengineAssetBatchSize applies defaults and upper bound', () => {
   assert.equal(normalizeVolcengineAssetBatchSize(undefined), DEFAULT_VOLCENGINE_ASSET_BATCH_SIZE);
   assert.equal(normalizeVolcengineAssetBatchSize(0), DEFAULT_VOLCENGINE_ASSET_BATCH_SIZE);
-  assert.equal(normalizeVolcengineAssetBatchSize(12.9), 12);
+  assert.equal(normalizeVolcengineAssetBatchSize(8.9), 8);
   assert.equal(normalizeVolcengineAssetBatchSize(1000), MAX_VOLCENGINE_ASSET_BATCH_SIZE);
 });

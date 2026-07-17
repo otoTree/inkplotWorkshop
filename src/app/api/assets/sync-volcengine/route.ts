@@ -344,6 +344,10 @@ export async function POST(req: Request) {
     });
   } catch (error) {
     const message = error instanceof Error ? error.message : '同步火山素材库失败';
+    console.error('Volcengine asset sync batch failed', {
+      message,
+      error,
+    });
     return NextResponse.json({ error: message }, { status: 500 });
   }
 }

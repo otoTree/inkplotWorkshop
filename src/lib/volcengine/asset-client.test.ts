@@ -3,6 +3,7 @@ import test from 'node:test';
 import { AIAPIError } from '../ai-server.ts';
 import {
   createAsset,
+  createAssetGroup,
   getAsset,
   getVolcengineAssetConfig,
   getVolcengineAssetProjectName,
@@ -248,12 +249,15 @@ test('asset API aborts a stalled upstream request', async () => {
   const previousTimeout = process.env.ARTS_ASSET_TIMEOUT_MS;
   process.env.ARTS_ASSET_TIMEOUT_MS = '10';
 
-  globalThis.fetch = ((_: RequestInfo | URL, init?: RequestInit) =>
-    new Promise<Response>((_, reject) => {
+  let attempts = 0;
+  globalThis.fetch = ((_: RequestInfo | URL, init?: RequestInit) => {
+    attempts += 1;
+    return new Promise<Response>((_, reject) => {
       init?.signal?.addEventListener('abort', () => {
         reject(new DOMException('Aborted', 'AbortError'));
       });
-    })) as typeof fetch;
+    });
+  }) as typeof fetch;
 
   try {
     await assert.rejects(
@@ -273,9 +277,42 @@ test('asset API aborts a stalled upstream request', async () => {
         error.status === 504 &&
         error.message.includes('请求超时')
     );
+    assert.equal(attempts, 3);
   } finally {
     globalThis.fetch = originalFetch;
     if (previousTimeout === undefined) delete process.env.ARTS_ASSET_TIMEOUT_MS;
     else process.env.ARTS_ASSET_TIMEOUT_MS = previousTimeout;
+  }
+});
+
+test('CreateAssetGroup retries one transient network failure', async () => {
+  const originalFetch = globalThis.fetch;
+  let attempts = 0;
+
+  globalThis.fetch = (async () => {
+    attempts += 1;
+    if (attempts === 1) throw new TypeError('fetch failed');
+    return new Response(JSON.stringify({ Result: { Id: 'group-after-retry' } }), {
+      status: 200,
+      headers: { 'Content-Type': 'application/json' },
+    });
+  }) as typeof fetch;
+
+  try {
+    const result = await createAssetGroup(
+      { Name: 'retry-group', GroupType: 'AIGC', ProjectName: 'tz' },
+      {
+        region: 'cn-beijing',
+        baseUrl: 'https://jphhngvqjmgr.sealosbja.site',
+        version: '2024-01-01',
+        projectName: 'tz',
+        authMode: 'arts',
+        apiKey: 'test-key',
+      }
+    );
+    assert.equal(result.Id, 'group-after-retry');
+    assert.equal(attempts, 2);
+  } finally {
+    globalThis.fetch = originalFetch;
   }
 });

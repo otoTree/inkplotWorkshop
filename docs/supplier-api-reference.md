@@ -140,9 +140,9 @@ ARTS_VIDEO_MODEL=seedance-2-0-fast-tezan
 例如 `https://jphhngvqjmgr.sealosbja.site` 的素材查询地址为
 `https://jphhngvqjmgr.sealosbja.site?Action=ListAssets&Version=2024-01-01`。
 
-应用内批量同步默认每批处理 10 个素材（接口允许 `batchSize` 最大为 25），每批通过
+应用内批量同步默认每批处理 5 个素材（接口允许 `batchSize` 最大为 10），每批通过
 `nextCursor` 继续下一次请求，避免数百张素材占用同一个 Serverless 调用。单个素材库
-请求默认 20 秒超时，可通过 `ARTS_ASSET_TIMEOUT_MS` 调整。
+请求默认 45 秒超时，可通过 `ARTS_ASSET_TIMEOUT_MS` 调整。
 
 Legacy AK/SK 模式：
 

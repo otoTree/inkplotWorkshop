@@ -1,5 +1,5 @@
-export const DEFAULT_VOLCENGINE_ASSET_BATCH_SIZE = 10;
-export const MAX_VOLCENGINE_ASSET_BATCH_SIZE = 25;
+export const DEFAULT_VOLCENGINE_ASSET_BATCH_SIZE = 5;
+export const MAX_VOLCENGINE_ASSET_BATCH_SIZE = 10;
 
 export const normalizeVolcengineAssetBatchSize = (value: unknown) => {
   const parsed = typeof value === 'number' ? value : Number(value);

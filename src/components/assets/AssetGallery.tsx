@@ -22,6 +22,7 @@ import { ExtractionPreviewDialog } from './ExtractionPreviewDialog';
 import { getImageGenerationPrompt } from '@/lib/prompts';
 import { buildVisualStyleRequestPayload, resolveArtStyleConfig } from '@/lib/project-visual-style';
 import { DEFAULT_IMAGE_GENERATION_MODEL, IMAGE_GENERATION_MODEL_LABELS } from '@/lib/image-generation-models';
+import { DEFAULT_VOLCENGINE_ASSET_BATCH_SIZE } from '@/lib/volcengine/asset-batch';
 
 type VolcengineSyncResult = {
   synced?: number;
@@ -227,7 +228,12 @@ export function AssetGallery({ projectId }: { projectId: string }) {
       const response = await fetch('/api/assets/sync-volcengine', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ projectId, action, cursor, batchSize: 10 }),
+        body: JSON.stringify({
+          projectId,
+          action,
+          cursor,
+          batchSize: DEFAULT_VOLCENGINE_ASSET_BATCH_SIZE,
+        }),
       });
       const data = await response.json().catch(() => ({})) as VolcengineSyncResult & {
         error?: string;
