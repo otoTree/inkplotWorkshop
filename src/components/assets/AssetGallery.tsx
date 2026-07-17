@@ -31,6 +31,9 @@ type VolcengineSyncResult = {
   failed?: number;
   errors?: number;
   skipped?: number;
+  hasMore?: boolean;
+  nextCursor?: string | null;
+  remaining?: number;
 };
 
 type VolcengineSyncNotice = {
@@ -213,6 +216,48 @@ export function AssetGallery({ projectId }: { projectId: string }) {
     };
   };
 
+  const runVolcengineSyncBatches = async (
+    action: VolcengineSyncAction
+  ): Promise<VolcengineSyncResult> => {
+    const aggregate: VolcengineSyncResult = {};
+    let cursor: string | null = null;
+    let batchCount = 0;
+
+    while (true) {
+      const response = await fetch('/api/assets/sync-volcengine', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ projectId, action, cursor, batchSize: 10 }),
+      });
+      const data = await response.json().catch(() => ({})) as VolcengineSyncResult & {
+        error?: string;
+      };
+
+      if (!response.ok) {
+        throw new Error(data.error || '素材库批次请求失败，请稍后重试');
+      }
+
+      for (const key of ['synced', 'refreshed', 'active', 'processing', 'failed', 'errors', 'skipped'] as const) {
+        aggregate[key] = (aggregate[key] || 0) + (data[key] || 0);
+      }
+
+      batchCount += 1;
+      if (!data.hasMore) break;
+      if (!data.nextCursor || data.nextCursor === cursor) {
+        throw new Error('素材库批次游标未推进，已停止以避免重复请求');
+      }
+
+      cursor = data.nextCursor;
+      const processed = aggregate.synced ?? aggregate.refreshed ?? 0;
+      setVolcengineSyncNotice({
+        type: 'warning',
+        message: `正在分批处理素材：已完成 ${processed} 个${typeof data.remaining === 'number' ? `，剩余 ${data.remaining} 个` : ''}（第 ${batchCount} 批）。`,
+      });
+    }
+
+    return aggregate;
+  };
+
   const resetVolcengineAssetSync = (): Partial<Asset> => ({
     volcengineAssetId: null,
     volcengineAssetStatus: null,
@@ -285,16 +330,7 @@ export function AssetGallery({ projectId }: { projectId: string }) {
     setIsRefreshing(true);
     try {
       if (volcengineSyncEnabled) {
-        const response = await fetch('/api/assets/sync-volcengine', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ projectId, action: 'refresh-status' }),
-        });
-        const data = await response.json().catch(() => ({}));
-
-        if (!response.ok) {
-          throw new Error(data.error || '刷新素材状态失败');
-        }
+        const data = await runVolcengineSyncBatches('refresh-status');
         setVolcengineSyncNotice(formatVolcengineSyncNotice(data, 'refresh-status'));
       }
       await fetchData();
@@ -315,17 +351,7 @@ export function AssetGallery({ projectId }: { projectId: string }) {
 
     setIsSyncingVolcengineAssets(true);
     try {
-      const response = await fetch('/api/assets/sync-volcengine', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ projectId }),
-      });
-      const data = await response.json().catch(() => ({}));
-
-      if (!response.ok) {
-        throw new Error(data.error || '同步失败，请稍后重试');
-      }
-
+      const data = await runVolcengineSyncBatches('sync');
       setVolcengineSyncNotice(formatVolcengineSyncNotice(data, 'sync'));
       await fetchData();
     } catch (error) {
@@ -349,17 +375,7 @@ export function AssetGallery({ projectId }: { projectId: string }) {
 
     setIsSyncingVolcengineAssets(true);
     try {
-      const response = await fetch('/api/assets/sync-volcengine', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ projectId, action: 'retry-processing' }),
-      });
-      const data = await response.json().catch(() => ({}));
-
-      if (!response.ok) {
-        throw new Error(data.error || '重试处理中素材失败，请稍后再试');
-      }
-
+      const data = await runVolcengineSyncBatches('retry-processing');
       setVolcengineSyncNotice(formatVolcengineSyncNotice(data, 'retry-processing'));
       await fetchData();
     } catch (error) {
@@ -392,17 +408,7 @@ export function AssetGallery({ projectId }: { projectId: string }) {
 
     setIsSyncingVolcengineAssets(true);
     try {
-      const response = await fetch('/api/assets/sync-volcengine', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ projectId, action: 'force-resync' }),
-      });
-      const data = await response.json().catch(() => ({}));
-
-      if (!response.ok) {
-        throw new Error(data.error || '完全重新同步失败，请稍后再试');
-      }
-
+      const data = await runVolcengineSyncBatches('force-resync');
       setVolcengineSyncNotice(formatVolcengineSyncNotice(data, 'force-resync'));
       await fetchData();
     } catch (error) {

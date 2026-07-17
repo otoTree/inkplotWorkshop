@@ -242,3 +242,40 @@ test('getAsset normalizes ARTS-style lowercase payload fields', async () => {
     globalThis.fetch = originalFetch;
   }
 });
+
+test('asset API aborts a stalled upstream request', async () => {
+  const originalFetch = globalThis.fetch;
+  const previousTimeout = process.env.ARTS_ASSET_TIMEOUT_MS;
+  process.env.ARTS_ASSET_TIMEOUT_MS = '10';
+
+  globalThis.fetch = ((_: RequestInfo | URL, init?: RequestInit) =>
+    new Promise<Response>((_, reject) => {
+      init?.signal?.addEventListener('abort', () => {
+        reject(new DOMException('Aborted', 'AbortError'));
+      });
+    })) as typeof fetch;
+
+  try {
+    await assert.rejects(
+      getAsset(
+        { Id: 'asset-timeout', ProjectName: 'tz' },
+        {
+          region: 'cn-beijing',
+          baseUrl: 'https://jphhngvqjmgr.sealosbja.site',
+          version: '2024-01-01',
+          projectName: 'tz',
+          authMode: 'arts',
+          apiKey: 'test-key',
+        }
+      ),
+      (error) =>
+        error instanceof AIAPIError &&
+        error.status === 504 &&
+        error.message.includes('请求超时')
+    );
+  } finally {
+    globalThis.fetch = originalFetch;
+    if (previousTimeout === undefined) delete process.env.ARTS_ASSET_TIMEOUT_MS;
+    else process.env.ARTS_ASSET_TIMEOUT_MS = previousTimeout;
+  }
+});

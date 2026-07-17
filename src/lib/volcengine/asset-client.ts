@@ -33,12 +33,35 @@ const DEFAULT_REGION = 'cn-beijing';
 const DEFAULT_VERSION = '2024-01-01';
 const DEFAULT_HOST = 'ark.cn-beijing.volcengineapi.com';
 const DEFAULT_ARTS_BASE_URL = 'https://apis.artsapi.com/api/v3';
+const DEFAULT_ASSET_TIMEOUT_MS = 20000;
 
 const getFirstDefinedEnv = (...values: Array<string | undefined>) => {
   for (const value of values) {
     if (typeof value === 'string' && value.trim()) return value.trim();
   }
   return '';
+};
+
+const getAssetTimeoutMs = () => {
+  const parsed = Number(process.env.ARTS_ASSET_TIMEOUT_MS);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : DEFAULT_ASSET_TIMEOUT_MS;
+};
+
+const fetchAssetApi = async (url: string, init: RequestInit, action: string) => {
+  const controller = new AbortController();
+  const timeoutMs = getAssetTimeoutMs();
+  const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+
+  try {
+    return await fetch(url, { ...init, signal: controller.signal });
+  } catch (error) {
+    if (controller.signal.aborted) {
+      throw new AIAPIError(`火山素材库 ${action} 请求超时`, 504, `${timeoutMs}ms`);
+    }
+    throw error;
+  } finally {
+    clearTimeout(timeoutId);
+  }
 };
 
 export const getVolcengineAssetProjectName = (override?: string | null) => {
@@ -323,11 +346,11 @@ export const requestVolcengineAssetApi = async <T>(
         }
       : buildVolcengineAssetHeaders({ action, bodyJson, config });
   const url = `${config.baseUrl}?Action=${encodeURIComponent(action)}&Version=${encodeURIComponent(config.version)}`;
-  const response = await fetch(url, {
+  const response = await fetchAssetApi(url, {
     method: 'POST',
     headers,
     body: bodyJson,
-  });
+  }, action);
 
   if (!response.ok) {
     const detail = await response.text().catch(() => '');

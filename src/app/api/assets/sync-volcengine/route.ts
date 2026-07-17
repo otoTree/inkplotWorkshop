@@ -2,6 +2,10 @@ import { NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 import { getAsset, getVolcengineAssetProjectName } from '@/lib/volcengine/asset-client';
 import {
+  normalizeVolcengineAssetBatchSize,
+  selectVolcengineAssetBatch,
+} from '@/lib/volcengine/asset-batch';
+import {
   mapVolcengineAssetRow,
   resolveVolcengineReferenceAssets,
   type LocalReferenceAsset,
@@ -134,7 +138,17 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    const { projectId, action = 'sync' } = await req.json() as { projectId?: unknown; action?: SyncAction };
+    const {
+      projectId,
+      action = 'sync',
+      cursor: rawCursor,
+      batchSize: rawBatchSize,
+    } = await req.json() as {
+      projectId?: unknown;
+      action?: SyncAction;
+      cursor?: unknown;
+      batchSize?: unknown;
+    };
     if (!projectId || typeof projectId !== 'string') {
       return NextResponse.json({ error: 'Missing projectId' }, { status: 400 });
     }
@@ -146,6 +160,8 @@ export async function POST(req: Request) {
     ) {
       return NextResponse.json({ error: 'Invalid action' }, { status: 400 });
     }
+    const cursor = typeof rawCursor === 'string' && rawCursor ? rawCursor : null;
+    const batchSize = normalizeVolcengineAssetBatchSize(rawBatchSize);
 
     const { data: project, error: projectError } = await supabase
       .from('projects')
@@ -177,28 +193,44 @@ export async function POST(req: Request) {
     const assetRows = ((assets || []) as AssetRow[]);
 
     if (action === 'refresh-status') {
+      const batch = selectVolcengineAssetBatch(
+        assetRows,
+        shouldRefreshAsset,
+        cursor,
+        batchSize
+      );
       const result = await refreshRemoteAssetStatuses({
-        assets: assetRows,
+        assets: batch.items,
         projectId,
         projectName: getProjectName(settings),
         supabase,
         userId: user.id,
       });
 
-      return NextResponse.json(result);
+      return NextResponse.json({
+        ...result,
+        hasMore: batch.hasMore,
+        nextCursor: batch.nextCursor,
+        remaining: batch.remaining,
+      });
     }
 
     const forceRecreateProcessing = action === 'retry-processing';
     const forceFullResync = action === 'force-resync';
-    const targets = assetRows.filter(
+    const isFirstBatch = !cursor;
+    const batch = selectVolcengineAssetBatch(
+      assetRows,
       forceFullResync
         ? shouldForceResyncAsset
         : forceRecreateProcessing
           ? shouldRetryProcessingAsset
-          : shouldResyncAsset
+          : shouldResyncAsset,
+      cursor,
+      batchSize
     );
+    const targets = batch.items;
     if (targets.length === 0) {
-      if (forceFullResync) {
+      if (forceFullResync && isFirstBatch) {
         await supabase
           .from('projects')
           .update({
@@ -217,10 +249,13 @@ export async function POST(req: Request) {
         processing: 0,
         failed: 0,
         skipped: (assets || []).length,
+        hasMore: false,
+        nextCursor: null,
+        remaining: 0,
       });
     }
 
-    const syncSettings = forceFullResync
+    const syncSettings = forceFullResync && isFirstBatch
       ? ({
           ...settings,
           assetGroupId: undefined,
@@ -248,23 +283,25 @@ export async function POST(req: Request) {
 
       if (resetError) throw resetError;
 
-      await supabase
-        .from('projects')
-        .update({
-          volcengine_video_settings: {
-            ...settings,
-            assetGroupId: null,
-          },
-        })
-        .eq('id', projectId)
-        .eq('user_id', user.id);
+      if (isFirstBatch) {
+        await supabase
+          .from('projects')
+          .update({
+            volcengine_video_settings: {
+              ...settings,
+              assetGroupId: null,
+            },
+          })
+          .eq('id', projectId)
+          .eq('user_id', user.id);
+      }
     }
 
     const updates: Array<{ assetId: string; patch: Record<string, unknown> }> = [];
     const resolved = await resolveVolcengineReferenceAssets({
       references: targets.map((asset) => toResyncReference(asset, forceRecreateProcessing || forceFullResync)),
       settings: syncSettings,
-      forceCreateAssetGroup: forceFullResync,
+      forceCreateAssetGroup: forceFullResync && isFirstBatch,
       persistence: {
         updateAsset: async (assetId, patch) => {
           updates.push({ assetId, patch });
@@ -301,6 +338,9 @@ export async function POST(req: Request) {
       failed,
       requiresAssetReadiness: resolved.requiresAssetReadiness,
       assetGroupId: resolved.assetGroupId,
+      hasMore: batch.hasMore,
+      nextCursor: batch.nextCursor,
+      remaining: batch.remaining,
     });
   } catch (error) {
     const message = error instanceof Error ? error.message : '同步火山素材库失败';
