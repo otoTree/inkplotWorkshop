@@ -35,6 +35,7 @@ type VolcengineSyncResult = {
   hasMore?: boolean;
   nextCursor?: string | null;
   remaining?: number;
+  region?: string;
 };
 
 type VolcengineSyncNotice = {
@@ -240,7 +241,8 @@ export function AssetGallery({ projectId }: { projectId: string }) {
       };
 
       if (!response.ok) {
-        throw new Error(data.error || '素材库批次请求失败，请稍后重试');
+        const message = data.error || '素材库批次请求失败，请稍后重试';
+        throw new Error(data.region ? `${message}（节点 ${data.region}）` : message);
       }
 
       for (const key of ['synced', 'refreshed', 'active', 'processing', 'failed', 'errors', 'skipped'] as const) {

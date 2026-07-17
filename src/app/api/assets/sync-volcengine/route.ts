@@ -13,6 +13,7 @@ import {
 } from '@/lib/volcengine/asset-sync';
 
 export const maxDuration = 300;
+export const preferredRegion = 'sin1';
 
 type AssetRow = Record<string, unknown> & {
   id: string;
@@ -212,6 +213,7 @@ export async function POST(req: Request) {
         hasMore: batch.hasMore,
         nextCursor: batch.nextCursor,
         remaining: batch.remaining,
+        region: process.env.VERCEL_REGION || 'local',
       });
     }
 
@@ -252,6 +254,7 @@ export async function POST(req: Request) {
         hasMore: false,
         nextCursor: null,
         remaining: 0,
+        region: process.env.VERCEL_REGION || 'local',
       });
     }
 
@@ -341,13 +344,18 @@ export async function POST(req: Request) {
       hasMore: batch.hasMore,
       nextCursor: batch.nextCursor,
       remaining: batch.remaining,
+      region: process.env.VERCEL_REGION || 'local',
     });
   } catch (error) {
     const message = error instanceof Error ? error.message : '同步火山素材库失败';
     console.error('Volcengine asset sync batch failed', {
       message,
       error,
+      region: process.env.VERCEL_REGION || 'local',
     });
-    return NextResponse.json({ error: message }, { status: 500 });
+    return NextResponse.json(
+      { error: message, region: process.env.VERCEL_REGION || 'local' },
+      { status: 500 }
+    );
   }
 }

@@ -143,6 +143,7 @@ ARTS_VIDEO_MODEL=seedance-2-0-fast-tezan
 应用内批量同步默认每批处理 5 个素材（接口允许 `batchSize` 最大为 10），每批通过
 `nextCursor` 继续下一次请求，避免数百张素材占用同一个 Serverless 调用。单个素材库
 请求默认 45 秒超时，可通过 `ARTS_ASSET_TIMEOUT_MS` 调整。
+Vercel 部署时素材同步路由固定运行在新加坡 `sin1`，响应中的 `region` 字段可用于确认实际执行区域。
 
 Legacy AK/SK 模式：
 
