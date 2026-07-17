@@ -19,7 +19,7 @@
 export ARTS_API_BASE_URL="https://apis.artsapi.com/api/v3"
 export ARTS_API_KEY="replace-with-your-arts-bearer-key"
 export ARTS_ASSET_PROJECT_NAME="your-project-name"
-export ARTS_VIDEO_MODEL="dreamina-seedance-2-0-260128"
+export ARTS_VIDEO_MODEL="seedance-2-0-fast-tezan"
 ```
 
 ## 统一约定
@@ -246,7 +246,7 @@ POST ${ARTS_VIDEO_BASE_URL}/contents/generations/tasks
 
 说明：
 
-- `model` 用当前项目默认值 `ARTS_VIDEO_MODEL`；国际版默认 `dreamina-seedance-2-0-260128`，国内版可用 `doubao-seedance-2-0-260128`
+- `model` 使用 `seedance-2-0-fast-tezan`（快速版）或 `seedance-2-0-tezan`（标准版）。
 - 项目实际发送字段为：
   - `model`
   - `content`
@@ -318,7 +318,7 @@ curl -X GET "${ARTS_VIDEO_BASE_URL}/contents/generations/tasks/${ARTS_VIDEO_TASK
 ```json
 {
   "id": "cgt_2b1b0f2f8fd44b73a0a6b64f3a6a7f11",
-  "model": "dreamina-seedance-2-0-260128",
+  "model": "seedance-2-0-fast-tezan",
   "status": "processing",
   "updated_at": 1778135602
 }
@@ -329,7 +329,7 @@ curl -X GET "${ARTS_VIDEO_BASE_URL}/contents/generations/tasks/${ARTS_VIDEO_TASK
 ```json
 {
   "id": "cgt_2b1b0f2f8fd44b73a0a6b64f3a6a7f11",
-  "model": "dreamina-seedance-2-0-260128",
+  "model": "seedance-2-0-fast-tezan",
   "status": "succeeded",
   "content": {
     "video_url": "https://cdn.example.com/video/cgt_2b1b0f2f8fd44b73a0a6b64f3a6a7f11.mp4"
@@ -340,7 +340,7 @@ curl -X GET "${ARTS_VIDEO_BASE_URL}/contents/generations/tasks/${ARTS_VIDEO_TASK
   "created_at": 1778135596,
   "updated_at": 1778135602,
   "seed": 42,
-  "resolution": "720p",
+  "resolution": "480p",
   "ratio": "16:9",
   "duration": 5,
   "framespersecond": 24,
@@ -356,7 +356,7 @@ curl -X GET "${ARTS_VIDEO_BASE_URL}/contents/generations/tasks/${ARTS_VIDEO_TASK
 ```json
 {
   "id": "cgt_2b1b0f2f8fd44b73a0a6b64f3a6a7f11",
-  "model": "dreamina-seedance-2-0-260128",
+  "model": "seedance-2-0-fast-tezan",
   "status": "failed",
   "error": {
     "code": "INVALID_PARAMETER",

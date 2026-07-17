@@ -1,12 +1,17 @@
 import { AIAPIError } from '../ai-server.ts';
 import { normalizeVideoGenerationError } from '../video-generation-error.ts';
-import type { Seedance2Resolution, Seedance2VideoPayload } from './video-payload.ts';
+import {
+  DEFAULT_SEEDANCE_2_RESOLUTION,
+  type Seedance2Resolution,
+  type Seedance2VideoPayload,
+} from './video-payload.ts';
 
 export type VolcengineVideoConfig = {
   baseUrl: string;
   apiKey: string;
   model: string;
   timeoutMs: number;
+  apiStyle?: 'ark' | 'gateway';
 };
 
 export type VolcengineMappedTaskStatus = 'processing' | 'completed' | 'failed';
@@ -55,14 +60,16 @@ const toTimeoutMs = (value: string | undefined) => {
 export const getVolcengineVideoConfig = (
   modelOverride?: string | null
 ): VolcengineVideoConfig => {
-  const baseUrl = normalizeVideoBaseUrl(
-    getFirstDefinedEnv(
-      process.env.ARTS_API_BASE_URL,
-      process.env.VOLCENGINE_ARK_VIDEO_BASE_URL,
-      process.env.ARK_BASE_URL
-    ) ||
-      'https://ark.cn-beijing.volces.com/api/v3'
-  );
+  const gatewayBaseUrl = getFirstDefinedEnv(process.env.ARTS_VIDEO_BASE_URL);
+  const baseUrl = gatewayBaseUrl
+    ? gatewayBaseUrl.replace(/\/+$/, '')
+    : normalizeVideoBaseUrl(
+        getFirstDefinedEnv(
+          process.env.ARTS_API_BASE_URL,
+          process.env.VOLCENGINE_ARK_VIDEO_BASE_URL,
+          process.env.ARK_BASE_URL
+        ) || 'https://ark.cn-beijing.volces.com/api/v3'
+      );
   const apiKey = getFirstDefinedEnv(
     process.env.ARTS_API_KEY,
     process.env.VOLCENGINE_ARK_VIDEO_API_KEY,
@@ -77,7 +84,7 @@ export const getVolcengineVideoConfig = (
     throw new AIAPIError('火山 Seedance 2.0 视频生成配置不完整', 500);
   }
 
-  return { baseUrl, apiKey, model, timeoutMs };
+  return { baseUrl, apiKey, model, timeoutMs, apiStyle: gatewayBaseUrl ? 'gateway' : 'ark' };
 };
 
 export const isSeedance2Model = (model?: string | null) =>
@@ -227,15 +234,20 @@ export const createSeedance2VideoTask = async (
   payload: Seedance2VideoPayload,
   config: VolcengineVideoConfig = getVolcengineVideoConfig()
 ) => {
+  const path =
+    config.apiStyle === 'gateway' ? '/v1/videos/generations' : '/contents/generations/tasks';
   const response = await fetchWithTimeout(
-    `${config.baseUrl}/contents/generations/tasks`,
+    `${config.baseUrl}${path}`,
     {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
         Authorization: `Bearer ${config.apiKey}`,
       },
-      body: JSON.stringify(payload),
+      body: JSON.stringify({
+        ...payload,
+        resolution: DEFAULT_SEEDANCE_2_RESOLUTION,
+      }),
     },
     config.timeoutMs
   );
@@ -252,8 +264,12 @@ export const getSeedance2VideoTask = async (
   taskId: string,
   config: VolcengineVideoConfig = getVolcengineVideoConfig()
 ) => {
+  const path =
+    config.apiStyle === 'gateway'
+      ? `/v1/tasks/${encodeURIComponent(taskId)}`
+      : `/contents/generations/tasks/${encodeURIComponent(taskId)}`;
   const response = await fetchWithTimeout(
-    `${config.baseUrl}/contents/generations/tasks/${encodeURIComponent(taskId)}`,
+    `${config.baseUrl}${path}`,
     {
       method: 'GET',
       headers: {

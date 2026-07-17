@@ -2,13 +2,70 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import {
   buildVolcengineSubmissionMetadata,
+  createSeedance2VideoTask,
   extractVolcengineVideoUrl,
   getConfiguredVolcengineVideoModel,
+  getSeedance2VideoTask,
   getVolcengineTaskSnapshot,
   getVolcengineVideoConfig,
   mergeVolcengineTaskMetadata,
   mapVolcengineTaskStatus,
 } from './video-client.ts';
+
+test('gateway base URL uses /v1 video generation and task routes', async () => {
+  const originalFetch = globalThis.fetch;
+  const requested: Array<{ url: string; method: string; body?: string }> = [];
+
+  globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
+    requested.push({
+      url: String(input),
+      method: init?.method || 'GET',
+      ...(init?.body ? { body: String(init.body) } : {}),
+    });
+    return new Response(JSON.stringify({ id: 'task-1', status: 'processing' }), {
+      status: 200,
+      headers: { 'Content-Type': 'application/json' },
+    });
+  }) as typeof fetch;
+
+  const config = {
+    baseUrl: 'https://jphhngvqjmgr.sealosbja.site',
+    apiKey: 'test-key',
+    model: 'seedance-2-0-fast-tezan',
+    timeoutMs: 1000,
+    apiStyle: 'gateway' as const,
+  };
+
+  try {
+    await createSeedance2VideoTask(
+      {
+        model: config.model,
+        content: [{ type: 'text', text: 'test' }],
+        resolution: '480p',
+      },
+      config
+    );
+    await getSeedance2VideoTask('task/id', config);
+
+    assert.deepEqual(requested, [
+      {
+        url: 'https://jphhngvqjmgr.sealosbja.site/v1/videos/generations',
+        method: 'POST',
+        body: JSON.stringify({
+          model: config.model,
+          content: [{ type: 'text', text: 'test' }],
+          resolution: '480p',
+        }),
+      },
+      {
+        url: 'https://jphhngvqjmgr.sealosbja.site/v1/tasks/task%2Fid',
+        method: 'GET',
+      },
+    ]);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
 
 test('mapVolcengineTaskStatus maps succeeded to completed', () => {
   assert.equal(mapVolcengineTaskStatus('succeeded'), 'completed');
@@ -86,6 +143,7 @@ test('mergeVolcengineTaskMetadata keeps unified status metadata shape', () => {
 
 test('getVolcengineVideoConfig prefers ARTS env and normalizes base url', () => {
   const previous = {
+    ARTS_VIDEO_BASE_URL: process.env.ARTS_VIDEO_BASE_URL,
     ARTS_API_BASE_URL: process.env.ARTS_API_BASE_URL,
     ARTS_API_KEY: process.env.ARTS_API_KEY,
     ARTS_VIDEO_MODEL: process.env.ARTS_VIDEO_MODEL,
@@ -97,8 +155,9 @@ test('getVolcengineVideoConfig prefers ARTS env and normalizes base url', () => 
   };
 
   process.env.ARTS_API_BASE_URL = 'https://apis.artsapi.com/api';
+  delete process.env.ARTS_VIDEO_BASE_URL;
   process.env.ARTS_API_KEY = 'arts-video-key';
-  process.env.ARTS_VIDEO_MODEL = 'dreamina-seedance-2-0-260128';
+  process.env.ARTS_VIDEO_MODEL = 'seedance-2-0-fast-tezan';
   process.env.VOLCENGINE_ARK_VIDEO_BASE_URL = 'https://legacy.example.com/api/v3';
   process.env.VOLCENGINE_ARK_VIDEO_API_KEY = 'legacy-video-key';
   process.env.VOLCENGINE_ARK_VIDEO_MODEL = 'legacy-model';
@@ -107,7 +166,37 @@ test('getVolcengineVideoConfig prefers ARTS env and normalizes base url', () => 
     const config = getVolcengineVideoConfig();
     assert.equal(config.baseUrl, 'https://apis.artsapi.com/api/v3');
     assert.equal(config.apiKey, 'arts-video-key');
-    assert.equal(config.model, 'dreamina-seedance-2-0-260128');
+    assert.equal(config.model, 'seedance-2-0-fast-tezan');
+  } finally {
+    for (const [key, value] of Object.entries(previous)) {
+      if (value === undefined) {
+        delete process.env[key];
+      } else {
+        process.env[key] = value;
+      }
+    }
+  }
+});
+
+test('getVolcengineVideoConfig preserves dedicated gateway base URL', () => {
+  const previous = {
+    ARTS_VIDEO_BASE_URL: process.env.ARTS_VIDEO_BASE_URL,
+    ARTS_API_BASE_URL: process.env.ARTS_API_BASE_URL,
+    ARTS_API_KEY: process.env.ARTS_API_KEY,
+    ARTS_VIDEO_MODEL: process.env.ARTS_VIDEO_MODEL,
+  };
+
+  process.env.ARTS_VIDEO_BASE_URL = 'https://jphhngvqjmgr.sealosbja.site/';
+  process.env.ARTS_API_BASE_URL = 'https://legacy.example.com/api/v3';
+  process.env.ARTS_API_KEY = 'gateway-key';
+  process.env.ARTS_VIDEO_MODEL = 'seedance-2-0-fast-tezan';
+
+  try {
+    const config = getVolcengineVideoConfig('seedance-2-0-tezan');
+    assert.equal(config.baseUrl, 'https://jphhngvqjmgr.sealosbja.site');
+    assert.equal(config.apiStyle, 'gateway');
+    assert.equal(config.apiKey, 'gateway-key');
+    assert.equal(config.model, 'seedance-2-0-tezan');
   } finally {
     for (const [key, value] of Object.entries(previous)) {
       if (value === undefined) {
@@ -149,12 +238,12 @@ test('getConfiguredVolcengineVideoModel prefers project override when provided',
     ARTS_VIDEO_MODEL: process.env.ARTS_VIDEO_MODEL,
   };
 
-  process.env.ARTS_VIDEO_MODEL = 'doubao-seedance-2-0-260128';
+  process.env.ARTS_VIDEO_MODEL = 'seedance-2-0-fast-tezan';
 
   try {
     assert.equal(
-      getConfiguredVolcengineVideoModel('doubao-seedance-2-0-999999'),
-      'doubao-seedance-2-0-999999'
+      getConfiguredVolcengineVideoModel('seedance-2-0-tezan'),
+      'seedance-2-0-tezan'
     );
   } finally {
     for (const [key, value] of Object.entries(previous)) {
@@ -169,6 +258,7 @@ test('getConfiguredVolcengineVideoModel prefers project override when provided',
 
 test('getVolcengineVideoConfig falls back to ARK base url and model envs', () => {
   const previous = {
+    ARTS_VIDEO_BASE_URL: process.env.ARTS_VIDEO_BASE_URL,
     ARTS_API_BASE_URL: process.env.ARTS_API_BASE_URL,
     ARTS_API_KEY: process.env.ARTS_API_KEY,
     ARTS_VIDEO_MODEL: process.env.ARTS_VIDEO_MODEL,
@@ -180,6 +270,7 @@ test('getVolcengineVideoConfig falls back to ARK base url and model envs', () =>
     ARK_VIDEO_MODEL: process.env.ARK_VIDEO_MODEL,
   };
 
+  delete process.env.ARTS_VIDEO_BASE_URL;
   delete process.env.ARTS_API_BASE_URL;
   delete process.env.ARTS_API_KEY;
   delete process.env.ARTS_VIDEO_MODEL;
@@ -188,13 +279,13 @@ test('getVolcengineVideoConfig falls back to ARK base url and model envs', () =>
   delete process.env.VOLCENGINE_ARK_VIDEO_MODEL;
   process.env.ARK_BASE_URL = 'https://ark.example.com/api';
   process.env.ARK_API_KEY = 'ark-key';
-  process.env.ARK_VIDEO_MODEL = 'doubao-seedance-2-0-260128';
+  process.env.ARK_VIDEO_MODEL = 'seedance-2-0-fast-tezan';
 
   try {
     const config = getVolcengineVideoConfig();
     assert.equal(config.baseUrl, 'https://ark.example.com/api/v3');
     assert.equal(config.apiKey, 'ark-key');
-    assert.equal(config.model, 'doubao-seedance-2-0-260128');
+    assert.equal(config.model, 'seedance-2-0-fast-tezan');
   } finally {
     for (const [key, value] of Object.entries(previous)) {
       if (value === undefined) {
@@ -208,18 +299,20 @@ test('getVolcengineVideoConfig falls back to ARK base url and model envs', () =>
 
 test('getVolcengineVideoConfig uses project model override', () => {
   const previous = {
+    ARTS_VIDEO_BASE_URL: process.env.ARTS_VIDEO_BASE_URL,
     ARTS_API_BASE_URL: process.env.ARTS_API_BASE_URL,
     ARTS_API_KEY: process.env.ARTS_API_KEY,
     ARTS_VIDEO_MODEL: process.env.ARTS_VIDEO_MODEL,
   };
 
+  delete process.env.ARTS_VIDEO_BASE_URL;
   process.env.ARTS_API_BASE_URL = 'https://apis.artsapi.com/api';
   process.env.ARTS_API_KEY = 'arts-video-key';
-  process.env.ARTS_VIDEO_MODEL = 'doubao-seedance-2-0-260128';
+  process.env.ARTS_VIDEO_MODEL = 'seedance-2-0-fast-tezan';
 
   try {
-    const config = getVolcengineVideoConfig('doubao-seedance-2-0-999999');
-    assert.equal(config.model, 'doubao-seedance-2-0-999999');
+    const config = getVolcengineVideoConfig('seedance-2-0-tezan');
+    assert.equal(config.model, 'seedance-2-0-tezan');
   } finally {
     for (const [key, value] of Object.entries(previous)) {
       if (value === undefined) {

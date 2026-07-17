@@ -63,6 +63,7 @@ test('createAsset signs OpenAPI request and parses Result.Id', async () => {
 
 test('getVolcengineAssetConfig prefers ARTS bearer config and preserves /api/v3', () => {
   const previous = {
+    ARTS_ASSET_BASE_URL: process.env.ARTS_ASSET_BASE_URL,
     ARTS_API_BASE_URL: process.env.ARTS_API_BASE_URL,
     ARTS_API_KEY: process.env.ARTS_API_KEY,
     ARTS_ASSET_PROJECT_NAME: process.env.ARTS_ASSET_PROJECT_NAME,
@@ -71,6 +72,7 @@ test('getVolcengineAssetConfig prefers ARTS bearer config and preserves /api/v3'
     VOLCENGINE_SECRET_ACCESS_KEY: process.env.VOLCENGINE_SECRET_ACCESS_KEY,
   };
 
+  delete process.env.ARTS_ASSET_BASE_URL;
   process.env.ARTS_API_BASE_URL = 'https://apis.artsapi.com/api/v3';
   process.env.ARTS_API_KEY = 'arts-key';
   process.env.ARTS_ASSET_PROJECT_NAME = 'arts-project';
@@ -98,16 +100,45 @@ test('getVolcengineAssetConfig prefers ARTS bearer config and preserves /api/v3'
 
 test('getVolcengineAssetConfig appends /v3 to an /api base URL', () => {
   const previous = {
+    ARTS_ASSET_BASE_URL: process.env.ARTS_ASSET_BASE_URL,
     ARTS_API_BASE_URL: process.env.ARTS_API_BASE_URL,
     ARTS_API_KEY: process.env.ARTS_API_KEY,
   };
 
   process.env.ARTS_API_BASE_URL = 'https://qimu-aigc.tezign.com/qimu-aigc/api';
+  delete process.env.ARTS_ASSET_BASE_URL;
   process.env.ARTS_API_KEY = 'arts-key';
 
   try {
     const resolved = getVolcengineAssetConfig();
     assert.equal(resolved.baseUrl, 'https://qimu-aigc.tezign.com/qimu-aigc/api/v3');
+  } finally {
+    for (const [key, value] of Object.entries(previous)) {
+      if (value === undefined) {
+        delete process.env[key];
+      } else {
+        process.env[key] = value;
+      }
+    }
+  }
+});
+
+test('getVolcengineAssetConfig preserves dedicated gateway asset root', () => {
+  const previous = {
+    ARTS_ASSET_BASE_URL: process.env.ARTS_ASSET_BASE_URL,
+    ARTS_API_BASE_URL: process.env.ARTS_API_BASE_URL,
+    ARTS_API_KEY: process.env.ARTS_API_KEY,
+  };
+
+  process.env.ARTS_ASSET_BASE_URL = 'https://jphhngvqjmgr.sealosbja.site/';
+  process.env.ARTS_API_BASE_URL = 'https://legacy.example.com/api/v3';
+  process.env.ARTS_API_KEY = 'gateway-key';
+
+  try {
+    const resolved = getVolcengineAssetConfig();
+    assert.equal(resolved.baseUrl, 'https://jphhngvqjmgr.sealosbja.site');
+    assert.equal(resolved.authMode, 'arts');
+    assert.equal(resolved.apiKey, 'gateway-key');
   } finally {
     for (const [key, value] of Object.entries(previous)) {
       if (value === undefined) {

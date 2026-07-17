@@ -7,7 +7,7 @@ import {
 
 test('buildSeedance2VideoPayload prefers active asset URIs', () => {
   const payload = buildSeedance2VideoPayload({
-    model: 'doubao-seedance-2-0-pro',
+    model: 'seedance-2-0-fast-tezan',
     prompt: '图片1保持角色一致，完成一个转身镜头。',
     references: [
       {
@@ -36,7 +36,7 @@ test('buildSeedance2VideoPayload prefers active asset URIs', () => {
 
 test('buildSeedance2VideoPayload uses URLs when references are not synced', () => {
   const payload = buildSeedance2VideoPayload({
-    model: 'doubao-seedance-2-0-pro',
+    model: 'seedance-2-0-tezan',
     prompt: '图片1保持场景一致。',
     references: [
       {
@@ -63,7 +63,7 @@ test('buildSeedance2VideoPayload uses URLs when references are not synced', () =
 
 test('buildSeedance2VideoPayload falls back to source URL for non-active asset URIs', () => {
   const payload = buildSeedance2VideoPayload({
-    model: 'doubao-seedance-2-0-pro',
+    model: 'seedance-2-0-fast-tezan',
     prompt: '图片1保持场景一致。',
     references: [
       {
@@ -86,7 +86,7 @@ test('buildSeedance2VideoPayload falls back to source URL for non-active asset U
 
 test('buildSeedance2VideoPayload always uses the fixed resolution', () => {
   const payload = buildSeedance2VideoPayload({
-    model: 'doubao-seedance-2-0-pro',
+    model: 'seedance-2-0-fast-tezan',
     prompt: '测试固定分辨率。',
   });
 

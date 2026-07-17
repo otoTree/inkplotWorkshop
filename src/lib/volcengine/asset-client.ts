@@ -188,7 +188,8 @@ export const getVolcengineAssetConfig = (): VolcengineAssetConfig => {
     'default';
   const groupId =
     getFirstDefinedEnv(process.env.ARTS_ASSET_GROUP_ID, process.env.VOLCENGINE_ASSET_GROUP_ID) || undefined;
-  const artsBaseUrl = getFirstDefinedEnv(process.env.ARTS_API_BASE_URL);
+  const dedicatedAssetBaseUrl = getFirstDefinedEnv(process.env.ARTS_ASSET_BASE_URL);
+  const artsBaseUrl = dedicatedAssetBaseUrl || getFirstDefinedEnv(process.env.ARTS_API_BASE_URL);
   const artsApiKey = getFirstDefinedEnv(process.env.ARTS_API_KEY);
 
   if (artsBaseUrl || artsApiKey) {
@@ -198,6 +199,8 @@ export const getVolcengineAssetConfig = (): VolcengineAssetConfig => {
 
     const normalizedBaseUrl = (() => {
       const trimmed = (artsBaseUrl || DEFAULT_ARTS_BASE_URL).replace(/\/+$/, '');
+      // The gateway-compatible asset endpoint lives directly at its configured root.
+      if (dedicatedAssetBaseUrl) return trimmed;
       if (/\/api\/v\d+$/i.test(trimmed)) return trimmed;
       if (/\/api$/i.test(trimmed)) return `${trimmed}/v3`;
       return `${trimmed}/api/v3`;

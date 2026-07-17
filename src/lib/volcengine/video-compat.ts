@@ -3,8 +3,8 @@ import { isSeedance2Model } from './video-client.ts';
 export type ProjectVideoModelPreference = 'legacy' | 'seedance-2.0';
 export type ProjectVideoAspectRatio = '9:16' | '16:9';
 export type Seedance2VideoModelSelection =
-  | 'dreamina-seedance-2-0-260128'
-  | 'doubao-seedance-2-0-260128';
+  | 'seedance-2-0-fast-tezan'
+  | 'seedance-2-0-tezan';
 export type ProjectVideoModelSelection = 'legacy' | Seedance2VideoModelSelection;
 
 export type ProjectVideoSettingsLike = {
@@ -33,18 +33,18 @@ export type VideoGenerationMetadataLike = {
 };
 
 export const DEFAULT_PROJECT_VIDEO_MODEL: ProjectVideoModelPreference = 'legacy';
-export const INTERNATIONAL_SEEDANCE_2_VIDEO_MODEL = 'dreamina-seedance-2-0-260128';
-export const DOMESTIC_SEEDANCE_2_VIDEO_MODEL = 'doubao-seedance-2-0-260128';
+export const FAST_SEEDANCE_2_VIDEO_MODEL = 'seedance-2-0-fast-tezan';
+export const STANDARD_SEEDANCE_2_VIDEO_MODEL = 'seedance-2-0-tezan';
 export const DEFAULT_SEEDANCE_2_VIDEO_MODEL: ProjectVideoModelSelection =
-  INTERNATIONAL_SEEDANCE_2_VIDEO_MODEL;
+  FAST_SEEDANCE_2_VIDEO_MODEL;
 export const SEEDANCE_2_VIDEO_MODEL_OPTIONS = [
   {
-    value: INTERNATIONAL_SEEDANCE_2_VIDEO_MODEL,
-    label: 'Seedance 2.0 国际版',
+    value: FAST_SEEDANCE_2_VIDEO_MODEL,
+    label: 'Seedance 2.0 Fast',
   },
   {
-    value: DOMESTIC_SEEDANCE_2_VIDEO_MODEL,
-    label: 'Seedance 2.0 国内版',
+    value: STANDARD_SEEDANCE_2_VIDEO_MODEL,
+    label: 'Seedance 2.0 标准版',
   },
 ] satisfies Array<{ value: Seedance2VideoModelSelection; label: string }>;
 export const DEFAULT_VOLCENGINE_PROJECT_NAME = 'default';
@@ -57,13 +57,13 @@ export const PROJECT_VIDEO_MODEL_OPTIONS = [
   },
   {
     value: DEFAULT_SEEDANCE_2_VIDEO_MODEL,
-    label: 'Seedance 2.0 国际版',
-    description: `${DEFAULT_SEEDANCE_2_VIDEO_MODEL}，国际版默认模型。`,
+    label: 'Seedance 2.0 Fast',
+    description: `${DEFAULT_SEEDANCE_2_VIDEO_MODEL}，快速模型。`,
   },
   {
-    value: DOMESTIC_SEEDANCE_2_VIDEO_MODEL,
-    label: 'Seedance 2.0 国内版',
-    description: 'doubao-seedance-2-0-260128，国内版模型。',
+    value: STANDARD_SEEDANCE_2_VIDEO_MODEL,
+    label: 'Seedance 2.0 标准版',
+    description: `${STANDARD_SEEDANCE_2_VIDEO_MODEL}，标准模型。`,
   },
 ] as const;
 
@@ -77,9 +77,6 @@ export const isSupportedSeedance2VideoModel = (
   value: string | null | undefined
 ): value is Seedance2VideoModelSelection =>
   SEEDANCE_2_VIDEO_MODEL_OPTIONS.some((option) => option.value === value);
-
-export const isInternationalSeedance2VideoModel = (value: string | null | undefined) =>
-  value === INTERNATIONAL_SEEDANCE_2_VIDEO_MODEL;
 
 export const normalizeProjectVideoModel = (
   value: string | null | undefined

@@ -28,7 +28,7 @@
 | 图像生成/编辑 | OpenAI-compatible Images，项目按异步任务适配 | `POST {baseUrl}/images/generations` + `GET {baseUrl}/images/generations/{task_id}` | `gemini-3-pro-image-preview` / `gpt-image-2` |
 | 通用视频生成 | OpenAI-compatible/中转供应商视频接口 | `POST {baseUrl}/video/generations` + `GET {baseUrl}/video/generations/{id}` | `AI_API_VIDEO_MODEL` / `OPENAI_VIDEO_MODEL` |
 | 通用视频下载 | OpenAI-compatible/中转供应商视频下载 | `GET {baseUrl}/videos/{id}/content?variant=mp4` | 与通用视频任务同一供应商 |
-| Seedance 2.0 视频 | 火山方舟内容生成任务 | `POST {baseUrl}/contents/generations/tasks` + `GET {baseUrl}/contents/generations/tasks/{taskId}` | `dreamina-seedance-2-0-260128` / `doubao-seedance-2-0-260128` |
+| Seedance 2.0 视频 | 火山方舟内容生成任务 | `POST {baseUrl}/contents/generations/tasks` + `GET {baseUrl}/contents/generations/tasks/{taskId}` | `seedance-2-0-fast-tezan` / `seedance-2-0-tezan` |
 | 火山素材库 | 火山素材资产库 OpenAPI / ARTS Bearer 兼容层 | `POST {assetBaseUrl}?Action=...&Version=2024-01-01` | `CreateAssetGroup` / `CreateAsset` / `GetAsset` / `ListAssets` |
 
 ## 2. 通用鉴权与请求约定
@@ -103,13 +103,14 @@ gpt-image-2
 
 | 配置项 | 环境变量优先级 | 默认值 |
 | --- | --- | --- |
-| Base URL | `ARTS_API_BASE_URL` -> `VOLCENGINE_ARK_VIDEO_BASE_URL` -> `ARK_BASE_URL` | `https://ark.cn-beijing.volces.com/api/v3` |
+| Base URL | `ARTS_VIDEO_BASE_URL` -> `ARTS_API_BASE_URL` -> `VOLCENGINE_ARK_VIDEO_BASE_URL` -> `ARK_BASE_URL` | `https://ark.cn-beijing.volces.com/api/v3` |
 | API Key | `ARTS_API_KEY` -> `VOLCENGINE_ARK_VIDEO_API_KEY` -> `ARK_API_KEY` | 无，必填 |
-| Model | `ARTS_VIDEO_MODEL` -> `VOLCENGINE_ARK_VIDEO_MODEL` -> `ARK_VIDEO_MODEL` -> Seedance 形态的 `AI_API_VIDEO_MODEL` | 无，必填 |
+| Model | 项目模型 -> `ARTS_VIDEO_MODEL` -> `VOLCENGINE_ARK_VIDEO_MODEL` -> `ARK_VIDEO_MODEL` -> Seedance 形态的 `AI_API_VIDEO_MODEL` | 无，必填 |
 | Timeout | `VOLCENGINE_ARK_VIDEO_TIMEOUT_MS` -> `AI_API_TIMEOUT_MS` | `300000ms` |
 
 Base URL 归一化规则：
 
+- 配置 `ARTS_VIDEO_BASE_URL` 时，将其视为兼容网关根地址，不追加 `/api/v3`；创建任务使用 `/v1/videos/generations`，查询任务使用 `/v1/tasks/{taskId}`。
 - 如果配置到 `/api/v3`，直接使用。
 - 如果配置到 `/api`，自动补为 `/api/v3`。
 - 如果配置为域名根路径，自动补为 `/api/v3`。
@@ -124,6 +125,18 @@ ARTS_API_KEY=replace-with-key
 ARTS_ASSET_PROJECT_NAME=default
 ARTS_ASSET_GROUP_ID=optional-group-id
 ```
+
+兼容网关可额外配置独立根地址：
+
+```env
+ARTS_VIDEO_BASE_URL=https://jphhngvqjmgr.sealosbja.site
+ARTS_ASSET_BASE_URL=https://jphhngvqjmgr.sealosbja.site
+ARTS_API_KEY=replace-with-key
+ARTS_VIDEO_MODEL=seedance-2-0-fast-tezan
+```
+
+`ARTS_ASSET_BASE_URL` 不会追加 `/api/v3`，素材库仍按
+`?Action=<Action>&Version=2024-01-01` 拼接，JSON 请求参数保持不变。
 
 素材库 Base URL 归一化规则：
 
@@ -589,15 +602,15 @@ Content-Type: application/json
 项目默认模型：
 
 ```text
-dreamina-seedance-2-0-260128
-doubao-seedance-2-0-260128
+seedance-2-0-fast-tezan
+seedance-2-0-tezan
 ```
 
 请求体：
 
 ```json
 {
-  "model": "dreamina-seedance-2-0-260128",
+  "model": "seedance-2-0-fast-tezan",
   "content": [
     {
       "type": "text",
@@ -613,7 +626,7 @@ doubao-seedance-2-0-260128
   ],
   "generate_audio": true,
   "ratio": "9:16",
-  "resolution": "720p",
+  "resolution": "480p",
   "duration": 5,
   "watermark": false
 }
@@ -627,7 +640,7 @@ doubao-seedance-2-0-260128
 | `content` | 是 | array | 多模态输入，至少包含一个 `{ "type": "text" }`。 |
 | `generate_audio` | 否 | boolean | 项目传 `true`。 |
 | `ratio` | 否 | string | `9:16` 或 `16:9`，默认项目侧归一为 `9:16`。 |
-| `resolution` | 否 | string | `720p` 或 `1080p`，项目默认 `720p`。 |
+| `resolution` | 是 | string | 固定为 `480p`。 |
 | `duration` | 否 | number | 秒数。 |
 | `watermark` | 否 | boolean | 项目传 `false`。 |
 
@@ -685,7 +698,7 @@ curl -X POST "$ARTS_API_BASE_URL/contents/generations/tasks" \
     ],
     "generate_audio": true,
     "ratio": "9:16",
-    "resolution": "720p",
+    "resolution": "480p",
     "duration": 5,
     "watermark": false
   }'
@@ -704,7 +717,7 @@ Content-Type: application/json
 ```json
 {
   "id": "cgt-20260507143012-abcd1",
-  "model": "dreamina-seedance-2-0-260128",
+  "model": "seedance-2-0-fast-tezan",
   "status": "processing",
   "updated_at": 1778135602
 }
@@ -715,7 +728,7 @@ Content-Type: application/json
 ```json
 {
   "id": "cgt-20260507143012-abcd1",
-  "model": "dreamina-seedance-2-0-260128",
+  "model": "seedance-2-0-fast-tezan",
   "status": "succeeded",
   "content": {
     "video_url": "https://cdn.example.com/video.mp4"
@@ -723,7 +736,7 @@ Content-Type: application/json
   "usage": {
     "total_tokens": 100
   },
-  "resolution": "720p",
+  "resolution": "480p",
   "ratio": "9:16",
   "duration": 5,
   "generate_audio": true
@@ -735,7 +748,7 @@ Content-Type: application/json
 ```json
 {
   "id": "cgt-20260507143012-abcd1",
-  "model": "dreamina-seedance-2-0-260128",
+  "model": "seedance-2-0-fast-tezan",
   "status": "failed",
   "error": {
     "code": "INVALID_PARAMETER",
@@ -1071,5 +1084,5 @@ curl -X POST "$ARTS_ASSET_BASE_URL?Action=GetAsset&Version=2024-01-01" \
 curl -X POST "$ARTS_API_BASE_URL/contents/generations/tasks" \
   -H "Authorization: Bearer $ARTS_API_KEY" \
   -H "Content-Type: application/json" \
-  -d '{"model":"'"$ARTS_VIDEO_MODEL"'","content":[{"type":"text","text":"test video"}],"ratio":"9:16","resolution":"720p","duration":5,"generate_audio":true,"watermark":false}'
+  -d '{"model":"'"$ARTS_VIDEO_MODEL"'","content":[{"type":"text","text":"test video"}],"ratio":"9:16","resolution":"480p","duration":5,"generate_audio":true,"watermark":false}'
 ```

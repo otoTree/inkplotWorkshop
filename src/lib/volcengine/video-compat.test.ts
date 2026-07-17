@@ -38,17 +38,17 @@ test('normalizeProjectVideoGenerationModel upgrades old seedance preference to c
     normalizeProjectVideoGenerationModel(undefined, 'seedance-2.0'),
     DEFAULT_SEEDANCE_2_VIDEO_MODEL
   );
-  assert.equal(DEFAULT_SEEDANCE_2_VIDEO_MODEL, 'dreamina-seedance-2-0-260128');
+  assert.equal(DEFAULT_SEEDANCE_2_VIDEO_MODEL, 'seedance-2-0-fast-tezan');
+  assert.equal(
+    normalizeProjectVideoGenerationModel('seedance-2-0-fast-tezan'),
+    'seedance-2-0-fast-tezan'
+  );
+  assert.equal(
+    normalizeProjectVideoGenerationModel('seedance-2-0-tezan'),
+    'seedance-2-0-tezan'
+  );
   assert.equal(
     normalizeProjectVideoGenerationModel('dreamina-seedance-2-0-260128'),
-    'dreamina-seedance-2-0-260128'
-  );
-  assert.equal(
-    normalizeProjectVideoGenerationModel('doubao-seedance-2-0-260128'),
-    'doubao-seedance-2-0-260128'
-  );
-  assert.equal(
-    normalizeProjectVideoGenerationModel('doubao-seedance-2-0-pro'),
     DEFAULT_SEEDANCE_2_VIDEO_MODEL
   );
   assert.equal(normalizeProjectVideoGenerationModel('legacy'), 'legacy');

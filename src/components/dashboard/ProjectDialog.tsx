@@ -30,6 +30,7 @@ import {
 } from '@/lib/project-visual-style';
 import {
   DEFAULT_PROJECT_VIDEO_ASPECT_RATIO,
+  DEFAULT_SEEDANCE_2_VIDEO_MODEL,
   DEFAULT_VOLCENGINE_PROJECT_NAME,
   normalizeProjectVideoModel,
   normalizeProjectVideoSettings,
@@ -68,7 +69,9 @@ export function ProjectDialog({ children, project, open: controlledOpen, onOpenC
   const [visualStylePreset, setVisualStylePreset] = useState<ProjectVisualStylePreset>(DEFAULT_PROJECT_VISUAL_STYLE_PRESET);
   const [characterArtStyle, setCharacterArtStyle] = useState('');
   const [sceneArtStyle, setSceneArtStyle] = useState('');
-  const [videoModel, setVideoModel] = useState<ProjectVideoModelSelection>('legacy');
+  const [videoModel, setVideoModel] = useState<ProjectVideoModelSelection>(
+    DEFAULT_SEEDANCE_2_VIDEO_MODEL
+  );
   const [videoAspectRatio, setVideoAspectRatio] = useState<'9:16' | '16:9'>(DEFAULT_PROJECT_VIDEO_ASPECT_RATIO);
   const [syncVolcengineAssets, setSyncVolcengineAssets] = useState(false);
   const [volcengineAssetGroupId, setVolcengineAssetGroupId] = useState('');
@@ -115,7 +118,7 @@ export function ProjectDialog({ children, project, open: controlledOpen, onOpenC
           setVisualStylePreset(DEFAULT_PROJECT_VISUAL_STYLE_PRESET);
           setCharacterArtStyle('');
           setSceneArtStyle('');
-          setVideoModel('legacy');
+          setVideoModel(DEFAULT_SEEDANCE_2_VIDEO_MODEL);
           setVideoAspectRatio(DEFAULT_PROJECT_VIDEO_ASPECT_RATIO);
           setSyncVolcengineAssets(false);
           setVolcengineAssetGroupId('');
@@ -261,7 +264,7 @@ export function ProjectDialog({ children, project, open: controlledOpen, onOpenC
         setVisualStylePreset(DEFAULT_PROJECT_VISUAL_STYLE_PRESET);
         setCharacterArtStyle('');
         setSceneArtStyle('');
-        setVideoModel('legacy');
+        setVideoModel(DEFAULT_SEEDANCE_2_VIDEO_MODEL);
         setVideoAspectRatio(DEFAULT_PROJECT_VIDEO_ASPECT_RATIO);
         setSyncVolcengineAssets(false);
         setVolcengineAssetGroupId('');
