@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
-import { getAsset } from '@/lib/volcengine/asset-client';
+import { getAsset, getVolcengineAssetProjectName } from '@/lib/volcengine/asset-client';
 import {
   mapVolcengineAssetRow,
   resolveVolcengineReferenceAssets,
@@ -23,10 +23,7 @@ type AssetRow = Record<string, unknown> & {
 type SyncAction = 'sync' | 'refresh-status' | 'retry-processing' | 'force-resync';
 
 const getProjectName = (settings: VolcengineVideoSettings) =>
-  settings.projectName ||
-  process.env.ARTS_ASSET_PROJECT_NAME ||
-  process.env.VOLCENGINE_ASSET_PROJECT_NAME ||
-  'default';
+  getVolcengineAssetProjectName(settings.projectName);
 
 const shouldResyncAsset = (asset: AssetRow) => {
   if (!asset.image_url) return false;

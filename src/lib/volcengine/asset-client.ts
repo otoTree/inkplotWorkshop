@@ -41,6 +41,24 @@ const getFirstDefinedEnv = (...values: Array<string | undefined>) => {
   return '';
 };
 
+export const getVolcengineAssetProjectName = (override?: string | null) => {
+  const gatewayConfigured = Boolean(
+    getFirstDefinedEnv(process.env.ARTS_ASSET_BASE_URL, process.env.ARTS_API_BASE_URL)
+  );
+  const configured = getFirstDefinedEnv(
+    process.env.ARTS_ASSET_PROJECT_NAME,
+    process.env.VOLCENGINE_ASSET_PROJECT_NAME
+  );
+  const normalizedOverride = typeof override === 'string' ? override.trim() : '';
+
+  // The Tezan gateway examples use ProjectName=tz. Migrate the old default
+  // value for gateway requests while keeping legacy Volcengine behavior.
+  if (normalizedOverride && !(gatewayConfigured && normalizedOverride === 'default')) {
+    return normalizedOverride;
+  }
+  return configured || (gatewayConfigured ? 'tz' : 'default');
+};
+
 const sha256Hex = (value: string) => crypto.createHash('sha256').update(value).digest('hex');
 const hmac = (key: crypto.BinaryLike, value: string) =>
   crypto.createHmac('sha256', key).update(value).digest();
@@ -183,9 +201,7 @@ const assertPublicAssetUrl = (value: string) => {
 
 export const getVolcengineAssetConfig = (): VolcengineAssetConfig => {
   const region = getFirstDefinedEnv(process.env.VOLCENGINE_ASSET_REGION) || DEFAULT_REGION;
-  const projectName =
-    getFirstDefinedEnv(process.env.ARTS_ASSET_PROJECT_NAME, process.env.VOLCENGINE_ASSET_PROJECT_NAME) ||
-    'default';
+  const projectName = getVolcengineAssetProjectName();
   const groupId =
     getFirstDefinedEnv(process.env.ARTS_ASSET_GROUP_ID, process.env.VOLCENGINE_ASSET_GROUP_ID) || undefined;
   const artsBaseUrl = getFirstDefinedEnv(

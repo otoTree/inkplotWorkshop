@@ -17,7 +17,7 @@
 ```bash
 export ARTS_API_BASE_URL="https://jphhngvqjmgr.sealosbja.site"
 export ARTS_API_KEY="replace-with-your-arts-bearer-key"
-export ARTS_ASSET_PROJECT_NAME="your-project-name"
+export ARTS_ASSET_PROJECT_NAME="tz"
 export ARTS_VIDEO_MODEL="seedance-2-0-fast-tezan"
 ```
 

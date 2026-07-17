@@ -1,6 +1,7 @@
 import {
   createAsset,
   createAssetGroup,
+  getVolcengineAssetProjectName,
   getAsset,
   normalizeVolcengineAssetStatus,
   type VolcengineAssetResult,
@@ -145,11 +146,7 @@ export const resolveVolcengineReferenceAssets = async ({
     getAsset: client?.getAsset || getAsset,
   };
   const syncEnabled = !!settings?.syncAssetsToPrivateLibrary;
-  const projectName =
-    settings?.projectName ||
-    process.env.ARTS_ASSET_PROJECT_NAME ||
-    process.env.VOLCENGINE_ASSET_PROJECT_NAME ||
-    'default';
+  const projectName = getVolcengineAssetProjectName(settings?.projectName);
   const groupId =
     settings?.assetGroupId ||
     process.env.ARTS_ASSET_GROUP_ID ||

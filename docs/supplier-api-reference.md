@@ -121,7 +121,7 @@ ARTS Bearer 模式：
 ```env
 ARTS_API_BASE_URL=https://jphhngvqjmgr.sealosbja.site
 ARTS_API_KEY=replace-with-key
-ARTS_ASSET_PROJECT_NAME=default
+ARTS_ASSET_PROJECT_NAME=tz
 ARTS_ASSET_GROUP_ID=optional-group-id
 ```
 

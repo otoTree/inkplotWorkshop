@@ -47,7 +47,7 @@ export const SEEDANCE_2_VIDEO_MODEL_OPTIONS = [
     label: 'Seedance 2.0 标准版',
   },
 ] satisfies Array<{ value: Seedance2VideoModelSelection; label: string }>;
-export const DEFAULT_VOLCENGINE_PROJECT_NAME = 'default';
+export const DEFAULT_VOLCENGINE_PROJECT_NAME = 'tz';
 export const DEFAULT_PROJECT_VIDEO_ASPECT_RATIO: ProjectVideoAspectRatio = '9:16';
 export const PROJECT_VIDEO_MODEL_OPTIONS = [
   {

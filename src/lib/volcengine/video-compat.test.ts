@@ -26,7 +26,7 @@ test('normalizeProjectVideoSettings applies explicit safe defaults', () => {
   assert.deepEqual(normalizeProjectVideoSettings(null), {
     syncAssetsToPrivateLibrary: false,
     assetGroupId: undefined,
-    projectName: 'default',
+    projectName: 'tz',
     model: 'legacy',
     preferredVideoModel: 'legacy',
     aspectRatio: '9:16',

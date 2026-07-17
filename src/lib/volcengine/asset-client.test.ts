@@ -5,6 +5,7 @@ import {
   createAsset,
   getAsset,
   getVolcengineAssetConfig,
+  getVolcengineAssetProjectName,
   type VolcengineAssetConfig,
 } from './asset-client.ts';
 
@@ -103,11 +104,13 @@ test('shared gateway asset base URL appends only Action and Version', async () =
     ARTS_ASSET_BASE_URL: process.env.ARTS_ASSET_BASE_URL,
     ARTS_API_BASE_URL: process.env.ARTS_API_BASE_URL,
     ARTS_API_KEY: process.env.ARTS_API_KEY,
+    ARTS_ASSET_PROJECT_NAME: process.env.ARTS_ASSET_PROJECT_NAME,
   };
 
   process.env.ARTS_API_BASE_URL = 'https://jphhngvqjmgr.sealosbja.site/';
   delete process.env.ARTS_ASSET_BASE_URL;
   process.env.ARTS_API_KEY = 'arts-key';
+  delete process.env.ARTS_ASSET_PROJECT_NAME;
   const originalFetch = globalThis.fetch;
   let requestedUrl = '';
 
@@ -122,6 +125,8 @@ test('shared gateway asset base URL appends only Action and Version', async () =
   try {
     const resolved = getVolcengineAssetConfig();
     assert.equal(resolved.baseUrl, 'https://jphhngvqjmgr.sealosbja.site');
+    assert.equal(resolved.projectName, 'tz');
+    assert.equal(getVolcengineAssetProjectName('default'), 'tz');
     await getAsset({ Id: 'asset-1', ProjectName: 'tz' }, resolved);
     assert.equal(
       requestedUrl,

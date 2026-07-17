@@ -511,7 +511,7 @@ export function ProjectDialog({ children, project, open: controlledOpen, onOpenC
                     <Input
                       value={volcengineProjectName}
                       onChange={(e) => setVolcengineProjectName(e.target.value)}
-                      placeholder="火山 ProjectName，默认 default"
+                      placeholder="素材库 ProjectName，默认 tz"
                       className="bg-white"
                     />
                   </div>
