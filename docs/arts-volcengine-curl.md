@@ -7,16 +7,15 @@
 当前项目里：
 
 - 火山素材库通过 `ARTS_API_BASE_URL` + `ARTS_API_KEY` 走 Bearer 鉴权
-- 素材库请求路径是 `.../api/v3?Action=<Action>&Version=2024-01-01`
-- 如果 `ARTS_API_BASE_URL` 配的是 `.../api`，素材库请求会自动补全为 `.../api/v3`
-- `Seedance 2.0` 视频生成走 `.../contents/generations/tasks`
+- 素材库直接在网关根地址拼 `?Action=<Action>&Version=2024-01-01`
+- `Seedance 2.0` 创建任务走 `/v1/videos/generations`，查询任务走 `/v1/tasks/{task_id}`
 - 视频模型默认取 `ARTS_VIDEO_MODEL`
 - 素材上传成功后，要继续轮询到 `Status=Active`，再在视频请求里写 `asset://<asset_id>`
 
 ## 相关环境变量
 
 ```bash
-export ARTS_API_BASE_URL="https://apis.artsapi.com/api/v3"
+export ARTS_API_BASE_URL="https://jphhngvqjmgr.sealosbja.site"
 export ARTS_API_KEY="replace-with-your-arts-bearer-key"
 export ARTS_ASSET_PROJECT_NAME="your-project-name"
 export ARTS_VIDEO_MODEL="seedance-2-0-fast-tezan"
@@ -241,7 +240,7 @@ curl -X POST "${ARTS_ASSET_BASE_URL}?Action=GetAsset&Version=2024-01-01" \
 接口：
 
 ```text
-POST ${ARTS_VIDEO_BASE_URL}/contents/generations/tasks
+POST ${ARTS_VIDEO_BASE_URL}/v1/videos/generations
 ```
 
 说明：
@@ -263,7 +262,7 @@ POST ${ARTS_VIDEO_BASE_URL}/contents/generations/tasks
 ### Curl
 
 ```bash
-curl -X POST "${ARTS_VIDEO_BASE_URL}/contents/generations/tasks" \
+curl -X POST "${ARTS_VIDEO_BASE_URL}/v1/videos/generations" \
   -H "Authorization: Bearer $ARTS_API_KEY" \
   -H "Content-Type: application/json" \
   -d '{
@@ -301,7 +300,7 @@ curl -X POST "${ARTS_VIDEO_BASE_URL}/contents/generations/tasks" \
 接口：
 
 ```text
-GET ${ARTS_VIDEO_BASE_URL}/contents/generations/tasks/{task_id}
+GET ${ARTS_VIDEO_BASE_URL}/v1/tasks/{task_id}
 ```
 
 ### Curl
@@ -309,7 +308,7 @@ GET ${ARTS_VIDEO_BASE_URL}/contents/generations/tasks/{task_id}
 ```bash
 export ARTS_VIDEO_TASK_ID="cgt_2b1b0f2f8fd44b73a0a6b64f3a6a7f11"
 
-curl -X GET "${ARTS_VIDEO_BASE_URL}/contents/generations/tasks/${ARTS_VIDEO_TASK_ID}" \
+curl -X GET "${ARTS_VIDEO_BASE_URL}/v1/tasks/${ARTS_VIDEO_TASK_ID}" \
   -H "Authorization: Bearer $ARTS_API_KEY"
 ```
 
@@ -379,8 +378,8 @@ CreateAssetGroup
 ## 7. 关键注意事项
 
 - 素材库和视频都复用 `ARTS_API_KEY`
-- 素材库请求路径保留在 `.../api/v3`
-- 视频请求路径保留在 `.../api/v3/contents/generations/tasks`
+- 素材库请求直接使用网关根地址加 Action/Version 查询参数
+- 视频请求使用 `/v1/videos/generations` 和 `/v1/tasks/{task_id}`
 - 当前项目素材库使用 `ProjectName`
 - 用于生成的视频引用建议写 `asset://<asset_id>`
 - 只有 `GetAsset` 返回 `Status=Active` 时再投喂到视频生成

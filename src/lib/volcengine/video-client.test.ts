@@ -141,7 +141,7 @@ test('mergeVolcengineTaskMetadata keeps unified status metadata shape', () => {
   });
 });
 
-test('getVolcengineVideoConfig prefers ARTS env and normalizes base url', () => {
+test('getVolcengineVideoConfig treats shared ARTS base URL as gateway root', () => {
   const previous = {
     ARTS_VIDEO_BASE_URL: process.env.ARTS_VIDEO_BASE_URL,
     ARTS_API_BASE_URL: process.env.ARTS_API_BASE_URL,
@@ -154,7 +154,7 @@ test('getVolcengineVideoConfig prefers ARTS env and normalizes base url', () => 
     ARK_VIDEO_MODEL: process.env.ARK_VIDEO_MODEL,
   };
 
-  process.env.ARTS_API_BASE_URL = 'https://apis.artsapi.com/api';
+  process.env.ARTS_API_BASE_URL = 'https://jphhngvqjmgr.sealosbja.site/';
   delete process.env.ARTS_VIDEO_BASE_URL;
   process.env.ARTS_API_KEY = 'arts-video-key';
   process.env.ARTS_VIDEO_MODEL = 'seedance-2-0-fast-tezan';
@@ -164,7 +164,8 @@ test('getVolcengineVideoConfig prefers ARTS env and normalizes base url', () => 
 
   try {
     const config = getVolcengineVideoConfig();
-    assert.equal(config.baseUrl, 'https://apis.artsapi.com/api/v3');
+    assert.equal(config.baseUrl, 'https://jphhngvqjmgr.sealosbja.site');
+    assert.equal(config.apiStyle, 'gateway');
     assert.equal(config.apiKey, 'arts-video-key');
     assert.equal(config.model, 'seedance-2-0-fast-tezan');
   } finally {

@@ -108,25 +108,24 @@ gpt-image-2
 | Model | 项目模型 -> `ARTS_VIDEO_MODEL` -> `VOLCENGINE_ARK_VIDEO_MODEL` -> `ARK_VIDEO_MODEL` -> Seedance 形态的 `AI_API_VIDEO_MODEL` | 无，必填 |
 | Timeout | `VOLCENGINE_ARK_VIDEO_TIMEOUT_MS` -> `AI_API_TIMEOUT_MS` | `300000ms` |
 
-Base URL 归一化规则：
+Base URL 规则：
 
-- 配置 `ARTS_VIDEO_BASE_URL` 时，将其视为兼容网关根地址，不追加 `/api/v3`；创建任务使用 `/v1/videos/generations`，查询任务使用 `/v1/tasks/{taskId}`。
-- 如果配置到 `/api/v3`，直接使用。
-- 如果配置到 `/api`，自动补为 `/api/v3`。
-- 如果配置为域名根路径，自动补为 `/api/v3`。
+- `ARTS_VIDEO_BASE_URL` 或 `ARTS_API_BASE_URL` 都视为兼容网关根地址，不追加 `/api/v3`。
+- 创建任务使用 `/v1/videos/generations`，查询任务使用 `/v1/tasks/{taskId}`。
+- 只有旧版 `VOLCENGINE_ARK_VIDEO_BASE_URL` / `ARK_BASE_URL` 继续使用 `/api/v3/contents/generations/tasks`。
 
 ### 3.5 火山素材库
 
 ARTS Bearer 模式：
 
 ```env
-ARTS_API_BASE_URL=https://apis.artsapi.com/api/v3
+ARTS_API_BASE_URL=https://jphhngvqjmgr.sealosbja.site
 ARTS_API_KEY=replace-with-key
 ARTS_ASSET_PROJECT_NAME=default
 ARTS_ASSET_GROUP_ID=optional-group-id
 ```
 
-兼容网关可额外配置独立根地址：
+视频和素材库默认复用这个根地址，也可以分别覆盖：
 
 ```env
 ARTS_VIDEO_BASE_URL=https://jphhngvqjmgr.sealosbja.site
@@ -135,14 +134,11 @@ ARTS_API_KEY=replace-with-key
 ARTS_VIDEO_MODEL=seedance-2-0-fast-tezan
 ```
 
-`ARTS_ASSET_BASE_URL` 不会追加 `/api/v3`，素材库仍按
+`ARTS_ASSET_BASE_URL` 和 `ARTS_API_BASE_URL` 都不会追加 `/api/v3`，素材库按
 `?Action=<Action>&Version=2024-01-01` 拼接，JSON 请求参数保持不变。
 
-素材库 Base URL 归一化规则：
-
-- `https://apis.artsapi.com/api/v3` -> `https://apis.artsapi.com/api/v3`
-- `https://apis.artsapi.com/api` -> `https://apis.artsapi.com/api/v3`
-- `https://apis.artsapi.com` -> `https://apis.artsapi.com/api/v3`
+例如 `https://jphhngvqjmgr.sealosbja.site` 的素材查询地址为
+`https://jphhngvqjmgr.sealosbja.site?Action=ListAssets&Version=2024-01-01`。
 
 Legacy AK/SK 模式：
 

@@ -98,21 +98,37 @@ test('getVolcengineAssetConfig prefers ARTS bearer config and preserves /api/v3'
   }
 });
 
-test('getVolcengineAssetConfig appends /v3 to an /api base URL', () => {
+test('shared gateway asset base URL appends only Action and Version', async () => {
   const previous = {
     ARTS_ASSET_BASE_URL: process.env.ARTS_ASSET_BASE_URL,
     ARTS_API_BASE_URL: process.env.ARTS_API_BASE_URL,
     ARTS_API_KEY: process.env.ARTS_API_KEY,
   };
 
-  process.env.ARTS_API_BASE_URL = 'https://qimu-aigc.tezign.com/qimu-aigc/api';
+  process.env.ARTS_API_BASE_URL = 'https://jphhngvqjmgr.sealosbja.site/';
   delete process.env.ARTS_ASSET_BASE_URL;
   process.env.ARTS_API_KEY = 'arts-key';
+  const originalFetch = globalThis.fetch;
+  let requestedUrl = '';
+
+  globalThis.fetch = (async (input: RequestInfo | URL) => {
+    requestedUrl = String(input);
+    return new Response(JSON.stringify({ result: { id: 'asset-1', status: 'active' } }), {
+      status: 200,
+      headers: { 'Content-Type': 'application/json' },
+    });
+  }) as typeof fetch;
 
   try {
     const resolved = getVolcengineAssetConfig();
-    assert.equal(resolved.baseUrl, 'https://qimu-aigc.tezign.com/qimu-aigc/api/v3');
+    assert.equal(resolved.baseUrl, 'https://jphhngvqjmgr.sealosbja.site');
+    await getAsset({ Id: 'asset-1', ProjectName: 'tz' }, resolved);
+    assert.equal(
+      requestedUrl,
+      'https://jphhngvqjmgr.sealosbja.site?Action=GetAsset&Version=2024-01-01'
+    );
   } finally {
+    globalThis.fetch = originalFetch;
     for (const [key, value] of Object.entries(previous)) {
       if (value === undefined) {
         delete process.env[key];

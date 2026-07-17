@@ -60,12 +60,14 @@ const toTimeoutMs = (value: string | undefined) => {
 export const getVolcengineVideoConfig = (
   modelOverride?: string | null
 ): VolcengineVideoConfig => {
-  const gatewayBaseUrl = getFirstDefinedEnv(process.env.ARTS_VIDEO_BASE_URL);
+  const gatewayBaseUrl = getFirstDefinedEnv(
+    process.env.ARTS_VIDEO_BASE_URL,
+    process.env.ARTS_API_BASE_URL
+  );
   const baseUrl = gatewayBaseUrl
     ? gatewayBaseUrl.replace(/\/+$/, '')
     : normalizeVideoBaseUrl(
         getFirstDefinedEnv(
-          process.env.ARTS_API_BASE_URL,
           process.env.VOLCENGINE_ARK_VIDEO_BASE_URL,
           process.env.ARK_BASE_URL
         ) || 'https://ark.cn-beijing.volces.com/api/v3'
