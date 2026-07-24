@@ -42,7 +42,7 @@ test('resolveVolcengineReferenceAssets returns asset URI for active synced asset
   assert.equal(resolved.references[0].mode, 'asset_uri');
 });
 
-test('resolveVolcengineReferenceAssets prefers source URLs for international model requests', async () => {
+test('resolveVolcengineReferenceAssets automatically prefers source URLs for international model requests', async () => {
   const resolved = await resolveVolcengineReferenceAssets({
     references: [
       {
@@ -58,8 +58,8 @@ test('resolveVolcengineReferenceAssets prefers source URLs for international mod
       syncAssetsToPrivateLibrary: true,
       assetGroupId: 'group-1',
       projectName: 'default',
+      model: 'intsd2-x',
     },
-    preferSourceUrls: true,
   });
 
   assert.equal(resolved.references[0].usableUrl, 'https://example.com/a.png');

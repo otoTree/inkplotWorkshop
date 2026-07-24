@@ -32,6 +32,7 @@ import {
   DEFAULT_PROJECT_VIDEO_ASPECT_RATIO,
   DEFAULT_SEEDANCE_2_VIDEO_MODEL,
   DEFAULT_VOLCENGINE_PROJECT_NAME,
+  isInternationalSeedance2Model,
   normalizeProjectVideoModel,
   normalizeProjectVideoSettings,
   PROJECT_VIDEO_MODEL_OPTIONS,
@@ -79,6 +80,7 @@ export function ProjectDialog({ children, project, open: controlledOpen, onOpenC
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [ideaInput, setIdeaInput] = useState('');
   const [isGenerating, setIsGenerating] = useState(false);
+  const usesInternationalSeedance = isInternationalSeedance2Model(videoModel);
   const compatibilityHint =
     project?.visualStylePresetSource === 'legacy-inferred'
       ? '这是历史项目：系统已根据原有人物或场景美术描述自动匹配预设，保存后会写入新的风格预设字段。'
@@ -176,6 +178,7 @@ export function ProjectDialog({ children, project, open: controlledOpen, onOpenC
     try {
       const normalizedLanguage = language || 'zh';
       const normalizedPreferredVideoModel = normalizeProjectVideoModel(videoModel);
+      const shouldSyncVolcengineAssets = !usesInternationalSeedance && syncVolcengineAssets;
       if (project) {
         // Update existing project
         await api.projects.update(project.id, {
@@ -190,7 +193,7 @@ export function ProjectDialog({ children, project, open: controlledOpen, onOpenC
             model: videoModel,
             preferredVideoModel: normalizedPreferredVideoModel,
             aspectRatio: videoAspectRatio,
-            syncAssetsToPrivateLibrary: syncVolcengineAssets,
+            syncAssetsToPrivateLibrary: shouldSyncVolcengineAssets,
             assetGroupId: volcengineAssetGroupId.trim() || undefined,
             projectName: volcengineProjectName.trim() || DEFAULT_VOLCENGINE_PROJECT_NAME,
           },
@@ -240,7 +243,7 @@ export function ProjectDialog({ children, project, open: controlledOpen, onOpenC
             model: videoModel,
             preferredVideoModel: normalizedPreferredVideoModel,
             aspectRatio: videoAspectRatio,
-            syncAssetsToPrivateLibrary: syncVolcengineAssets,
+            syncAssetsToPrivateLibrary: shouldSyncVolcengineAssets,
             assetGroupId: volcengineAssetGroupId.trim() || undefined,
             projectName: volcengineProjectName.trim() || DEFAULT_VOLCENGINE_PROJECT_NAME,
           },
@@ -442,9 +445,13 @@ export function ProjectDialog({ children, project, open: controlledOpen, onOpenC
               <div className="sm:col-span-3">
                 <Select
                   value={videoModel}
-                  onValueChange={(value) =>
-                    setVideoModel(value as ProjectVideoModelSelection)
-                  }
+                  onValueChange={(value) => {
+                    const nextModel = value as ProjectVideoModelSelection;
+                    setVideoModel(nextModel);
+                    if (isInternationalSeedance2Model(nextModel)) {
+                      setSyncVolcengineAssets(false);
+                    }
+                  }}
                 >
                   <SelectTrigger id="videoModel">
                     <SelectValue placeholder="选择视频模型" />
@@ -491,16 +498,21 @@ export function ProjectDialog({ children, project, open: controlledOpen, onOpenC
                     type="checkbox"
                     checked={syncVolcengineAssets}
                     onChange={(e) => setSyncVolcengineAssets(e.target.checked)}
+                    disabled={usesInternationalSeedance}
                     className="mt-1 h-4 w-4"
                   />
                   <span>
-                    同步素材到火山素材库
+                    {usesInternationalSeedance
+                      ? '国际版自动使用对象存储链接'
+                      : '同步素材到火山素材库'}
                     <span className="block text-xs text-slate-500">
-                      开启后，Seedance 2.0 会优先使用火山素材库 ID 作为参考素材；素材需处理完成后才能用于生成。
+                      {usesInternationalSeedance
+                        ? 'intsd2-x 不使用火山素材库，生成时会直接提交资产的对象存储 URL。'
+                        : '开启后，Seedance 2.0 会优先使用火山素材库 ID 作为参考素材；素材需处理完成后才能用于生成。'}
                     </span>
                   </span>
                 </label>
-                {syncVolcengineAssets && (
+                {syncVolcengineAssets && !usesInternationalSeedance && (
                   <div className="grid gap-3 rounded-md border border-slate-200 bg-slate-50 p-3">
                     <Input
                       value={volcengineAssetGroupId}

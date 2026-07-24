@@ -4,7 +4,8 @@ export type ProjectVideoModelPreference = 'legacy' | 'seedance-2.0';
 export type ProjectVideoAspectRatio = '9:16' | '16:9';
 export type Seedance2VideoModelSelection =
   | 'seedance-2-0-fast-tezan'
-  | 'seedance-2-0-tezan';
+  | 'seedance-2-0-tezan'
+  | 'intsd2-x';
 export type ProjectVideoModelSelection = 'legacy' | Seedance2VideoModelSelection;
 
 export type ProjectVideoSettingsLike = {
@@ -35,6 +36,7 @@ export type VideoGenerationMetadataLike = {
 export const DEFAULT_PROJECT_VIDEO_MODEL: ProjectVideoModelPreference = 'legacy';
 export const FAST_SEEDANCE_2_VIDEO_MODEL = 'seedance-2-0-fast-tezan';
 export const STANDARD_SEEDANCE_2_VIDEO_MODEL = 'seedance-2-0-tezan';
+export const INTERNATIONAL_SEEDANCE_2_VIDEO_MODEL = 'intsd2-x';
 export const DEFAULT_SEEDANCE_2_VIDEO_MODEL: ProjectVideoModelSelection =
   FAST_SEEDANCE_2_VIDEO_MODEL;
 export const SEEDANCE_2_VIDEO_MODEL_OPTIONS = [
@@ -45,6 +47,10 @@ export const SEEDANCE_2_VIDEO_MODEL_OPTIONS = [
   {
     value: STANDARD_SEEDANCE_2_VIDEO_MODEL,
     label: 'Seedance 2.0 标准版',
+  },
+  {
+    value: INTERNATIONAL_SEEDANCE_2_VIDEO_MODEL,
+    label: 'Seedance 2.0 国际版',
   },
 ] satisfies Array<{ value: Seedance2VideoModelSelection; label: string }>;
 export const DEFAULT_VOLCENGINE_PROJECT_NAME = 'tz';
@@ -65,6 +71,11 @@ export const PROJECT_VIDEO_MODEL_OPTIONS = [
     label: 'Seedance 2.0 标准版',
     description: `${STANDARD_SEEDANCE_2_VIDEO_MODEL}，标准模型。`,
   },
+  {
+    value: INTERNATIONAL_SEEDANCE_2_VIDEO_MODEL,
+    label: 'Seedance 2.0 国际版',
+    description: `${INTERNATIONAL_SEEDANCE_2_VIDEO_MODEL}，直接使用对象存储链接，不经过火山素材库。`,
+  },
 ] as const;
 
 const normalizeOptionalString = (value: string | null | undefined) => {
@@ -77,6 +88,9 @@ export const isSupportedSeedance2VideoModel = (
   value: string | null | undefined
 ): value is Seedance2VideoModelSelection =>
   SEEDANCE_2_VIDEO_MODEL_OPTIONS.some((option) => option.value === value);
+
+export const isInternationalSeedance2Model = (value: string | null | undefined) =>
+  normalizeOptionalString(value)?.toLowerCase() === INTERNATIONAL_SEEDANCE_2_VIDEO_MODEL;
 
 export const normalizeProjectVideoModel = (
   value: string | null | undefined
@@ -112,12 +126,14 @@ export const normalizeProjectVideoSettings = (
   const preferredVideoModel = normalizeProjectVideoModel(
     settings?.preferredVideoModel ?? settings?.model
   );
+  const model = normalizeProjectVideoGenerationModel(settings?.model, preferredVideoModel);
 
   return {
-    syncAssetsToPrivateLibrary: settings?.syncAssetsToPrivateLibrary === true,
+    syncAssetsToPrivateLibrary:
+      !isInternationalSeedance2Model(model) && settings?.syncAssetsToPrivateLibrary === true,
     assetGroupId: normalizeOptionalString(settings?.assetGroupId),
     projectName: normalizeOptionalString(settings?.projectName) || DEFAULT_VOLCENGINE_PROJECT_NAME,
-    model: normalizeProjectVideoGenerationModel(settings?.model, preferredVideoModel),
+    model,
     preferredVideoModel,
     aspectRatio: normalizeProjectVideoAspectRatio(settings?.aspectRatio),
   };

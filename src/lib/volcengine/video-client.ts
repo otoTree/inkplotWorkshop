@@ -90,7 +90,8 @@ export const getVolcengineVideoConfig = (
 };
 
 export const isSeedance2Model = (model?: string | null) =>
-  typeof model === 'string' && /seedance[-_]?2|seedance-2|2-0/i.test(model);
+  typeof model === 'string' &&
+  (/seedance[-_]?2|seedance-2|2-0/i.test(model) || model.trim().toLowerCase() === 'intsd2-x');
 
 export const getConfiguredVolcengineVideoModel = (modelOverride?: string | null) => {
   const normalizedOverride =

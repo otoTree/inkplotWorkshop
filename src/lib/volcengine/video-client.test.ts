@@ -8,9 +8,14 @@ import {
   getSeedance2VideoTask,
   getVolcengineTaskSnapshot,
   getVolcengineVideoConfig,
+  isSeedance2Model,
   mergeVolcengineTaskMetadata,
   mapVolcengineTaskStatus,
 } from './video-client.ts';
+
+test('international model id is recognized as Seedance 2.0', () => {
+  assert.equal(isSeedance2Model('intsd2-x'), true);
+});
 
 test('gateway base URL uses /v1 video generation and task routes', async () => {
   const originalFetch = globalThis.fetch;

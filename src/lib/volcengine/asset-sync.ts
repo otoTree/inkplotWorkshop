@@ -7,7 +7,10 @@ import {
   type VolcengineAssetResult,
   type VolcengineAssetStatus,
 } from './asset-client.ts';
-import type { ProjectVideoModelSelection } from './video-compat.ts';
+import {
+  isInternationalSeedance2Model,
+  type ProjectVideoModelSelection,
+} from './video-compat.ts';
 
 export type VolcengineVideoSettings = {
   syncAssetsToPrivateLibrary?: boolean;
@@ -145,7 +148,8 @@ export const resolveVolcengineReferenceAssets = async ({
     createAssetGroup: client?.createAssetGroup || createAssetGroup,
     getAsset: client?.getAsset || getAsset,
   };
-  const syncEnabled = !!settings?.syncAssetsToPrivateLibrary;
+  const useSourceUrls = preferSourceUrls || isInternationalSeedance2Model(settings?.model);
+  const syncEnabled = !useSourceUrls && !!settings?.syncAssetsToPrivateLibrary;
   const projectName = getVolcengineAssetProjectName(settings?.projectName);
   const groupId =
     settings?.assetGroupId ||
@@ -155,7 +159,7 @@ export const resolveVolcengineReferenceAssets = async ({
   const resolved: ResolvedReferenceAsset[] = [];
   const pendingAssets: PendingReferenceAsset[] = [];
 
-  if (preferSourceUrls) {
+  if (useSourceUrls) {
     for (const asset of references) {
       const fallback = toResolvedUrl(asset);
       if (fallback) resolved.push(fallback);

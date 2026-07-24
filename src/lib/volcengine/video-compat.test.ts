@@ -4,7 +4,9 @@ import {
   DEFAULT_SEEDANCE_2_VIDEO_MODEL,
   DEFAULT_PROJECT_VIDEO_ASPECT_RATIO,
   DEFAULT_PROJECT_VIDEO_MODEL,
+  INTERNATIONAL_SEEDANCE_2_VIDEO_MODEL,
   inferVideoTaskProvider,
+  isInternationalSeedance2Model,
   normalizeProjectVideoAspectRatio,
   normalizeProjectVideoGenerationModel,
   normalizeProjectVideoModel,
@@ -48,10 +50,36 @@ test('normalizeProjectVideoGenerationModel upgrades old seedance preference to c
     'seedance-2-0-tezan'
   );
   assert.equal(
+    normalizeProjectVideoGenerationModel(INTERNATIONAL_SEEDANCE_2_VIDEO_MODEL),
+    INTERNATIONAL_SEEDANCE_2_VIDEO_MODEL
+  );
+  assert.equal(
     normalizeProjectVideoGenerationModel('dreamina-seedance-2-0-260128'),
     DEFAULT_SEEDANCE_2_VIDEO_MODEL
   );
   assert.equal(normalizeProjectVideoGenerationModel('legacy'), 'legacy');
+});
+
+test('international Seedance model disables private asset sync', () => {
+  assert.equal(isInternationalSeedance2Model('intsd2-x'), true);
+  assert.deepEqual(
+    normalizeProjectVideoSettings({
+      model: 'intsd2-x',
+      preferredVideoModel: 'seedance-2.0',
+      syncAssetsToPrivateLibrary: true,
+      assetGroupId: 'group-existing',
+      projectName: 'tz',
+      aspectRatio: '16:9',
+    }),
+    {
+      syncAssetsToPrivateLibrary: false,
+      assetGroupId: 'group-existing',
+      projectName: 'tz',
+      model: 'intsd2-x',
+      preferredVideoModel: 'seedance-2.0',
+      aspectRatio: '16:9',
+    }
+  );
 });
 
 test('normalizeProjectVideoAspectRatio keeps supported values and falls back safely', () => {

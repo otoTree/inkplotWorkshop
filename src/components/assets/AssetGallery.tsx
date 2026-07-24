@@ -23,6 +23,7 @@ import { getImageGenerationPrompt } from '@/lib/prompts';
 import { buildVisualStyleRequestPayload, resolveArtStyleConfig } from '@/lib/project-visual-style';
 import { DEFAULT_IMAGE_GENERATION_MODEL, IMAGE_GENERATION_MODEL_LABELS } from '@/lib/image-generation-models';
 import { DEFAULT_VOLCENGINE_ASSET_BATCH_SIZE } from '@/lib/volcengine/asset-batch';
+import { normalizeProjectVideoSettings } from '@/lib/volcengine/video-compat';
 
 type VolcengineSyncResult = {
   synced?: number;
@@ -95,7 +96,9 @@ export function AssetGallery({ projectId }: { projectId: string }) {
 
   const artStyleConfig: ArtStyleConfig = resolveArtStyleConfig(project);
   const imageModel = project?.imageGenerationModel || DEFAULT_IMAGE_GENERATION_MODEL;
-  const volcengineSyncEnabled = project?.volcengineVideoSettings?.syncAssetsToPrivateLibrary === true;
+  const normalizedVideoSettings = normalizeProjectVideoSettings(project?.volcengineVideoSettings);
+  const volcengineSyncEnabled = normalizedVideoSettings.syncAssetsToPrivateLibrary;
+  const usesInternationalSeedance = normalizedVideoSettings.model === 'intsd2-x';
 
   const getAssetsByType = (type: AssetType) => assets?.filter((a) => a.type === type) || [];
 
@@ -865,11 +868,17 @@ export function AssetGallery({ projectId }: { projectId: string }) {
                     : 'border-slate-200 bg-slate-50 text-slate-500'
                 }
               >
-                {volcengineSyncEnabled ? '已开启' : '未开启'}
+                {usesInternationalSeedance
+                  ? '国际版不需要'
+                  : volcengineSyncEnabled
+                    ? '已开启'
+                    : '未开启'}
               </Badge>
             </div>
             <p className="mt-1 text-xs text-black/45">
-              状态来自资产库记录；视频生成前会把关联资产同步到火山素材库。
+              {usesInternationalSeedance
+                ? '当前使用 Seedance 2.0 国际版，视频生成会直接使用对象存储链接。'
+                : '状态来自资产库记录；视频生成前会把关联资产同步到火山素材库。'}
             </p>
           </div>
           <div className="flex flex-wrap gap-2">
