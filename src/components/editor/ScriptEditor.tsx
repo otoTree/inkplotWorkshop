@@ -24,6 +24,10 @@ import { Label } from "@/components/ui/label";
 import { Progress } from "@/components/ui/progress";
 import { Textarea } from "@/components/ui/textarea";
 import { EPISODE_DURATION_MIN_SECONDS, normalizeEpisodeDurationSeconds } from '@/lib/duration';
+import {
+  getAccountLimitErrorMessage,
+  type AccountCreationLimits,
+} from '@/lib/account-limits';
 
 type SeriesOutlineItem = {
   episode_number: number;
@@ -65,6 +69,7 @@ export function ScriptEditor({ projectId }: { projectId: string }) {
   const [scriptAssets, setScriptAssets] = useState<Asset[]>([]);
   const [project, setProject] = useState<Project | null>(null);
   const [currentEpisode, setCurrentEpisode] = useState<Episode | null>(null);
+  const [accountLimits, setAccountLimits] = useState<AccountCreationLimits | null>(null);
 
   useEffect(() => {
     if (ideaDialogOpen && project) {
@@ -74,14 +79,19 @@ export function ScriptEditor({ projectId }: { projectId: string }) {
 
   const fetchData = useCallback(async () => {
     try {
-        const [proj, eps, assets] = await Promise.all([
+        const [proj, eps, assets, limits] = await Promise.all([
             api.projects.get(projectId),
             api.episodes.list(projectId),
-            api.assets.list(projectId)
+            api.assets.list(projectId),
+            api.accountLimits.get(),
         ]);
         setProject(proj);
         setEpisodes(eps);
         setScriptAssets(assets);
+        setAccountLimits(limits);
+        if (limits.maxEpisodesPerProject !== null) {
+          setEpisodeCount(String(limits.maxEpisodesPerProject));
+        }
         
         // Handle initialization logic
         if (eps.length === 0 && proj) {
@@ -249,8 +259,11 @@ export function ScriptEditor({ projectId }: { projectId: string }) {
 
   const handleGenerateSeries = async () => {
     if (!idea.trim()) return;
+    const limits = accountLimits || await api.accountLimits.get();
     const parsedEpisodeCount = Number.parseInt(episodeCount, 10);
-    const safeEpisodeCount = Number.isFinite(parsedEpisodeCount) ? Math.max(10, Math.min(120, parsedEpisodeCount)) : 52;
+    const safeEpisodeCount = limits.maxEpisodesPerProject === null
+      ? (Number.isFinite(parsedEpisodeCount) ? Math.max(10, Math.min(120, parsedEpisodeCount)) : 52)
+      : limits.maxEpisodesPerProject;
     const batchSize = 8;
     const computedTotalBatches = Math.ceil(safeEpisodeCount / batchSize);
     setIsGenerating(true);
@@ -426,7 +439,7 @@ export function ScriptEditor({ projectId }: { projectId: string }) {
       
     } catch (error) {
       console.error(error);
-      alert("生成剧集失败，请检查您的 API Key。");
+      alert(getAccountLimitErrorMessage(error, '生成剧集失败，请检查您的 API Key。'));
     } finally {
       setIsGenerating(false);
       setGenerationStage('idle');
@@ -521,6 +534,16 @@ export function ScriptEditor({ projectId }: { projectId: string }) {
   };
 
   const handleAddEpisode = async () => {
+    if (
+      accountLimits?.maxEpisodesPerProject !== null &&
+      accountLimits?.maxEpisodesPerProject !== undefined &&
+      episodes.length >= accountLimits.maxEpisodesPerProject
+    ) {
+      alert('当前账号的每个项目最多只能创建 1 集。');
+      return;
+    }
+
+    try {
       const maxEp = episodes?.length ? Math.max(...episodes.map(e => e.episodeNumber)) : 0;
       const nextEpNum = maxEp + 1;
       
@@ -537,6 +560,9 @@ export function ScriptEditor({ projectId }: { projectId: string }) {
       await api.episodes.create(newEpisode);
       setEpisodes(prev => [...prev, newEpisode]);
       setCurrentEpisode(newEpisode);
+    } catch (error) {
+      alert(getAccountLimitErrorMessage(error, '新增剧集失败，请稍后重试。'));
+    }
   };
 
   const handleDeleteEpisode = async (e: React.MouseEvent, episodeId: string) => {
@@ -566,7 +592,24 @@ export function ScriptEditor({ projectId }: { projectId: string }) {
       <aside className="flex w-full shrink-0 flex-col overflow-hidden border-b border-black/[0.08] bg-gray-50 lg:h-full lg:w-64 lg:border-b-0 lg:border-r">
          <div className="p-4 border-b border-black/[0.04] flex justify-between items-center bg-white">
              <span className="font-serif font-bold text-sm">剧集列表</span>
-             <Button variant="ghost" size="icon" onClick={handleAddEpisode} className="h-8 w-8">
+             <Button
+               variant="ghost"
+               size="icon"
+               onClick={handleAddEpisode}
+               className="h-8 w-8"
+               disabled={
+                 accountLimits?.maxEpisodesPerProject !== null &&
+                 accountLimits?.maxEpisodesPerProject !== undefined &&
+                 episodes.length >= accountLimits.maxEpisodesPerProject
+               }
+               title={
+                 accountLimits?.maxEpisodesPerProject !== null &&
+                 accountLimits?.maxEpisodesPerProject !== undefined &&
+                 episodes.length >= accountLimits.maxEpisodesPerProject
+                   ? '当前账号的每个项目最多只能创建 1 集'
+                   : '新增剧集'
+               }
+             >
                  <Plus className="h-4 w-4" />
              </Button>
          </div>
@@ -622,7 +665,9 @@ export function ScriptEditor({ projectId }: { projectId: string }) {
                         <DialogHeader>
                             <DialogTitle>从灵感生成剧本</DialogTitle>
                             <DialogDescription>
-                                输入故事主题或灵感，生成完整项目设计（角色、场景、道具与 50+ 集大纲）。
+                                {accountLimits?.maxEpisodesPerProject === null
+                                  ? '输入故事主题或灵感，生成完整项目设计（角色、场景、道具与 50+ 集大纲）。'
+                                  : '输入故事主题或灵感，生成完整项目设计；当前账号仅生成 1 集。'}
                                 这将覆盖当前剧集与资产。
                             </DialogDescription>
                         </DialogHeader>
@@ -636,14 +681,17 @@ export function ScriptEditor({ projectId }: { projectId: string }) {
                                 className="min-h-[100px]"
                             />
                             <div>
-                                <Label htmlFor="episodeCount" className="mb-2 block">目标集数（10-120）</Label>
+                                <Label htmlFor="episodeCount" className="mb-2 block">
+                                  {accountLimits?.maxEpisodesPerProject === null ? '目标集数（10-120）' : '目标集数（当前账号固定为 1）'}
+                                </Label>
                                 <Input
                                   id="episodeCount"
                                   type="number"
-                                  min={10}
-                                  max={120}
+                                  min={accountLimits?.maxEpisodesPerProject === null ? 10 : 1}
+                                  max={accountLimits?.maxEpisodesPerProject === null ? 120 : 1}
                                   value={episodeCount}
                                   onChange={(e) => setEpisodeCount(e.target.value)}
+                                  disabled={accountLimits?.maxEpisodesPerProject !== null}
                                 />
                             </div>
                             {isGenerating && (

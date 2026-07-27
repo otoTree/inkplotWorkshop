@@ -45,6 +45,7 @@ import {
   IMAGE_GENERATION_MODEL_LABELS,
   type SupportedImageGenerationModel,
 } from '@/lib/image-generation-models';
+import { getAccountLimitErrorMessage } from '@/lib/account-limits';
 
 interface ProjectDialogProps {
   children?: React.ReactNode;
@@ -276,6 +277,7 @@ export function ProjectDialog({ children, project, open: controlledOpen, onOpenC
       if (onSuccess) onSuccess();
     } catch (error) {
       console.error('Failed to save project:', error);
+      alert(getAccountLimitErrorMessage(error, '保存项目失败，请稍后重试。'));
     } finally {
       setIsSubmitting(false);
     }

@@ -9,8 +9,84 @@ import { normalizeShotDurationSeconds } from '@/lib/duration';
 import { normalizeProjectVideoSettings } from '@/lib/volcengine/video-compat';
 import { normalizeImageGenerationModel } from '@/lib/image-generation-models';
 import { appendNoSubtitleDirective } from '@/lib/storyboard-generation';
+import {
+  getAccountCreationLimits,
+  type AccountCreationLimits,
+} from '@/lib/account-limits';
 
 const supabase = createClient();
+
+type AuthenticatedUser = {
+  id: string;
+  email?: string;
+};
+
+const getAuthenticatedUser = async (): Promise<AuthenticatedUser> => {
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) throw new Error('请先登录后再操作。');
+  return { id: user.id, email: user.email };
+};
+
+const assertProjectCapacity = async (user: AuthenticatedUser) => {
+  const limits = getAccountCreationLimits(user.email);
+  if (limits.maxProjects === null) return;
+
+  const { count, error } = await supabase
+    .from('projects')
+    .select('id', { count: 'exact', head: true });
+  if (error) throw error;
+  if ((count || 0) >= limits.maxProjects) {
+    throw new Error('当前账号最多只能创建 1 个项目。');
+  }
+};
+
+const assertEpisodeCapacity = async (user: AuthenticatedUser, episodes: Episode[]) => {
+  const limits = getAccountCreationLimits(user.email);
+  if (limits.maxEpisodesPerProject === null || episodes.length === 0) return;
+
+  const additionsByProject = new Map<string, number>();
+  episodes.forEach((episode) => {
+    additionsByProject.set(
+      episode.projectId,
+      (additionsByProject.get(episode.projectId) || 0) + 1
+    );
+  });
+
+  for (const [projectId, additions] of additionsByProject) {
+    const { count, error } = await supabase
+      .from('episodes')
+      .select('id', { count: 'exact', head: true })
+      .eq('project_id', projectId);
+    if (error) throw error;
+    if ((count || 0) + additions > limits.maxEpisodesPerProject) {
+      throw new Error('当前账号的每个项目最多只能创建 1 集。');
+    }
+  }
+};
+
+const assertShotCapacity = async (user: AuthenticatedUser, shots: Shot[]) => {
+  const limits = getAccountCreationLimits(user.email);
+  if (limits.maxShotsPerEpisode === null || shots.length === 0) return;
+
+  const additionsByEpisode = new Map<string, number>();
+  shots.forEach((shot) => {
+    additionsByEpisode.set(
+      shot.episodeId,
+      (additionsByEpisode.get(shot.episodeId) || 0) + 1
+    );
+  });
+
+  for (const [episodeId, additions] of additionsByEpisode) {
+    const { count, error } = await supabase
+      .from('shots')
+      .select('id', { count: 'exact', head: true })
+      .eq('episode_id', episodeId);
+    if (error) throw error;
+    if ((count || 0) + additions > limits.maxShotsPerEpisode) {
+      throw new Error('当前账号的每集最多只能创建 1 个分镜。');
+    }
+  }
+};
 
 const toProject = (row: Record<string, unknown>): Project => {
   const resolvedStyle = resolveProjectVisualStyleSelection(row.art_style);
@@ -104,6 +180,13 @@ const normalizeShotVideoGenerationMetadata = (
 ) => metadata ?? {};
 
 export const api = {
+  accountLimits: {
+    get: async (): Promise<AccountCreationLimits> => {
+      const user = await getAuthenticatedUser();
+      return getAccountCreationLimits(user.email);
+    },
+  },
+
   // Projects
   projects: {
     list: async (): Promise<Project[]> => {
@@ -128,8 +211,8 @@ export const api = {
     },
 
     create: async (project: Project): Promise<void> => {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) throw new Error('User not authenticated');
+      const user = await getAuthenticatedUser();
+      await assertProjectCapacity(user);
 
       const { error } = await supabase.from('projects').insert({
         id: project.id,
@@ -217,8 +300,8 @@ export const api = {
     },
 
     create: async (episode: Episode): Promise<void> => {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) throw new Error('User not authenticated');
+      const user = await getAuthenticatedUser();
+      await assertEpisodeCapacity(user, [episode]);
 
       const { error } = await supabase.from('episodes').insert({
         id: episode.id,
@@ -234,8 +317,9 @@ export const api = {
     },
     
     bulkCreate: async (episodes: Episode[]): Promise<void> => {
-       const { data: { user } } = await supabase.auth.getUser();
-       if (!user) throw new Error('User not authenticated');
+       const user = await getAuthenticatedUser();
+       if (episodes.length === 0) return;
+       await assertEpisodeCapacity(user, episodes);
        
        const rows = episodes.map(e => ({
         id: e.id,
@@ -397,8 +481,8 @@ export const api = {
     },
 
     create: async (shot: Shot): Promise<void> => {
-       const { data: { user } } = await supabase.auth.getUser();
-       if (!user) throw new Error('User not authenticated');
+       const user = await getAuthenticatedUser();
+       await assertShotCapacity(user, [shot]);
        
        const { error } = await supabase.from('shots').insert({
          id: shot.id,
@@ -429,9 +513,9 @@ export const api = {
     },
     
     bulkCreate: async (shots: Shot[]): Promise<void> => {
-        const { data: { user } } = await supabase.auth.getUser();
-        if (!user) throw new Error('User not authenticated');
+        const user = await getAuthenticatedUser();
         if (shots.length === 0) return;
+        await assertShotCapacity(user, shots);
         
         const rows = shots.map(s => ({
             id: s.id,

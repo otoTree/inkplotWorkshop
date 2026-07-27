@@ -82,6 +82,8 @@ export function OneClickWorkflowDialog({ projectId, open, onOpenChange }: OneCli
       log('获取项目数据...');
       const project = await api.projects.get(projectId);
       if (!project) throw new Error('项目不存在');
+      const accountLimits = await api.accountLimits.get();
+      const targetEpisodeCount = accountLimits.maxEpisodesPerProject ?? 52;
       const imageModel =
         project.imageGenerationModel || DEFAULT_IMAGE_GENERATION_MODEL;
 
@@ -95,7 +97,7 @@ export function OneClickWorkflowDialog({ projectId, open, onOpenChange }: OneCli
           throw new Error('当前项目没有故事大纲，也没有填写一句话梗概。请先在项目设置中填写一句话梗概，或在“剧本”页面手动生成大纲。');
         }
         
-        log('未发现大纲，正在根据项目梗概生成项目设计 (默认 52 集)...');
+        log(`未发现大纲，正在根据项目梗概生成项目设计 (${targetEpisodeCount} 集)...`);
         const blueprintResponse = await fetch('/api/ai/generate', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -103,14 +105,16 @@ export function OneClickWorkflowDialog({ projectId, open, onOpenChange }: OneCli
               type: 'story_blueprint', 
               theme: project.logline, // 使用项目的一句话梗概作为灵感来源
               language: project.language || 'zh',
-              episode_count: 52
+              episode_count: targetEpisodeCount
           }),
         });
         
         if (!blueprintResponse.ok) throw new Error('项目大纲生成失败');
         
         const blueprintData = await blueprintResponse.json();
-        const generatedEpisodes = blueprintData.series_outline || [];
+        const generatedEpisodes = Array.isArray(blueprintData.series_outline)
+          ? blueprintData.series_outline.slice(0, targetEpisodeCount)
+          : [];
         
         if (generatedEpisodes.length > 0) {
           log(`已生成 ${generatedEpisodes.length} 集大纲，正在保存...`);
@@ -250,7 +254,10 @@ export function OneClickWorkflowDialog({ projectId, open, onOpenChange }: OneCli
       // 根据用户要求：不需要在剧本生成后提取资产，因为创意生成阶段已经生成了必要的角色和场景，剧本只会使用这些已有资产。
       setProgress(40);
       let assets = await api.assets.list(projectId);
-      const validEpisodes = episodes.filter(e => e.content && e.content.trim().length > 0);
+      const eligibleEpisodes = episodes.filter(e => e.content && e.content.trim().length > 0);
+      const validEpisodes = accountLimits.maxEpisodesPerProject === null
+        ? eligibleEpisodes
+        : eligibleEpisodes.slice(0, accountLimits.maxEpisodesPerProject);
 
       // 3. 生成资产图片 (Generate asset images)
       const assetsToGenerateImages = assets.filter(a => !a.imageUrl && a.visualPrompt);
@@ -372,7 +379,10 @@ export function OneClickWorkflowDialog({ projectId, open, onOpenChange }: OneCli
           };
 
           log(`第 ${ep.episodeNumber} 集：正在规划镜头数量...`);
-          const plannedShots = await requestPlan();
+          const requestedShots = await requestPlan();
+          const plannedShots = accountLimits.maxShotsPerEpisode === null
+            ? requestedShots
+            : requestedShots.slice(0, accountLimits.maxShotsPerEpisode);
 
           if (plannedShots.length === 0) {
             log(`第 ${ep.episodeNumber} 集：未生成任何镜头规划。`);

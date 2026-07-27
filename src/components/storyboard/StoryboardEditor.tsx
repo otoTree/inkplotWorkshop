@@ -35,6 +35,10 @@ import {
   normalizeVideoGenerationError,
 } from '@/lib/video-generation-error';
 import { getVideoGenerationAccess } from '@/lib/video-generation-history';
+import {
+  getAccountLimitErrorMessage,
+  type AccountCreationLimits,
+} from '@/lib/account-limits';
 
 interface StoryboardEditorProps {
   projectId: string;
@@ -94,6 +98,7 @@ export function StoryboardEditor({ projectId }: StoryboardEditorProps) {
   const [episodes, setEpisodes] = useState<Episode[]>([]);
   const [assets, setAssets] = useState<Asset[]>([]);
   const [shots, setShots] = useState<Shot[]>([]);
+  const [accountLimits, setAccountLimits] = useState<AccountCreationLimits | null>(null);
   const [draggedShotId, setDraggedShotId] = useState<string | null>(null);
   const [assetClipboard, setAssetClipboard] = useState<{
     sourceShotSequence: number;
@@ -109,6 +114,7 @@ export function StoryboardEditor({ projectId }: StoryboardEditorProps) {
     api.projects.get(projectId).then(setProject);
     api.episodes.list(projectId).then(setEpisodes);
     api.assets.list(projectId).then(setAssets);
+    api.accountLimits.get().then(setAccountLimits);
   }, [projectId]);
 
   // Fetch shots when episode changes
@@ -199,7 +205,11 @@ export function StoryboardEditor({ projectId }: StoryboardEditorProps) {
     };
 
     onProgress?.({ phase: '正在规划镜头数量', current: 0, total: 0 });
-    const plannedShots = await requestPlan();
+    const limits = accountLimits || await api.accountLimits.get();
+    const requestedShots = await requestPlan();
+    const plannedShots = limits.maxShotsPerEpisode === null
+      ? requestedShots
+      : requestedShots.slice(0, limits.maxShotsPerEpisode);
 
     if (plannedShots.length === 0) return [];
     onProgress?.({ phase: '正在逐镜头生成', current: 0, total: plannedShots.length });
@@ -539,6 +549,16 @@ export function StoryboardEditor({ projectId }: StoryboardEditorProps) {
 
   const handleAddShot = async () => {
     if (!selectedEpisodeId) return;
+    if (
+      accountLimits?.maxShotsPerEpisode !== null &&
+      accountLimits?.maxShotsPerEpisode !== undefined &&
+      shots.length >= accountLimits.maxShotsPerEpisode
+    ) {
+      alert('当前账号的每集最多只能创建 1 个分镜。');
+      return;
+    }
+
+    try {
     const maxSeq = shots && shots.length > 0 ? Math.max(...shots.map(s => s.sequence)) : 0;
     
     const newShot: Shot = {
@@ -564,6 +584,9 @@ export function StoryboardEditor({ projectId }: StoryboardEditorProps) {
 
     await api.shots.create(newShot);
     setShots(prev => [...prev, newShot]);
+    } catch (error) {
+      alert(getAccountLimitErrorMessage(error, '新增分镜失败，请稍后重试。'));
+    }
   };
   
   const handleUpdateShot = async (updatedShot: Shot) => {
@@ -784,7 +807,24 @@ export function StoryboardEditor({ projectId }: StoryboardEditorProps) {
                   ? '当前剧集视频已全生成或排队中'
                   : '一键生成当前剧集视频'}
             </Button>
-            <Button variant="outline" size="icon" onClick={handleAddShot} className="w-full sm:w-9">
+            <Button
+              variant="outline"
+              size="icon"
+              onClick={handleAddShot}
+              className="w-full sm:w-9"
+              disabled={
+                accountLimits?.maxShotsPerEpisode !== null &&
+                accountLimits?.maxShotsPerEpisode !== undefined &&
+                shots.length >= accountLimits.maxShotsPerEpisode
+              }
+              title={
+                accountLimits?.maxShotsPerEpisode !== null &&
+                accountLimits?.maxShotsPerEpisode !== undefined &&
+                shots.length >= accountLimits.maxShotsPerEpisode
+                  ? '当前账号的每集最多只能创建 1 个分镜'
+                  : '新增分镜'
+              }
+            >
               <Plus className="w-4 h-4" />
             </Button>
           </div>

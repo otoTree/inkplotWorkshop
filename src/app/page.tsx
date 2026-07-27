@@ -9,6 +9,7 @@ import { normalizeImageGenerationModel } from "@/lib/image-generation-models";
 import { redirect } from "next/navigation";
 import { signOut } from "./actions";
 import { Project } from "@/types";
+import { getAccountCreationLimits } from "@/lib/account-limits";
 
 export default async function Home() {
   const supabase = await createClient();
@@ -46,6 +47,9 @@ export default async function Home() {
       updatedAt: new Date(record.updated_at as string).getTime(),
     };
   });
+  const accountLimits = getAccountCreationLimits(user.email);
+  const canCreateProject =
+    accountLimits.maxProjects === null || projects.length < accountLimits.maxProjects;
 
   return (
     <div className="flex min-h-screen flex-col items-center p-8 sm:p-20 font-sans bg-white">
@@ -65,11 +69,22 @@ export default async function Home() {
                 <LogOut className="mr-2 h-4 w-4" /> 退出登录
               </Button>
             </form>
-            <ProjectDialog>
-              <Button size="lg" className="rounded-full px-8">
-                <Plus className="mr-2 h-4 w-4" /> 新建项目
+            {canCreateProject ? (
+              <ProjectDialog>
+                <Button size="lg" className="rounded-full px-8">
+                  <Plus className="mr-2 h-4 w-4" /> 新建项目
+                </Button>
+              </ProjectDialog>
+            ) : (
+              <Button
+                size="lg"
+                className="rounded-full px-8"
+                disabled
+                title="当前账号最多只能创建 1 个项目"
+              >
+                <Plus className="mr-2 h-4 w-4" /> 已达项目上限
               </Button>
-            </ProjectDialog>
+            )}
           </div>
         </div>
         
