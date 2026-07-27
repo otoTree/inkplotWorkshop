@@ -18,7 +18,7 @@ const DEFAULT_ACCOUNT_LIMITS: AccountCreationLimits = {
   exempt: false,
   maxProjects: 1,
   maxEpisodesPerProject: 1,
-  maxShotsPerEpisode: 1,
+  maxShotsPerEpisode: 10,
 };
 
 export const isAccountLimitExempt = (email?: string | null) =>
@@ -32,7 +32,7 @@ export const getAccountCreationLimits = (email?: string | null): AccountCreation
 const DATABASE_LIMIT_MESSAGES: Array<[string, string]> = [
   ['INKPLOT_LIMIT_PROJECTS', '当前账号最多只能创建 1 个项目。'],
   ['INKPLOT_LIMIT_EPISODES', '当前账号的每个项目最多只能创建 1 集。'],
-  ['INKPLOT_LIMIT_SHOTS', '当前账号的每集最多只能创建 1 个分镜。'],
+  ['INKPLOT_LIMIT_SHOTS', '当前账号的每集最多只能创建 10 个分镜。'],
 ];
 
 export const getAccountLimitErrorMessage = (

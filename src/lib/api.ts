@@ -83,7 +83,7 @@ const assertShotCapacity = async (user: AuthenticatedUser, shots: Shot[]) => {
       .eq('episode_id', episodeId);
     if (error) throw error;
     if ((count || 0) + additions > limits.maxShotsPerEpisode) {
-      throw new Error('当前账号的每集最多只能创建 1 个分镜。');
+      throw new Error(`当前账号的每集最多只能创建 ${limits.maxShotsPerEpisode} 个分镜。`);
     }
   }
 };

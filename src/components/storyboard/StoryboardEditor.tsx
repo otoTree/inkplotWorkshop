@@ -554,7 +554,7 @@ export function StoryboardEditor({ projectId }: StoryboardEditorProps) {
       accountLimits?.maxShotsPerEpisode !== undefined &&
       shots.length >= accountLimits.maxShotsPerEpisode
     ) {
-      alert('当前账号的每集最多只能创建 1 个分镜。');
+      alert(`当前账号的每集最多只能创建 ${accountLimits.maxShotsPerEpisode} 个分镜。`);
       return;
     }
 
@@ -821,7 +821,7 @@ export function StoryboardEditor({ projectId }: StoryboardEditorProps) {
                 accountLimits?.maxShotsPerEpisode !== null &&
                 accountLimits?.maxShotsPerEpisode !== undefined &&
                 shots.length >= accountLimits.maxShotsPerEpisode
-                  ? '当前账号的每集最多只能创建 1 个分镜'
+                  ? `当前账号的每集最多只能创建 ${accountLimits.maxShotsPerEpisode} 个分镜`
                   : '新增分镜'
               }
             >
