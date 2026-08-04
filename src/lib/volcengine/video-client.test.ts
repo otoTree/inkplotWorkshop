@@ -46,7 +46,7 @@ test('gateway base URL uses /v1 video generation and task routes', async () => {
       {
         model: config.model,
         content: [{ type: 'text', text: 'test' }],
-        resolution: '720p',
+        resolution: '480p',
       },
       config
     );
@@ -59,7 +59,7 @@ test('gateway base URL uses /v1 video generation and task routes', async () => {
         body: JSON.stringify({
           model: config.model,
           content: [{ type: 'text', text: 'test' }],
-          resolution: '720p',
+          resolution: '480p',
         }),
       },
       {
@@ -119,7 +119,7 @@ test('mergeVolcengineTaskMetadata keeps unified status metadata shape', () => {
     requestContentMode: 'asset_uri',
     referenceAssetIds: ['asset-1'],
     aspectRatio: '9:16',
-    resolution: '720p',
+    resolution: '480p',
     result: {
       id: 'cgt-test',
       status: 'processing',

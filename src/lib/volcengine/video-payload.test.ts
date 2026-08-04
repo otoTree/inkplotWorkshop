@@ -108,5 +108,5 @@ test('buildSeedance2VideoPayload always uses the fixed resolution', () => {
   });
 
   assert.equal(payload.resolution, DEFAULT_SEEDANCE_2_RESOLUTION);
-  assert.equal(payload.resolution, '720p');
+  assert.equal(payload.resolution, '480p');
 });

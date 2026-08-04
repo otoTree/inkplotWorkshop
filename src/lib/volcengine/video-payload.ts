@@ -8,8 +8,8 @@ export type Seedance2Reference = {
 };
 
 export type Seedance2AspectRatio = '9:16' | '16:9';
-export type Seedance2Resolution = '720p';
-export const DEFAULT_SEEDANCE_2_RESOLUTION: Seedance2Resolution = '720p';
+export type Seedance2Resolution = '480p';
+export const DEFAULT_SEEDANCE_2_RESOLUTION: Seedance2Resolution = '480p';
 
 export type Seedance2VideoPayload = {
   model: string;

@@ -78,7 +78,7 @@ type VideoGenerationMetadata = {
   requestContentMode?: 'asset_uri' | 'url';
   referenceAssetIds?: string[];
   aspectRatio?: '9:16' | '16:9';
-  resolution?: Seedance2Resolution | '480p';
+  resolution?: Seedance2Resolution | '720p';
   rawStatus?: string;
   usage?: Record<string, unknown>;
   error?: Record<string, unknown> | string | null;
