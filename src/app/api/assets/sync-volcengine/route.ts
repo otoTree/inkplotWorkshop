@@ -11,10 +11,7 @@ import {
   type LocalReferenceAsset,
   type VolcengineVideoSettings,
 } from '@/lib/volcengine/asset-sync';
-import {
-  isInternationalSeedance2Model,
-  normalizeProjectVideoSettings,
-} from '@/lib/volcengine/video-compat';
+import { normalizeProjectVideoSettings } from '@/lib/volcengine/video-compat';
 
 export const maxDuration = 300;
 export const preferredRegion = 'sin1';
@@ -182,15 +179,9 @@ export async function POST(req: Request) {
 
     const settings = (project.volcengine_video_settings || {}) as VolcengineVideoSettings;
     const normalizedSettings = normalizeProjectVideoSettings(settings);
-    if (isInternationalSeedance2Model(normalizedSettings.model)) {
-      return NextResponse.json(
-        { error: 'Seedance 2.0 国际版直接使用对象存储链接，无需同步火山素材库' },
-        { status: 400 }
-      );
-    }
     if (normalizedSettings.syncAssetsToPrivateLibrary !== true) {
       return NextResponse.json(
-        { error: '请先在项目设置中开启“同步素材到火山素材库”' },
+        { error: '所有模型已统一使用对象存储 URL，不再同步或使用火山素材 ID' },
         { status: 400 }
       );
     }

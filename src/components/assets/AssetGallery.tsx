@@ -3,7 +3,6 @@
 import { api } from '@/lib/api';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Progress } from '@/components/ui/progress';
 import { Input } from '@/components/ui/input';
@@ -14,7 +13,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { Plus, User, MapPin, Wand2, Loader2, Sparkles, Trash2, Package, Search, RefreshCw } from 'lucide-react';
+import { Plus, User, MapPin, Wand2, Loader2, Sparkles, Trash2, Package, Search } from 'lucide-react';
 import { ArtStyleConfig, Asset, AssetType, Episode, Project } from '@/types';
 import { useState, useEffect, useCallback } from 'react';
 import { AssetDialog } from './AssetDialog';
@@ -22,29 +21,6 @@ import { ExtractionPreviewDialog } from './ExtractionPreviewDialog';
 import { getImageGenerationPrompt } from '@/lib/prompts';
 import { buildVisualStyleRequestPayload, resolveArtStyleConfig } from '@/lib/project-visual-style';
 import { DEFAULT_IMAGE_GENERATION_MODEL, IMAGE_GENERATION_MODEL_LABELS } from '@/lib/image-generation-models';
-import { DEFAULT_VOLCENGINE_ASSET_BATCH_SIZE } from '@/lib/volcengine/asset-batch';
-import { normalizeProjectVideoSettings } from '@/lib/volcengine/video-compat';
-
-type VolcengineSyncResult = {
-  synced?: number;
-  refreshed?: number;
-  active?: number;
-  processing?: number;
-  failed?: number;
-  errors?: number;
-  skipped?: number;
-  hasMore?: boolean;
-  nextCursor?: string | null;
-  remaining?: number;
-  region?: string;
-};
-
-type VolcengineSyncNotice = {
-  type: 'success' | 'warning' | 'error';
-  message: string;
-};
-
-type VolcengineSyncAction = 'sync' | 'refresh-status' | 'retry-processing' | 'force-resync';
 
 export function AssetGallery({ projectId }: { projectId: string }) {
   const [assets, setAssets] = useState<Asset[]>([]);
@@ -53,9 +29,6 @@ export function AssetGallery({ projectId }: { projectId: string }) {
   const [activeTab, setActiveTab] = useState<AssetType>('character');
   const [searchQuery, setSearchQuery] = useState('');
   const [episodeFilter, setEpisodeFilter] = useState('all');
-  const [isRefreshing, setIsRefreshing] = useState(false);
-  const [isSyncingVolcengineAssets, setIsSyncingVolcengineAssets] = useState(false);
-  const [volcengineSyncNotice, setVolcengineSyncNotice] = useState<VolcengineSyncNotice | null>(null);
   
   // Dialog State
   const [dialogOpen, setDialogOpen] = useState(false);
@@ -96,9 +69,6 @@ export function AssetGallery({ projectId }: { projectId: string }) {
 
   const artStyleConfig: ArtStyleConfig = resolveArtStyleConfig(project);
   const imageModel = project?.imageGenerationModel || DEFAULT_IMAGE_GENERATION_MODEL;
-  const normalizedVideoSettings = normalizeProjectVideoSettings(project?.volcengineVideoSettings);
-  const volcengineSyncEnabled = normalizedVideoSettings.syncAssetsToPrivateLibrary;
-  const usesInternationalSeedance = normalizedVideoSettings.model === 'intsd2-x';
 
   const getAssetsByType = (type: AssetType) => assets?.filter((a) => a.type === type) || [];
 
@@ -130,146 +100,7 @@ export function AssetGallery({ projectId }: { projectId: string }) {
     return `第${linked[0].episodeNumber}集等 ${linked.length} 集`;
   };
 
-  const formatSyncTime = (value?: string | null) => {
-    if (!value) return '暂无记录';
-    const date = new Date(value);
-    if (Number.isNaN(date.getTime())) return '暂无记录';
-    return new Intl.DateTimeFormat('zh-CN', {
-      month: '2-digit',
-      day: '2-digit',
-      hour: '2-digit',
-      minute: '2-digit',
-    }).format(date);
-  };
-
-  const getVolcengineErrorMessage = (value: unknown): string | null => {
-    if (!value) return null;
-    if (typeof value === 'string') return value;
-    if (value instanceof Error) return value.message;
-    if (Array.isArray(value)) {
-      return value.map(getVolcengineErrorMessage).filter(Boolean).join('；') || null;
-    }
-    if (typeof value !== 'object') return String(value);
-
-    const error = value as Record<string, unknown>;
-    const message =
-      error.Message ||
-      error.message ||
-      error.ErrorMessage ||
-      error.error_message ||
-      error.details ||
-      error.Detail;
-    const code = error.Code || error.code || error.ErrorCode || error.error_code;
-    const nested = error.Error || error.error || error.cause || error.Cause;
-    const nestedMessage = nested ? getVolcengineErrorMessage(nested) : null;
-
-    if (message && code) return `${String(code)}：${String(message)}`;
-    if (message) return String(message);
-    if (nestedMessage) return nestedMessage;
-
-    try {
-      return JSON.stringify(error);
-    } catch {
-      return null;
-    }
-  };
-
-  const formatVolcengineSyncNotice = (
-    result: VolcengineSyncResult,
-    action: VolcengineSyncAction
-  ): VolcengineSyncNotice => {
-    const total = result.synced ?? result.refreshed ?? 0;
-    const failed = result.failed ?? 0;
-    const errors = result.errors ?? 0;
-    const active = result.active ?? 0;
-    const processing = result.processing ?? 0;
-    const skipped = result.skipped ?? 0;
-    const actionLabel =
-      action === 'refresh-status'
-        ? '刷新'
-        : action === 'retry-processing'
-          ? '重试提交'
-          : action === 'force-resync'
-            ? '完全重新同步'
-            : '同步';
-    const details = [
-      total > 0 ? `${actionLabel} ${total} 个` : null,
-      active > 0 ? `已可用 ${active}` : null,
-      processing > 0 ? `处理中 ${processing}` : null,
-      failed > 0 ? `失败 ${failed}` : null,
-      errors > 0 ? `查询异常 ${errors}` : null,
-      skipped > 0 ? `跳过 ${skipped}` : null,
-    ].filter(Boolean);
-
-    if (failed > 0 || errors > 0) {
-      return {
-        type: 'error',
-        message: `${actionLabel}完成，但有素材失败：${details.join('，')}。请查看下方素材卡片里的失败原因。`,
-      };
-    }
-
-    if (processing > 0) {
-      return {
-        type: 'warning',
-        message: `${actionLabel}已提交：${details.join('，')}。素材仍在火山处理中，稍后可刷新状态。`,
-      };
-    }
-
-    return {
-      type: 'success',
-      message: details.length > 0 ? `${actionLabel}完成：${details.join('，')}。` : `${actionLabel}完成。`,
-    };
-  };
-
-  const runVolcengineSyncBatches = async (
-    action: VolcengineSyncAction
-  ): Promise<VolcengineSyncResult> => {
-    const aggregate: VolcengineSyncResult = {};
-    let cursor: string | null = null;
-    let batchCount = 0;
-
-    while (true) {
-      const response = await fetch('/api/assets/sync-volcengine', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          projectId,
-          action,
-          cursor,
-          batchSize: DEFAULT_VOLCENGINE_ASSET_BATCH_SIZE,
-        }),
-      });
-      const data = await response.json().catch(() => ({})) as VolcengineSyncResult & {
-        error?: string;
-      };
-
-      if (!response.ok) {
-        const message = data.error || '素材库批次请求失败，请稍后重试';
-        throw new Error(data.region ? `${message}（节点 ${data.region}）` : message);
-      }
-
-      for (const key of ['synced', 'refreshed', 'active', 'processing', 'failed', 'errors', 'skipped'] as const) {
-        aggregate[key] = (aggregate[key] || 0) + (data[key] || 0);
-      }
-
-      batchCount += 1;
-      if (!data.hasMore) break;
-      if (!data.nextCursor || data.nextCursor === cursor) {
-        throw new Error('素材库批次游标未推进，已停止以避免重复请求');
-      }
-
-      cursor = data.nextCursor;
-      const processed = aggregate.synced ?? aggregate.refreshed ?? 0;
-      setVolcengineSyncNotice({
-        type: 'warning',
-        message: `正在分批处理素材：已完成 ${processed} 个${typeof data.remaining === 'number' ? `，剩余 ${data.remaining} 个` : ''}（第 ${batchCount} 批）。`,
-      });
-    }
-
-    return aggregate;
-  };
-
-  const resetVolcengineAssetSync = (): Partial<Asset> => ({
+  const clearLegacyAssetSync = (): Partial<Asset> => ({
     volcengineAssetId: null,
     volcengineAssetStatus: null,
     volcengineAssetGroupId: null,
@@ -278,28 +109,6 @@ export function AssetGallery({ projectId }: { projectId: string }) {
     volcengineAssetError: null,
     volcengineAssetSyncedAt: null,
   });
-
-  const getAssetSyncLabel = (asset: Asset) => {
-    if (!asset.imageUrl) return '无图片';
-    if (asset.volcengineAssetStatus === 'Active' && asset.volcengineAssetId) return '已同步';
-    if (asset.volcengineAssetStatus === 'Processing') return '处理中';
-    if (asset.volcengineAssetStatus === 'Failed') return '同步失败';
-    if (asset.volcengineAssetId) return '已提交';
-    return '未同步';
-  };
-
-  const getAssetSyncClassName = (asset: Asset) => {
-    if (asset.volcengineAssetStatus === 'Active' && asset.volcengineAssetId) {
-      return 'border-emerald-200 bg-emerald-50 text-emerald-700';
-    }
-    if (asset.volcengineAssetStatus === 'Processing') {
-      return 'border-sky-200 bg-sky-50 text-sky-700';
-    }
-    if (asset.volcengineAssetStatus === 'Failed') {
-      return 'border-red-200 bg-red-50 text-red-700';
-    }
-    return 'border-slate-200 bg-slate-50 text-slate-500';
-  };
 
   const normalizeText = (value: string) => value.trim().toLowerCase();
 
@@ -337,100 +146,6 @@ export function AssetGallery({ projectId }: { projectId: string }) {
     setDialogOpen(true);
   };
 
-  const handleRefresh = async () => {
-    setIsRefreshing(true);
-    try {
-      if (volcengineSyncEnabled) {
-        const data = await runVolcengineSyncBatches('refresh-status');
-        setVolcengineSyncNotice(formatVolcengineSyncNotice(data, 'refresh-status'));
-      }
-      await fetchData();
-    } catch (error) {
-      const message = error instanceof Error ? error.message : '刷新素材状态失败';
-      setVolcengineSyncNotice({ type: 'error', message });
-      alert(message);
-    } finally {
-      setIsRefreshing(false);
-    }
-  };
-
-  const handleResyncVolcengineAssets = async () => {
-    if (!volcengineSyncEnabled) {
-      alert('请先在项目设置中开启“同步素材到火山素材库”。');
-      return;
-    }
-
-    setIsSyncingVolcengineAssets(true);
-    try {
-      const data = await runVolcengineSyncBatches('sync');
-      setVolcengineSyncNotice(formatVolcengineSyncNotice(data, 'sync'));
-      await fetchData();
-    } catch (error) {
-      const message = error instanceof Error ? error.message : '同步失败，请稍后重试';
-      setVolcengineSyncNotice({ type: 'error', message });
-      alert(message);
-    } finally {
-      setIsSyncingVolcengineAssets(false);
-    }
-  };
-
-  const handleRetryProcessingVolcengineAssets = async () => {
-    if (!volcengineSyncEnabled) {
-      alert('请先在项目设置中开启“同步素材到火山素材库”。');
-      return;
-    }
-
-    if (!confirm('将重新提交所有“处理中”的火山素材。若旧任务稍后完成，素材库里可能出现重复素材，是否继续？')) {
-      return;
-    }
-
-    setIsSyncingVolcengineAssets(true);
-    try {
-      const data = await runVolcengineSyncBatches('retry-processing');
-      setVolcengineSyncNotice(formatVolcengineSyncNotice(data, 'retry-processing'));
-      await fetchData();
-    } catch (error) {
-      const message = error instanceof Error ? error.message : '重试处理中素材失败，请稍后再试';
-      setVolcengineSyncNotice({ type: 'error', message });
-      alert(message);
-    } finally {
-      setIsSyncingVolcengineAssets(false);
-    }
-  };
-
-  const handleForceResyncVolcengineAssets = async () => {
-    if (!volcengineSyncEnabled) {
-      alert('请先在项目设置中开启“同步素材到火山素材库”。');
-      return;
-    }
-
-    if (syncableAssets.length === 0) {
-      alert('当前没有带图片的资产可同步。');
-      return;
-    }
-
-    if (
-      !confirm(
-        `将清空 ${syncableAssets.length} 个资产的旧火山素材记录，并重新创建素材组后全部重传。旧素材不会从火山素材库删除，是否继续？`
-      )
-    ) {
-      return;
-    }
-
-    setIsSyncingVolcengineAssets(true);
-    try {
-      const data = await runVolcengineSyncBatches('force-resync');
-      setVolcengineSyncNotice(formatVolcengineSyncNotice(data, 'force-resync'));
-      await fetchData();
-    } catch (error) {
-      const message = error instanceof Error ? error.message : '完全重新同步失败，请稍后再试';
-      setVolcengineSyncNotice({ type: 'error', message });
-      alert(message);
-    } finally {
-      setIsSyncingVolcengineAssets(false);
-    }
-  };
-
   const handleSaveAsset = async (data: Partial<Asset>) => {
     if (dialogMode === 'create') {
         const newAsset: Asset = {
@@ -451,7 +166,7 @@ export function AssetGallery({ projectId }: { projectId: string }) {
         const imageChanged =
           data.imageUrl !== undefined && data.imageUrl !== selectedAsset.imageUrl;
         const updateData: Partial<Asset> = imageChanged
-          ? { ...data, ...resetVolcengineAssetSync() }
+          ? { ...data, ...clearLegacyAssetSync() }
           : data;
         await api.assets.update(selectedAsset.id, updateData);
         setAssets(prev => prev.map(a => a.id === selectedAsset.id ? { ...a, ...updateData } : a));
@@ -656,7 +371,7 @@ export function AssetGallery({ projectId }: { projectId: string }) {
         const data = await response.json();
 
         if (data.data && data.data[0]?.url) {
-            const updates: Partial<Asset> = { imageUrl: data.data[0].url, ...resetVolcengineAssetSync() };
+            const updates: Partial<Asset> = { imageUrl: data.data[0].url, ...clearLegacyAssetSync() };
             await api.assets.update(asset.id, updates);
             setAssets(prev => prev.map(a => a.id === asset.id ? { ...a, ...updates } : a));
         } else {
@@ -724,7 +439,7 @@ export function AssetGallery({ projectId }: { projectId: string }) {
             const data = await response.json();
 
             if (data.data && data.data[0]?.url) {
-                const updates: Partial<Asset> = { imageUrl: data.data[0].url, ...resetVolcengineAssetSync() };
+                const updates: Partial<Asset> = { imageUrl: data.data[0].url, ...clearLegacyAssetSync() };
                 await api.assets.update(asset.id, updates);
                 setAssets(prev => prev.map(a => a.id === asset.id ? { ...a, ...updates } : a));
             } else {
@@ -758,28 +473,6 @@ export function AssetGallery({ projectId }: { projectId: string }) {
   const locationCount = assets.filter(a => a.type === 'location').length;
   const propCount = assets.filter(a => a.type === 'prop').length;
   const missingImageCount = assets.filter(a => !a.imageUrl && a.visualPrompt).length;
-  const syncableAssets = assets.filter(a => a.imageUrl);
-  const submittedAssetCount = syncableAssets.filter(a => a.volcengineAssetId).length;
-  const activeAssetCount = syncableAssets.filter(
-    a => a.volcengineAssetStatus === 'Active' && a.volcengineAssetId
-  ).length;
-  const processingAssetCount = syncableAssets.filter(
-    a => a.volcengineAssetStatus === 'Processing' && a.volcengineAssetId
-  ).length;
-  const failedAssetCount = syncableAssets.filter(a => a.volcengineAssetStatus === 'Failed').length;
-  const unsyncedAssetCount = Math.max(0, syncableAssets.length - submittedAssetCount);
-  const resyncCandidateCount = syncableAssets.filter(
-    a => !a.volcengineAssetId || a.volcengineAssetStatus === 'Failed'
-  ).length;
-  const latestSyncTime = syncableAssets
-    .map(a => a.volcengineAssetSyncedAt)
-    .filter((value): value is string => typeof value === 'string' && value.length > 0)
-    .map(value => new Date(value).getTime())
-    .filter(value => !Number.isNaN(value))
-    .sort((a, b) => b - a)[0];
-  const latestSyncLabel = latestSyncTime
-    ? formatSyncTime(new Date(latestSyncTime).toISOString())
-    : '暂无记录';
   const visibleAssets = getFilteredAssetsByType(activeTab);
   const ActiveIcon = typeIconMap[activeTab];
   const selectedEpisode = episodes.find((episode) => episode.id === episodeFilter);
@@ -791,13 +484,6 @@ export function AssetGallery({ projectId }: { projectId: string }) {
         : selectedEpisode
           ? `第 ${selectedEpisode.episodeNumber} 集`
           : '剧集分类';
-  const volcengineSyncNoticeClassName =
-    volcengineSyncNotice?.type === 'error'
-      ? 'border-red-200 bg-red-50 text-red-700'
-      : volcengineSyncNotice?.type === 'warning'
-        ? 'border-amber-200 bg-amber-50 text-amber-700'
-        : 'border-emerald-200 bg-emerald-50 text-emerald-700';
-
   return (
     <div className="mx-auto max-w-6xl p-4 sm:p-8">
       <div className="mb-8 flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
@@ -855,132 +541,6 @@ export function AssetGallery({ projectId }: { projectId: string }) {
         </div>
       </div>
 
-      <div className="mb-8 rounded-lg border border-black/[0.08] bg-white p-4">
-        <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-          <div>
-            <div className="flex flex-wrap items-center gap-2">
-              <h2 className="text-sm font-semibold text-black/80">火山素材库同步</h2>
-              <Badge
-                variant="outline"
-                className={
-                  volcengineSyncEnabled
-                    ? 'border-emerald-200 bg-emerald-50 text-emerald-700'
-                    : 'border-slate-200 bg-slate-50 text-slate-500'
-                }
-              >
-                {usesInternationalSeedance
-                  ? '国际版不需要'
-                  : volcengineSyncEnabled
-                    ? '已开启'
-                    : '未开启'}
-              </Badge>
-            </div>
-            <p className="mt-1 text-xs text-black/45">
-              {usesInternationalSeedance
-                ? '当前使用 Seedance 2.0 国际版，视频生成会直接使用对象存储链接。'
-                : '状态来自资产库记录；视频生成前会把关联资产同步到火山素材库。'}
-            </p>
-          </div>
-          <div className="flex flex-wrap gap-2">
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              onClick={handleRefresh}
-              disabled={isRefreshing || isSyncingVolcengineAssets}
-              className="w-fit"
-            >
-              <RefreshCw className={`mr-2 h-4 w-4 ${isRefreshing ? 'animate-spin' : ''}`} />
-              刷新状态
-            </Button>
-            <Button
-              type="button"
-              size="sm"
-              onClick={handleResyncVolcengineAssets}
-              disabled={
-                !volcengineSyncEnabled ||
-                isSyncingVolcengineAssets ||
-                resyncCandidateCount === 0
-              }
-              className="w-fit bg-black text-white hover:bg-black/80"
-              title={
-                volcengineSyncEnabled
-                  ? '只同步未同步和失败的资产'
-                  : '请先在项目设置中开启素材库同步'
-              }
-            >
-              <RefreshCw className={`mr-2 h-4 w-4 ${isSyncingVolcengineAssets ? 'animate-spin' : ''}`} />
-              {isSyncingVolcengineAssets ? '同步中...' : `重新同步 (${resyncCandidateCount})`}
-            </Button>
-            {processingAssetCount > 0 && (
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                onClick={handleRetryProcessingVolcengineAssets}
-                disabled={!volcengineSyncEnabled || isSyncingVolcengineAssets}
-                className="w-fit border-sky-200 bg-sky-50 text-sky-700 hover:bg-sky-100"
-                title="重新提交所有处理中但长时间没有完成的资产"
-              >
-                <RefreshCw className={`mr-2 h-4 w-4 ${isSyncingVolcengineAssets ? 'animate-spin' : ''}`} />
-                重试处理中 ({processingAssetCount})
-              </Button>
-            )}
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              onClick={handleForceResyncVolcengineAssets}
-              disabled={!volcengineSyncEnabled || isSyncingVolcengineAssets || syncableAssets.length === 0}
-              className="w-fit border-amber-200 bg-amber-50 text-amber-700 hover:bg-amber-100"
-              title={
-                volcengineSyncEnabled
-                  ? '清空当前同步记录，创建新素材组后全部重新提交'
-                  : '请先在项目设置中开启素材库同步'
-              }
-            >
-              <RefreshCw className={`mr-2 h-4 w-4 ${isSyncingVolcengineAssets ? 'animate-spin' : ''}`} />
-              完全重新同步 ({syncableAssets.length})
-            </Button>
-          </div>
-        </div>
-        <div className="mt-4 grid grid-cols-2 gap-3 md:grid-cols-5">
-          <div className="rounded-md bg-black/[0.03] px-3 py-2">
-            <p className="text-[10px] uppercase tracking-widest text-black/35">可同步图片</p>
-            <p className="mt-1 text-lg font-semibold text-black/80">{syncableAssets.length}</p>
-          </div>
-          <div className="rounded-md bg-emerald-50 px-3 py-2">
-            <p className="text-[10px] uppercase tracking-widest text-emerald-600/65">可用于生成</p>
-            <p className="mt-1 text-lg font-semibold text-emerald-700">{activeAssetCount}/{syncableAssets.length}</p>
-          </div>
-          <div className="rounded-md bg-sky-50 px-3 py-2">
-            <p className="text-[10px] uppercase tracking-widest text-sky-600/65">处理中</p>
-            <p className="mt-1 text-lg font-semibold text-sky-700">{processingAssetCount}</p>
-          </div>
-          <div className="rounded-md bg-red-50 px-3 py-2">
-            <p className="text-[10px] uppercase tracking-widest text-red-600/65">失败</p>
-            <p className="mt-1 text-lg font-semibold text-red-700">{failedAssetCount}</p>
-          </div>
-          <div className="rounded-md bg-black/[0.03] px-3 py-2">
-            <p className="text-[10px] uppercase tracking-widest text-black/35">最后同步</p>
-            <p className="mt-1 text-sm font-semibold text-black/75">{latestSyncLabel}</p>
-          </div>
-        </div>
-        <div className="mt-3 flex flex-wrap gap-2 text-xs text-black/45">
-          <span>已提交到素材库 {submittedAssetCount} 张</span>
-          <span>未同步 {unsyncedAssetCount} 张</span>
-          <span>待重新同步 {resyncCandidateCount} 张</span>
-          {project?.volcengineVideoSettings?.assetGroupId && (
-            <span>素材组 {project.volcengineVideoSettings.assetGroupId}</span>
-          )}
-        </div>
-        {volcengineSyncNotice && (
-          <div className={`mt-3 rounded-md border px-3 py-2 text-xs ${volcengineSyncNoticeClassName}`}>
-            {volcengineSyncNotice.message}
-          </div>
-        )}
-      </div>
-
       <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as AssetType)} className="w-full">
         <div className="mb-8 flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
             <TabsList className="grid w-full grid-cols-3 sm:w-fit">
@@ -1029,7 +589,6 @@ export function AssetGallery({ projectId }: { projectId: string }) {
 
                 {visibleAssets.map((asset) => {
                   const episodeLabel = getEpisodeLabel(asset);
-                  const volcengineErrorMessage = getVolcengineErrorMessage(asset.volcengineAssetError);
                   return (
                     <Card 
                         key={asset.id} 
@@ -1091,28 +650,6 @@ export function AssetGallery({ projectId }: { projectId: string }) {
                         </CardHeader>
                         <CardContent className="p-4 pt-0 text-xs text-black/50">
                             <p className="line-clamp-3">{asset.description || '暂无描述'}</p>
-                            {asset.imageUrl && (
-                                <div className="mt-3 flex flex-wrap items-center gap-2">
-                                    <span className={`rounded border px-2 py-0.5 text-[10px] font-medium ${getAssetSyncClassName(asset)}`}>
-                                        {getAssetSyncLabel(asset)}
-                                    </span>
-                                    {asset.volcengineAssetId && (
-                                        <span className="max-w-full truncate rounded bg-black/[0.04] px-2 py-1 font-mono text-[10px] text-black/45">
-                                            {asset.volcengineAssetId}
-                                        </span>
-                                    )}
-                                    {asset.volcengineAssetSyncedAt && (
-                                        <span className="text-[10px] text-black/35">
-                                            {formatSyncTime(asset.volcengineAssetSyncedAt)}
-                                        </span>
-                                    )}
-                                </div>
-                            )}
-                            {asset.imageUrl && volcengineErrorMessage && (
-                                <p className="mt-2 line-clamp-3 rounded-md border border-red-100 bg-red-50 px-2 py-1 text-[11px] leading-5 text-red-700">
-                                    失败原因：{volcengineErrorMessage}
-                                </p>
-                            )}
                             {episodeLabel && (
                                 <p className="mt-2 inline-flex rounded bg-black/[0.04] px-2 py-1 text-[11px] text-black/50">
                                     {episodeLabel}

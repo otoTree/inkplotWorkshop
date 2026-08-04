@@ -8,8 +8,8 @@ export type Seedance2Reference = {
 };
 
 export type Seedance2AspectRatio = '9:16' | '16:9';
-export type Seedance2Resolution = '480p';
-export const DEFAULT_SEEDANCE_2_RESOLUTION: Seedance2Resolution = '480p';
+export type Seedance2Resolution = '720p';
+export const DEFAULT_SEEDANCE_2_RESOLUTION: Seedance2Resolution = '720p';
 
 export type Seedance2VideoPayload = {
   model: string;
@@ -29,23 +29,13 @@ export type Seedance2VideoPayload = {
 export const normalizeSeedance2AspectRatio = (value?: string | null): Seedance2AspectRatio =>
   value === '16:9' ? '16:9' : '9:16';
 
-const isAssetUri = (value: string) => /^asset:\/\/[^/\s]+$/i.test(value);
+const isObjectStorageUrl = (value: string) => /^https?:\/\//i.test(value);
 
 const resolveReferenceUrl = (reference: Seedance2Reference) => {
-  const fallbackUrl = reference.sourceUrl || (reference.mode === 'url' ? reference.usableUrl : '');
-
-  if (reference.mode === 'asset_uri') {
-    if (reference.volcengineAssetStatus === 'Active' && isAssetUri(reference.usableUrl)) {
-      return reference.usableUrl;
-    }
-    return fallbackUrl || null;
+  if (reference.sourceUrl && isObjectStorageUrl(reference.sourceUrl)) {
+    return reference.sourceUrl;
   }
-
-  if (isAssetUri(reference.usableUrl)) {
-    return reference.volcengineAssetStatus === 'Active' ? reference.usableUrl : fallbackUrl || null;
-  }
-
-  return reference.usableUrl;
+  return isObjectStorageUrl(reference.usableUrl) ? reference.usableUrl : null;
 };
 
 export const buildSeedance2VideoPayload = ({

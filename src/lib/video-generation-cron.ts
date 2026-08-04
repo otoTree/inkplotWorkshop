@@ -527,7 +527,7 @@ export const runVideoGenerationCronTick = async (
                 provider: useSeedance2 ? 'volcengine' : 'legacy',
                 model: useSeedance2 && resolvedSeedanceModel ? resolvedSeedanceModel : undefined,
                 aspectRatio: useSeedance2 ? aspectRatio : undefined,
-                resolution: useSeedance2 ? DEFAULT_SEEDANCE_2_RESOLUTION : undefined,
+                resolution: DEFAULT_SEEDANCE_2_RESOLUTION,
                 rawStatus: useSeedance2 ? 'failed' : undefined,
                 error: errorDetails,
               }),

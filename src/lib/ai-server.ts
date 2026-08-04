@@ -5,6 +5,7 @@ import {
   normalizeImageGenerationModel,
 } from '@/lib/image-generation-models';
 import { appendNoSubtitleDirective } from '@/lib/storyboard-generation';
+import { DEFAULT_SEEDANCE_2_RESOLUTION } from '@/lib/volcengine/video-payload';
 
 type AIAPIConfig = {
   baseUrl: string;
@@ -1074,6 +1075,7 @@ export const callAIVideoGeneration = async (
     const payload: Record<string, unknown> = {
       model: videoModel,
       prompt,
+      resolution: DEFAULT_SEEDANCE_2_RESOLUTION,
     };
     
     if (duration) payload.duration = duration;

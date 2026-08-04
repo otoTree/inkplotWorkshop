@@ -103,7 +103,7 @@ const toVolcengineMetadata = (
       ? metadata.aspectRatio
       : undefined,
   resolution:
-    metadata?.resolution === '480p'
+    metadata?.resolution === '480p' || metadata?.resolution === '720p'
       ? metadata.resolution
       : undefined,
 });

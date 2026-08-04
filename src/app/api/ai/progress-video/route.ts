@@ -78,7 +78,7 @@ type VideoGenerationMetadata = {
   requestContentMode?: 'asset_uri' | 'url';
   referenceAssetIds?: string[];
   aspectRatio?: '9:16' | '16:9';
-  resolution?: Seedance2Resolution;
+  resolution?: Seedance2Resolution | '480p';
   rawStatus?: string;
   usage?: Record<string, unknown>;
   error?: Record<string, unknown> | string | null;
@@ -506,7 +506,7 @@ export async function POST(req: Request) {
                 provider: useSeedance2 ? 'volcengine' : 'legacy',
                 model: useSeedance2 && resolvedSeedanceModel ? resolvedSeedanceModel : undefined,
                 aspectRatio: useSeedance2 ? aspectRatio : undefined,
-                resolution: useSeedance2 ? DEFAULT_SEEDANCE_2_RESOLUTION : undefined,
+                resolution: DEFAULT_SEEDANCE_2_RESOLUTION,
                 rawStatus: useSeedance2 ? 'failed' : undefined,
                 error: getGenerationFailureMessage(error),
               }
