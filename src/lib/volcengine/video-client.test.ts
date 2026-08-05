@@ -235,11 +235,11 @@ test('getVolcengineVideoConfig preserves dedicated gateway base URL', () => {
   process.env.ARTS_VIDEO_MODEL = 'seedance-2-0-fast-tezan';
 
   try {
-    const config = getVolcengineVideoConfig('seedance-2-0-tezan');
+    const config = getVolcengineVideoConfig('seedance-2-0');
     assert.equal(config.baseUrl, 'https://jphhngvqjmgr.sealosbja.site');
     assert.equal(config.apiStyle, 'gateway');
     assert.equal(config.apiKey, 'gateway-key');
-    assert.equal(config.model, 'seedance-2-0-tezan');
+    assert.equal(config.model, 'seedance-2-0');
   } finally {
     for (const [key, value] of Object.entries(previous)) {
       if (value === undefined) {
@@ -285,8 +285,8 @@ test('getConfiguredVolcengineVideoModel prefers project override when provided',
 
   try {
     assert.equal(
-      getConfiguredVolcengineVideoModel('seedance-2-0-tezan'),
-      'seedance-2-0-tezan'
+      getConfiguredVolcengineVideoModel('seedance-2-0'),
+      'seedance-2-0'
     );
   } finally {
     for (const [key, value] of Object.entries(previous)) {
@@ -297,6 +297,13 @@ test('getConfiguredVolcengineVideoModel prefers project override when provided',
       }
     }
   }
+});
+
+test('getConfiguredVolcengineVideoModel migrates the old standard model id', () => {
+  assert.equal(
+    getConfiguredVolcengineVideoModel('seedance-2-0-tezan'),
+    'seedance-2-0'
+  );
 });
 
 test('getVolcengineVideoConfig falls back to ARK base url and model envs', () => {
@@ -354,8 +361,8 @@ test('getVolcengineVideoConfig uses project model override', () => {
   process.env.ARTS_VIDEO_MODEL = 'seedance-2-0-fast-tezan';
 
   try {
-    const config = getVolcengineVideoConfig('seedance-2-0-tezan');
-    assert.equal(config.model, 'seedance-2-0-tezan');
+    const config = getVolcengineVideoConfig('seedance-2-0');
+    assert.equal(config.model, 'seedance-2-0');
   } finally {
     for (const [key, value] of Object.entries(previous)) {
       if (value === undefined) {

@@ -31,7 +31,7 @@ interface ShotCardProps {
   copiedAssetIds: string[];
   copiedAssetSourceSequence?: number;
   onCopyAssets: (shot: Shot) => void;
-  onUpdate: (shot: Shot) => void | Promise<void>;
+  onUpdate: (shot: Shot, options?: { persist?: boolean }) => void | Promise<void>;
   onDelete: (id: string) => void;
   onDragStart?: () => void;
   onDragOver?: (event: DragEvent<HTMLDivElement>) => void;
@@ -99,6 +99,7 @@ export function ShotCard({
   };
 
   const isGeneratingVideo = current.videoStatus === 'queued' || (current.videoStatus === 'processing' && !current.videoGenerationId);
+  const [isSubmittingVideo, setIsSubmittingVideo] = useState(false);
   const [queuePosition, setQueuePosition] = useState<number | null>(null);
   const videoErrorMessage = getVideoGenerationErrorMessage(current.videoGenerationMetadata?.error);
   const videoHistory = normalizeVideoGenerationHistory(current.videoGenerationMetadata);
@@ -298,7 +299,7 @@ export function ShotCard({
   }, [current.videoGenerationId, current.videoStatus]);
 
   const handleGenerateVideo = async () => {
-    if (isGeneratingVideo || current.videoStatus === 'processing') {
+    if (isSubmittingVideo || isGeneratingVideo || current.videoStatus === 'processing') {
       return; // Prevent duplicate clicks
     }
     if (videoGenerationAccess.isLocked) {
@@ -322,8 +323,7 @@ export function ShotCard({
     if (current.referenceImage) allImages.push(current.referenceImage);
     if (relatedImages.length > 0) allImages.push(...relatedImages);
     
-    // We update status to queued to trigger UI, but we must preserve videoGenerationId if we have one (though usually it's empty here)
-    onUpdate({ ...current, videoStatus: 'queued' });
+    setIsSubmittingVideo(true);
     try {
       const response = await fetch('/api/ai/generate-video', {
         method: 'POST',
@@ -355,15 +355,15 @@ export function ShotCard({
       const data = await response.json();
       
       if (data.status === 'queued') {
-        // API confirms it is queued
         setQueuePosition(data.position || null);
-        if (data.videoGenerationMetadata) {
-          onUpdate({
-            ...current,
-            videoStatus: 'queued',
-            videoGenerationMetadata: data.videoGenerationMetadata,
-          });
-        }
+        // The API already persisted this state; a second write could erase a task ID assigned meanwhile.
+        await onUpdate({
+          ...current,
+          videoStatus: 'queued',
+          videoGenerationId: null,
+          videoGenerationMetadata:
+            data.videoGenerationMetadata || current.videoGenerationMetadata,
+        }, { persist: false });
         return;
       }
 
@@ -385,6 +385,7 @@ export function ShotCard({
       alert(`视频生成失败: ${message}`);
       onUpdate({
         ...current,
+        videoGenerationId: null,
         videoStatus: 'failed',
         videoGenerationMetadata: {
           ...(current.videoGenerationMetadata || {}),
@@ -392,6 +393,7 @@ export function ShotCard({
         },
       });
     } finally {
+      setIsSubmittingVideo(false);
       setQueuePosition(null);
     }
   };
@@ -666,19 +668,19 @@ ${current.videoPrompt || 'None'}
                     size="sm"
                     variant="outline"
                     className={`h-7 gap-1 px-2 text-xs transition-colors ${
-                      isGeneratingVideo || current.videoStatus === 'processing' || videoGenerationAccess.isLocked
+                      isSubmittingVideo || isGeneratingVideo || current.videoStatus === 'processing' || videoGenerationAccess.isLocked
                         ? 'bg-indigo-50 text-indigo-400 border-indigo-200 cursor-not-allowed opacity-80'
                         : 'text-indigo-600 border-indigo-200 hover:bg-indigo-50'
                     }`}
                     onClick={handleGenerateVideo}
-                    disabled={isGeneratingVideo || current.videoStatus === 'processing' || videoGenerationAccess.isLocked}
+                    disabled={isSubmittingVideo || isGeneratingVideo || current.videoStatus === 'processing' || videoGenerationAccess.isLocked}
                   >
-                    {(isGeneratingVideo || current.videoStatus === 'processing') ? (
+                    {(isSubmittingVideo || isGeneratingVideo || current.videoStatus === 'processing') ? (
                       <Loader2 className="w-3 h-3 animate-spin" />
                     ) : (
                       <Video className="w-3 h-3" />
                     )}
-                    {(isGeneratingVideo || current.videoStatus === 'processing')
+                    {(isSubmittingVideo || isGeneratingVideo || current.videoStatus === 'processing')
                       ? '生成中...'
                       : videoGenerationAccess.isLocked
                         ? '需解禁'
@@ -857,8 +859,15 @@ ${current.videoPrompt || 'None'}
                           {videoErrorMessage}
                         </p>
                       )}
-                      <Button variant="outline" size="sm" className="h-7 text-xs bg-white" onClick={handleGenerateVideo}>
-                        重新生成
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="h-7 gap-1 text-xs bg-white"
+                        onClick={handleGenerateVideo}
+                        disabled={isSubmittingVideo}
+                      >
+                        {isSubmittingVideo && <Loader2 className="h-3 w-3 animate-spin" />}
+                        {isSubmittingVideo ? '提交中...' : '重新生成'}
                       </Button>
                     </div>
                   )}

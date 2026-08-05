@@ -589,7 +589,10 @@ export function StoryboardEditor({ projectId }: StoryboardEditorProps) {
     }
   };
   
-  const handleUpdateShot = async (updatedShot: Shot) => {
+  const handleUpdateShot = async (
+    updatedShot: Shot,
+    options: { persist?: boolean } = {}
+  ) => {
       const existingShot = shots.find((shot) => shot.id === updatedShot.id);
 
       // Preserve server-assigned video task metadata when a stale editor state saves over it.
@@ -639,7 +642,9 @@ export function StoryboardEditor({ projectId }: StoryboardEditorProps) {
         return;
       }
 
-      await api.shots.update(mergedShot.id, buildShotUpdatePayload(mergedShot, existingShot));
+      if (options.persist !== false) {
+        await api.shots.update(mergedShot.id, buildShotUpdatePayload(mergedShot, existingShot));
+      }
       setShots(prev =>
         sortShotsBySequence(prev.map(s => s.id === mergedShot.id ? mergedShot : s))
       );

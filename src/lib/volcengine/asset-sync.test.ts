@@ -4,7 +4,7 @@ import { resolveVolcengineReferenceAssets } from './asset-sync.ts';
 
 const models = [
   'seedance-2-0-fast-tezan',
-  'seedance-2-0-tezan',
+  'seedance-2-0',
   'intsd2-x',
 ] as const;
 

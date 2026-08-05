@@ -28,7 +28,7 @@
 | 图像生成/编辑 | OpenAI-compatible Images，项目按异步任务适配 | `POST {baseUrl}/images/generations` + `GET {baseUrl}/images/generations/{task_id}` | `gemini-3-pro-image-preview` / `gpt-image-2` |
 | 通用视频生成 | OpenAI-compatible/中转供应商视频接口 | `POST {baseUrl}/video/generations` + `GET {baseUrl}/video/generations/{id}` | `AI_API_VIDEO_MODEL` / `OPENAI_VIDEO_MODEL` |
 | 通用视频下载 | OpenAI-compatible/中转供应商视频下载 | `GET {baseUrl}/videos/{id}/content?variant=mp4` | 与通用视频任务同一供应商 |
-| Seedance 2.0 视频 | 火山方舟内容生成任务 | `POST {baseUrl}/contents/generations/tasks` + `GET {baseUrl}/contents/generations/tasks/{taskId}` | `seedance-2-0-fast-tezan` / `seedance-2-0-tezan` |
+| Seedance 2.0 视频 | 火山方舟内容生成任务 | `POST {baseUrl}/contents/generations/tasks` + `GET {baseUrl}/contents/generations/tasks/{taskId}` | `seedance-2-0-fast-tezan` / `seedance-2-0` |
 | 火山素材库 | 火山素材资产库 OpenAPI / ARTS Bearer 兼容层 | `POST {assetBaseUrl}?Action=...&Version=2024-01-01` | `CreateAssetGroup` / `CreateAsset` / `GetAsset` / `ListAssets` |
 
 ## 2. 通用鉴权与请求约定
@@ -604,7 +604,7 @@ Content-Type: application/json
 
 ```text
 seedance-2-0-fast-tezan
-seedance-2-0-tezan
+seedance-2-0
 ```
 
 请求体：

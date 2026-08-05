@@ -245,7 +245,7 @@ POST ${ARTS_VIDEO_BASE_URL}/v1/videos/generations
 
 说明：
 
-- `model` 使用 `seedance-2-0-fast-tezan`（快速版）或 `seedance-2-0-tezan`（标准版）。
+- `model` 使用 `seedance-2-0-fast-tezan`（快速版）或 `seedance-2-0`（标准版）。
 - 项目实际发送字段为：
   - `model`
   - `content`

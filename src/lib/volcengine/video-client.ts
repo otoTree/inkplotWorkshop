@@ -96,12 +96,16 @@ export const isSeedance2Model = (model?: string | null) =>
   typeof model === 'string' &&
   (/seedance[-_]?2|seedance-2|2-0/i.test(model) || model.trim().toLowerCase() === 'intsd2-x');
 
+const normalizeConfiguredVideoModelId = (model: string) =>
+  model === 'seedance-2-0-tezan' ? 'seedance-2-0' : model;
+
 export const getConfiguredVolcengineVideoModel = (modelOverride?: string | null) => {
-  const normalizedOverride =
+  const rawOverride =
     typeof modelOverride === 'string' && modelOverride.trim() ? modelOverride.trim() : '';
+  const normalizedOverride = normalizeConfiguredVideoModelId(rawOverride);
   if (isSeedance2Model(normalizedOverride)) return normalizedOverride;
 
-  return (
+  const configuredModel =
     getFirstDefinedEnv(
       process.env.ARTS_VIDEO_MODEL,
       process.env.VOLCENGINE_ARK_VIDEO_MODEL,
@@ -110,8 +114,8 @@ export const getConfiguredVolcengineVideoModel = (modelOverride?: string | null)
     (() => {
       const fallbackModel = getFirstDefinedEnv(process.env.AI_API_VIDEO_MODEL);
       return isSeedance2Model(fallbackModel) ? fallbackModel : '';
-    })()
-  );
+    })();
+  return normalizeConfiguredVideoModelId(configuredModel);
 };
 
 export const mapVolcengineTaskStatus = (status: string): VolcengineMappedTaskStatus => {

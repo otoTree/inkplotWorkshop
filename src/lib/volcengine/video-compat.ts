@@ -4,7 +4,7 @@ export type ProjectVideoModelPreference = 'legacy' | 'seedance-2.0';
 export type ProjectVideoAspectRatio = '9:16' | '16:9';
 export type Seedance2VideoModelSelection =
   | 'seedance-2-0-fast-tezan'
-  | 'seedance-2-0-tezan'
+  | 'seedance-2-0'
   | 'intsd2-x';
 export type ProjectVideoModelSelection = 'legacy' | Seedance2VideoModelSelection;
 
@@ -35,8 +35,9 @@ export type VideoGenerationMetadataLike = {
 
 export const DEFAULT_PROJECT_VIDEO_MODEL: ProjectVideoModelPreference = 'legacy';
 export const FAST_SEEDANCE_2_VIDEO_MODEL = 'seedance-2-0-fast-tezan';
-export const STANDARD_SEEDANCE_2_VIDEO_MODEL = 'seedance-2-0-tezan';
+export const STANDARD_SEEDANCE_2_VIDEO_MODEL = 'seedance-2-0';
 export const INTERNATIONAL_SEEDANCE_2_VIDEO_MODEL = 'intsd2-x';
+const LEGACY_STANDARD_SEEDANCE_2_VIDEO_MODEL = 'seedance-2-0-tezan';
 export const DEFAULT_SEEDANCE_2_VIDEO_MODEL: ProjectVideoModelSelection =
   FAST_SEEDANCE_2_VIDEO_MODEL;
 export const SEEDANCE_2_VIDEO_MODEL_OPTIONS = [
@@ -106,6 +107,9 @@ export const normalizeProjectVideoGenerationModel = (
 ): ProjectVideoModelSelection => {
   const normalizedValue = normalizeOptionalString(value);
   if (normalizedValue === 'legacy') return 'legacy';
+  if (normalizedValue === LEGACY_STANDARD_SEEDANCE_2_VIDEO_MODEL) {
+    return STANDARD_SEEDANCE_2_VIDEO_MODEL;
+  }
   if (isSupportedSeedance2VideoModel(normalizedValue)) {
     return normalizedValue;
   }

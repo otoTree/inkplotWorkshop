@@ -37,7 +37,7 @@ test('buildSeedance2VideoPayload replaces active asset URIs with source URLs', (
 
 test('buildSeedance2VideoPayload uses URLs when references are not synced', () => {
   const payload = buildSeedance2VideoPayload({
-    model: 'seedance-2-0-tezan',
+    model: 'seedance-2-0',
     prompt: '图片1保持场景一致。',
     references: [
       {

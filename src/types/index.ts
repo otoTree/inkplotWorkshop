@@ -156,7 +156,7 @@ export interface Shot {
   referenceImage?: string;     // 参考图URL
   videoPrompt?: string;        // 视频提示词 (用于生成视频)
   videoUrl?: string;           // ★NEW: 生成的视频URL
-  videoGenerationId?: string;  // ★NEW: 视频生成任务ID
+  videoGenerationId?: string | null;  // ★NEW: 视频生成任务ID
   videoStatus?: 'pending' | 'queued' | 'processing' | 'completed' | 'failed'; // ★NEW: 视频生成状态
   videoGenerationMetadata?: {
     provider?: 'volcengine' | string;
