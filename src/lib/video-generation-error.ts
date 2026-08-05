@@ -74,3 +74,21 @@ export const getVideoGenerationErrorMessage = (value: unknown): string | null =>
   }
 };
 
+export const isVideoGenerationTaskNotFoundError = (value: unknown): boolean => {
+  const normalized = normalizeVideoGenerationError(value);
+  if (!normalized || typeof normalized === 'string') return false;
+
+  const error = asRecord(normalized.error);
+  return (
+    error?.code === 'NotFound' &&
+    error.message === 'Task not found' &&
+    error.type === 'InvalidRequestError'
+  );
+};
+
+export const getVideoGenerationTaskNotFoundError = (
+  value: unknown
+): VideoGenerationError =>
+  isVideoGenerationTaskNotFoundError(value)
+    ? normalizeVideoGenerationError(value)
+    : null;

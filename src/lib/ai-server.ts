@@ -6,6 +6,7 @@ import {
 } from '@/lib/image-generation-models';
 import { appendNoSubtitleDirective } from '@/lib/storyboard-generation';
 import { DEFAULT_SEEDANCE_2_RESOLUTION } from '@/lib/volcengine/video-payload';
+import { getVideoGenerationTaskNotFoundError } from '@/lib/video-generation-error';
 
 type AIAPIConfig = {
   baseUrl: string;
@@ -1143,10 +1144,22 @@ export const getAIVideoStatus = async (videoId: string) => {
 
     if (!response.ok) {
       const detail = await response.text().catch(() => '');
+      const taskNotFoundError = getVideoGenerationTaskNotFoundError(detail);
+      if (taskNotFoundError) {
+        return {
+          id: videoId,
+          status: 'failed',
+          error: taskNotFoundError,
+        };
+      }
       throw new AIAPIError('查询视频状态失败', response.status, detail);
     }
 
-    return await response.json();
+    const result = await response.json();
+    const taskNotFoundError = getVideoGenerationTaskNotFoundError(result);
+    return taskNotFoundError
+      ? { id: videoId, status: 'failed', error: taskNotFoundError }
+      : result;
   });
 };
 

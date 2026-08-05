@@ -72,6 +72,43 @@ test('gateway base URL uses /v1 video generation and task routes', async () => {
   }
 });
 
+test('task-not-found query response becomes a terminal failed snapshot', async () => {
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = (async () =>
+    new Response(
+      JSON.stringify({
+        error: {
+          code: 'NotFound',
+          message: 'Task not found',
+          type: 'InvalidRequestError',
+        },
+      }),
+      { status: 404, headers: { 'Content-Type': 'application/json' } }
+    )) as typeof fetch;
+
+  try {
+    const result = await getSeedance2VideoTask('missing-task', {
+      baseUrl: 'https://video.example.com',
+      apiKey: 'test-key',
+      model: 'seedance-2-0-fast-tezan',
+      timeoutMs: 1000,
+      apiStyle: 'gateway',
+    });
+
+    assert.equal(result.id, 'missing-task');
+    assert.equal(result.status, 'failed');
+    assert.deepEqual(result.error, {
+      error: {
+        code: 'NotFound',
+        message: 'Task not found',
+        type: 'InvalidRequestError',
+      },
+    });
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
 test('mapVolcengineTaskStatus maps succeeded to completed', () => {
   assert.equal(mapVolcengineTaskStatus('succeeded'), 'completed');
 });

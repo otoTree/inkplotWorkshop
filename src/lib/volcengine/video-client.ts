@@ -1,5 +1,8 @@
 import { AIAPIError } from '../ai-server.ts';
-import { normalizeVideoGenerationError } from '../video-generation-error.ts';
+import {
+  getVideoGenerationTaskNotFoundError,
+  normalizeVideoGenerationError,
+} from '../video-generation-error.ts';
 import {
   DEFAULT_SEEDANCE_2_RESOLUTION,
   type Seedance2Resolution,
@@ -285,10 +288,22 @@ export const getSeedance2VideoTask = async (
 
   if (!response.ok) {
     const detail = await response.text().catch(() => '');
+    const taskNotFoundError = getVideoGenerationTaskNotFoundError(detail);
+    if (taskNotFoundError) {
+      return {
+        id: taskId,
+        status: 'failed',
+        error: taskNotFoundError,
+      };
+    }
     throw new AIAPIError('查询火山 Seedance 2.0 视频状态失败', response.status, detail);
   }
 
-  return await response.json();
+  const result = await response.json();
+  const taskNotFoundError = getVideoGenerationTaskNotFoundError(result);
+  return taskNotFoundError
+    ? { id: taskId, status: 'failed', error: taskNotFoundError }
+    : result;
 };
 
 export const extractVolcengineTaskId = (result: unknown): string | null => {
