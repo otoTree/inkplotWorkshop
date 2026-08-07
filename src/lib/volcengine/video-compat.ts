@@ -5,7 +5,9 @@ export type ProjectVideoAspectRatio = '9:16' | '16:9';
 export type Seedance2VideoModelSelection =
   | 'seedance-2-0-fast-tezan'
   | 'seedance-2-0'
-  | 'intsd2-x';
+  | 'intsd2-x'
+  | 'intsd20-hc'
+  | 'intsd20-hc-f';
 export type ProjectVideoModelSelection = 'legacy' | Seedance2VideoModelSelection;
 
 export type ProjectVideoSettingsLike = {
@@ -37,6 +39,8 @@ export const DEFAULT_PROJECT_VIDEO_MODEL: ProjectVideoModelPreference = 'legacy'
 export const FAST_SEEDANCE_2_VIDEO_MODEL = 'seedance-2-0-fast-tezan';
 export const STANDARD_SEEDANCE_2_VIDEO_MODEL = 'seedance-2-0';
 export const INTERNATIONAL_SEEDANCE_2_VIDEO_MODEL = 'intsd2-x';
+export const OVERSEAS_STANDARD_SEEDANCE_2_VIDEO_MODEL = 'intsd20-hc';
+export const OVERSEAS_FAST_SEEDANCE_2_VIDEO_MODEL = 'intsd20-hc-f';
 const LEGACY_STANDARD_SEEDANCE_2_VIDEO_MODEL = 'seedance-2-0-tezan';
 export const DEFAULT_SEEDANCE_2_VIDEO_MODEL: ProjectVideoModelSelection =
   FAST_SEEDANCE_2_VIDEO_MODEL;
@@ -52,6 +56,14 @@ export const SEEDANCE_2_VIDEO_MODEL_OPTIONS = [
   {
     value: INTERNATIONAL_SEEDANCE_2_VIDEO_MODEL,
     label: 'Seedance 2.0 国际版',
+  },
+  {
+    value: OVERSEAS_STANDARD_SEEDANCE_2_VIDEO_MODEL,
+    label: '海外 Seedance 2.0 标准版',
+  },
+  {
+    value: OVERSEAS_FAST_SEEDANCE_2_VIDEO_MODEL,
+    label: '海外 Seedance 2.0 Fast',
   },
 ] satisfies Array<{ value: Seedance2VideoModelSelection; label: string }>;
 export const DEFAULT_VOLCENGINE_PROJECT_NAME = 'tz';
@@ -77,6 +89,16 @@ export const PROJECT_VIDEO_MODEL_OPTIONS = [
     label: 'Seedance 2.0 国际版',
     description: `${INTERNATIONAL_SEEDANCE_2_VIDEO_MODEL}，使用对象存储链接。`,
   },
+  {
+    value: OVERSEAS_STANDARD_SEEDANCE_2_VIDEO_MODEL,
+    label: '海外 Seedance 2.0 标准版',
+    description: `${OVERSEAS_STANDARD_SEEDANCE_2_VIDEO_MODEL}，720p，使用对象存储链接。`,
+  },
+  {
+    value: OVERSEAS_FAST_SEEDANCE_2_VIDEO_MODEL,
+    label: '海外 Seedance 2.0 Fast',
+    description: `${OVERSEAS_FAST_SEEDANCE_2_VIDEO_MODEL}，720p，使用对象存储链接。`,
+  },
 ] as const;
 
 const normalizeOptionalString = (value: string | null | undefined) => {
@@ -91,7 +113,11 @@ export const isSupportedSeedance2VideoModel = (
   SEEDANCE_2_VIDEO_MODEL_OPTIONS.some((option) => option.value === value);
 
 export const isInternationalSeedance2Model = (value: string | null | undefined) =>
-  normalizeOptionalString(value)?.toLowerCase() === INTERNATIONAL_SEEDANCE_2_VIDEO_MODEL;
+  [
+    INTERNATIONAL_SEEDANCE_2_VIDEO_MODEL,
+    OVERSEAS_STANDARD_SEEDANCE_2_VIDEO_MODEL,
+    OVERSEAS_FAST_SEEDANCE_2_VIDEO_MODEL,
+  ].includes(normalizeOptionalString(value)?.toLowerCase() || '');
 
 export const normalizeProjectVideoModel = (
   value: string | null | undefined

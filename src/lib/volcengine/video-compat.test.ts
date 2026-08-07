@@ -5,6 +5,8 @@ import {
   DEFAULT_PROJECT_VIDEO_ASPECT_RATIO,
   DEFAULT_PROJECT_VIDEO_MODEL,
   INTERNATIONAL_SEEDANCE_2_VIDEO_MODEL,
+  OVERSEAS_FAST_SEEDANCE_2_VIDEO_MODEL,
+  OVERSEAS_STANDARD_SEEDANCE_2_VIDEO_MODEL,
   inferVideoTaskProvider,
   isInternationalSeedance2Model,
   normalizeProjectVideoAspectRatio,
@@ -58,6 +60,14 @@ test('normalizeProjectVideoGenerationModel upgrades old seedance preference to c
     INTERNATIONAL_SEEDANCE_2_VIDEO_MODEL
   );
   assert.equal(
+    normalizeProjectVideoGenerationModel(OVERSEAS_STANDARD_SEEDANCE_2_VIDEO_MODEL),
+    OVERSEAS_STANDARD_SEEDANCE_2_VIDEO_MODEL
+  );
+  assert.equal(
+    normalizeProjectVideoGenerationModel(OVERSEAS_FAST_SEEDANCE_2_VIDEO_MODEL),
+    OVERSEAS_FAST_SEEDANCE_2_VIDEO_MODEL
+  );
+  assert.equal(
     normalizeProjectVideoGenerationModel('dreamina-seedance-2-0-260128'),
     DEFAULT_SEEDANCE_2_VIDEO_MODEL
   );
@@ -66,7 +76,15 @@ test('normalizeProjectVideoGenerationModel upgrades old seedance preference to c
 
 test('all video models disable private asset sync', () => {
   assert.equal(isInternationalSeedance2Model('intsd2-x'), true);
-  for (const model of ['seedance-2-0-fast-tezan', 'seedance-2-0', 'intsd2-x'] as const) {
+  assert.equal(isInternationalSeedance2Model('intsd20-hc'), true);
+  assert.equal(isInternationalSeedance2Model('intsd20-hc-f'), true);
+  for (const model of [
+    'seedance-2-0-fast-tezan',
+    'seedance-2-0',
+    'intsd2-x',
+    'intsd20-hc',
+    'intsd20-hc-f',
+  ] as const) {
     assert.equal(
       normalizeProjectVideoSettings({
         model,

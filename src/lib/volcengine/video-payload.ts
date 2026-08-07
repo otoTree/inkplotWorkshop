@@ -9,9 +9,10 @@ export type Seedance2Reference = {
 
 export type Seedance2AspectRatio = '9:16' | '16:9';
 export type Seedance2Resolution = '480p';
+export type OverseasSeedance2Size = '1280x720' | '720x1280';
 export const DEFAULT_SEEDANCE_2_RESOLUTION: Seedance2Resolution = '480p';
 
-export type Seedance2VideoPayload = {
+export type ArkSeedance2VideoPayload = {
   model: string;
   content: Array<
     | { type: 'text'; text: string }
@@ -26,6 +27,40 @@ export type Seedance2VideoPayload = {
   watermark?: boolean;
 };
 
+export type OverseasSeedance2VideoPayload = {
+  model: 'intsd20-hc' | 'intsd20-hc-f';
+  prompt: string;
+  size: OverseasSeedance2Size;
+  duration?: number;
+  reference_images: Array<{ url: string }>;
+};
+
+export type Seedance2VideoPayload =
+  | ArkSeedance2VideoPayload
+  | OverseasSeedance2VideoPayload;
+
+type Seedance2VideoPayloadForModel<TModel extends string> =
+  TModel extends OverseasSeedance2VideoPayload['model']
+    ? OverseasSeedance2VideoPayload
+    : OverseasSeedance2VideoPayload['model'] extends TModel
+      ? Seedance2VideoPayload
+      : ArkSeedance2VideoPayload;
+
+type BuildSeedance2VideoPayloadParams<TModel extends string> = {
+  model: TModel;
+  prompt: string;
+  references?: Seedance2Reference[];
+  duration?: number;
+  ratio?: Seedance2AspectRatio;
+  generateAudio?: boolean;
+  watermark?: boolean;
+};
+
+export const isOverseasSeedance2Model = (
+  model?: string | null
+): model is OverseasSeedance2VideoPayload['model'] =>
+  model === 'intsd20-hc' || model === 'intsd20-hc-f';
+
 export const normalizeSeedance2AspectRatio = (value?: string | null): Seedance2AspectRatio =>
   value === '16:9' ? '16:9' : '9:16';
 
@@ -38,7 +73,10 @@ const resolveReferenceUrl = (reference: Seedance2Reference) => {
   return isObjectStorageUrl(reference.usableUrl) ? reference.usableUrl : null;
 };
 
-export const buildSeedance2VideoPayload = ({
+export function buildSeedance2VideoPayload<TModel extends string>(
+  params: BuildSeedance2VideoPayloadParams<TModel>
+): Seedance2VideoPayloadForModel<TModel>;
+export function buildSeedance2VideoPayload({
   model,
   prompt,
   references = [],
@@ -46,16 +84,24 @@ export const buildSeedance2VideoPayload = ({
   ratio = '9:16',
   generateAudio = true,
   watermark = false,
-}: {
-  model: string;
-  prompt: string;
-  references?: Seedance2Reference[];
-  duration?: number;
-  ratio?: Seedance2AspectRatio;
-  generateAudio?: boolean;
-  watermark?: boolean;
-}): Seedance2VideoPayload => {
-  const content: Seedance2VideoPayload['content'] = [
+}: BuildSeedance2VideoPayloadParams<string>): Seedance2VideoPayload {
+  const resolvedReferences = references.flatMap((reference) => {
+    if (reference.contentType && reference.contentType !== 'image_url') return [];
+    const resolvedUrl = resolveReferenceUrl(reference);
+    return resolvedUrl ? [resolvedUrl] : [];
+  });
+
+  if (isOverseasSeedance2Model(model)) {
+    return {
+      model,
+      prompt,
+      size: ratio === '16:9' ? '1280x720' : '720x1280',
+      ...(duration ? { duration } : {}),
+      reference_images: resolvedReferences.map((url) => ({ url })),
+    };
+  }
+
+  const content: ArkSeedance2VideoPayload['content'] = [
     {
       type: 'text',
       text: prompt,
@@ -96,4 +142,4 @@ export const buildSeedance2VideoPayload = ({
     ...(duration ? { duration } : {}),
     watermark,
   };
-};
+}

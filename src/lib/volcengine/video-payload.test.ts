@@ -110,3 +110,56 @@ test('buildSeedance2VideoPayload always uses the fixed resolution', () => {
   assert.equal(payload.resolution, DEFAULT_SEEDANCE_2_RESOLUTION);
   assert.equal(payload.resolution, '480p');
 });
+
+test('buildSeedance2VideoPayload builds the overseas Fast body with landscape size', () => {
+  const payload = buildSeedance2VideoPayload({
+    model: 'intsd20-hc-f',
+    prompt: 'A red ball resting on a plain white table, static camera, minimal motion.',
+    references: [
+      {
+        usableUrl: 'https://storage.example.com/a.png',
+        mode: 'url',
+      },
+      {
+        usableUrl: 'https://storage.example.com/b.png',
+        mode: 'url',
+      },
+    ],
+    duration: 5,
+    ratio: '16:9',
+  });
+
+  assert.deepEqual(payload, {
+    model: 'intsd20-hc-f',
+    prompt: 'A red ball resting on a plain white table, static camera, minimal motion.',
+    size: '1280x720',
+    duration: 5,
+    reference_images: [
+      { url: 'https://storage.example.com/a.png' },
+      { url: 'https://storage.example.com/b.png' },
+    ],
+  });
+});
+
+test('buildSeedance2VideoPayload builds the overseas standard body with portrait size', () => {
+  const payload = buildSeedance2VideoPayload({
+    model: 'intsd20-hc',
+    prompt: '人物保持一致，缓慢走近镜头。',
+    references: [
+      {
+        usableUrl: 'https://storage.example.com/character.png',
+        mode: 'url',
+      },
+    ],
+    duration: 5,
+    ratio: '9:16',
+  });
+
+  assert.deepEqual(payload, {
+    model: 'intsd20-hc',
+    prompt: '人物保持一致，缓慢走近镜头。',
+    size: '720x1280',
+    duration: 5,
+    reference_images: [{ url: 'https://storage.example.com/character.png' }],
+  });
+});

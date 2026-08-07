@@ -13,8 +13,46 @@ import {
   mapVolcengineTaskStatus,
 } from './video-client.ts';
 
-test('international model id is recognized as Seedance 2.0', () => {
+test('international model ids are recognized as Seedance 2.0', () => {
   assert.equal(isSeedance2Model('intsd2-x'), true);
+  assert.equal(isSeedance2Model('intsd20-hc'), true);
+  assert.equal(isSeedance2Model('intsd20-hc-f'), true);
+});
+
+test('gateway submission preserves the overseas Seedance body exactly', async () => {
+  const originalFetch = globalThis.fetch;
+  let requestBody = '';
+
+  globalThis.fetch = (async (_input: RequestInfo | URL, init?: RequestInit) => {
+    requestBody = String(init?.body || '');
+    return new Response(JSON.stringify({ id: 'task-overseas', status: 'queued' }), {
+      status: 200,
+      headers: { 'Content-Type': 'application/json' },
+    });
+  }) as typeof fetch;
+
+  const payload = {
+    model: 'intsd20-hc-f' as const,
+    prompt: 'A red ball resting on a plain white table.',
+    size: '1280x720' as const,
+    duration: 5,
+    reference_images: [{ url: 'https://storage.example.com/red-ball.png' }],
+  };
+
+  try {
+    await createSeedance2VideoTask(payload, {
+      baseUrl: 'https://video.example.com',
+      apiKey: 'test-key',
+      model: payload.model,
+      timeoutMs: 1000,
+      apiStyle: 'gateway',
+    });
+
+    assert.deepEqual(JSON.parse(requestBody), payload);
+    assert.equal(Object.hasOwn(JSON.parse(requestBody), 'resolution'), false);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
 });
 
 test('gateway base URL uses /v1 video generation and task routes', async () => {
@@ -148,6 +186,32 @@ test('getVolcengineTaskSnapshot prefers content.video_url and maps status', () =
   assert.equal(snapshot.videoStatus, 'completed');
   assert.equal(snapshot.videoUrl, 'https://example.com/test.mp4');
   assert.deepEqual(snapshot.usage, { total_tokens: 100 });
+});
+
+test('getVolcengineTaskSnapshot maps overseas task query responses', () => {
+  const processing = getVolcengineTaskSnapshot({
+    id: 'task_5829a0962958401892c340e46c711619',
+    object: 'video',
+    model: 'dreamina-seedance-2-0-fast-hc',
+    status: 'in_progress',
+    progress: 50,
+    url: null,
+    error: null,
+  });
+  assert.equal(processing.videoStatus, 'processing');
+  assert.equal(processing.videoUrl, null);
+
+  const completed = getVolcengineTaskSnapshot({
+    id: 'task_5829a0962958401892c340e46c711619',
+    object: 'video',
+    model: 'dreamina-seedance-2-0-fast-hc',
+    status: 'completed',
+    progress: 100,
+    url: 'https://storage.example.com/generated-video',
+    error: null,
+  });
+  assert.equal(completed.videoStatus, 'completed');
+  assert.equal(completed.videoUrl, 'https://storage.example.com/generated-video');
 });
 
 test('mergeVolcengineTaskMetadata keeps unified status metadata shape', () => {

@@ -4,7 +4,7 @@ import {
   normalizeVideoGenerationError,
 } from '../video-generation-error.ts';
 import {
-  DEFAULT_SEEDANCE_2_RESOLUTION,
+  isOverseasSeedance2Model,
   type Seedance2Resolution,
   type Seedance2VideoPayload,
 } from './video-payload.ts';
@@ -94,7 +94,9 @@ export const getVolcengineVideoConfig = (
 
 export const isSeedance2Model = (model?: string | null) =>
   typeof model === 'string' &&
-  (/seedance[-_]?2|seedance-2|2-0/i.test(model) || model.trim().toLowerCase() === 'intsd2-x');
+  (/seedance[-_]?2|seedance-2|2-0/i.test(model) ||
+    model.trim().toLowerCase() === 'intsd2-x' ||
+    isOverseasSeedance2Model(model.trim().toLowerCase()));
 
 const normalizeConfiguredVideoModelId = (model: string) =>
   model === 'seedance-2-0-tezan' ? 'seedance-2-0' : model;
@@ -254,10 +256,7 @@ export const createSeedance2VideoTask = async (
         'Content-Type': 'application/json',
         Authorization: `Bearer ${config.apiKey}`,
       },
-      body: JSON.stringify({
-        ...payload,
-        resolution: DEFAULT_SEEDANCE_2_RESOLUTION,
-      }),
+      body: JSON.stringify(payload),
     },
     config.timeoutMs
   );
