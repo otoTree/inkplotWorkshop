@@ -123,7 +123,13 @@ export const getConfiguredVolcengineVideoModel = (modelOverride?: string | null)
 export const mapVolcengineTaskStatus = (status: string): VolcengineMappedTaskStatus => {
   const normalized = status.toLowerCase();
   if (['succeeded', 'completed', 'success'].includes(normalized)) return 'completed';
-  if (['failed', 'error', 'cancelled', 'canceled'].includes(normalized)) return 'failed';
+  if (
+    ['failed', 'error', 'cancelled', 'canceled', 'expired', 'timeout', 'timed_out'].includes(
+      normalized
+    )
+  ) {
+    return 'failed';
+  }
   return 'processing';
 };
 

@@ -155,6 +155,34 @@ test('mapVolcengineTaskStatus maps failed-like states to failed', () => {
   assert.equal(mapVolcengineTaskStatus('failed'), 'failed');
   assert.equal(mapVolcengineTaskStatus('error'), 'failed');
   assert.equal(mapVolcengineTaskStatus('cancelled'), 'failed');
+  assert.equal(mapVolcengineTaskStatus('expired'), 'failed');
+  assert.equal(mapVolcengineTaskStatus('timed_out'), 'failed');
+});
+
+test('getVolcengineTaskSnapshot maps POLL_TIMEOUT expiration to failed', () => {
+  const snapshot = getVolcengineTaskSnapshot({
+    id: 'cgt-20260807131801-49kl4',
+    error: {
+      code: 'POLL_TIMEOUT',
+      message: '上游任务 cgt-20260807131801-49kl4 轮询超时（360 次）',
+    },
+    model: 'doubao-seedance-2-0-260128',
+    ratio: '16:9',
+    status: 'expired',
+    content: null,
+    duration: 14,
+    created_at: 1786079881,
+    resolution: '480p',
+    updated_at: 1786081819,
+    generate_audio: true,
+  });
+
+  assert.equal(snapshot.rawStatus, 'expired');
+  assert.equal(snapshot.videoStatus, 'failed');
+  assert.deepEqual(snapshot.error, {
+    code: 'POLL_TIMEOUT',
+    message: '上游任务 cgt-20260807131801-49kl4 轮询超时（360 次）',
+  });
 });
 
 test('extractVolcengineVideoUrl reads nested content.video_url first', () => {
