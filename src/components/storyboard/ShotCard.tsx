@@ -8,7 +8,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Input } from '@/components/ui/input';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { Save, Trash2, Plus, Box, Maximize2, Download, Copy, Shield, Video, Loader2, GripVertical, ClipboardCopy, ClipboardPaste, History, ExternalLink } from 'lucide-react';
+import { Save, Trash2, Plus, Box, Maximize2, Download, Copy, Shield, Video, Loader2, GripVertical, ClipboardCopy, ClipboardPaste, History, ExternalLink, Link2 } from 'lucide-react';
 import { toPng } from 'html-to-image';
 import { ShotDetailDialog } from './ShotDetailDialog';
 import { normalizeShotDurationSeconds } from '@/lib/duration';
@@ -100,6 +100,11 @@ export function ShotCard({
 
   const isGeneratingVideo = current.videoStatus === 'queued' || (current.videoStatus === 'processing' && !current.videoGenerationId);
   const [isSubmittingVideo, setIsSubmittingVideo] = useState(false);
+  const [isCheckingVideoUrl, setIsCheckingVideoUrl] = useState(false);
+  const [videoUrlQueryMessage, setVideoUrlQueryMessage] = useState<{
+    type: 'success' | 'info' | 'error';
+    text: string;
+  } | null>(null);
   const [queuePosition, setQueuePosition] = useState<number | null>(null);
   const videoErrorMessage = getVideoGenerationErrorMessage(current.videoGenerationMetadata?.error);
   const videoHistory = normalizeVideoGenerationHistory(current.videoGenerationMetadata);
@@ -129,6 +134,84 @@ export function ShotCard({
     currentRef.current = current;
     onUpdateRef.current = onUpdate;
   }, [current, onUpdate]);
+
+  const queryVideoStatus = useCallback(async (latestCurrent: Shot) => {
+    const videoId = latestCurrent.videoGenerationId;
+    if (!videoId || videoId.startsWith('pending:')) {
+      throw new Error('视频任务尚未创建，请稍后再试。');
+    }
+
+    const res = await fetch('/api/ai/video-status', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ videoId }),
+    });
+
+    if (!res.ok) {
+      const errorData = await res.json().catch(() => ({}));
+      const message =
+        errorData.videoErrorMessage ||
+        getVideoGenerationErrorMessage(errorData.videoError || errorData.details) ||
+        errorData.error ||
+        '查询视频任务失败';
+      throw new Error(message);
+    }
+
+    const data = await res.json();
+    const statusInfo = data.data || data;
+    const status = (data.videoStatus || statusInfo.status || '').toLowerCase();
+    const videoError = normalizeVideoGenerationError(
+      data.videoError ||
+        data.videoGenerationMetadata?.error ||
+        statusInfo.error ||
+        statusInfo.Error ||
+        statusInfo.last_error ||
+        statusInfo.failure_reason ||
+        statusInfo.message
+    );
+
+    if (['completed', 'succeeded', 'success'].includes(status)) {
+      const directUrl =
+        data.videoUrl ||
+        statusInfo.content?.video_url ||
+        statusInfo.url ||
+        statusInfo.video_url ||
+        (statusInfo.data &&
+          (statusInfo.data.content?.video_url || statusInfo.data.url || statusInfo.data.video_url)) ||
+        `/api/ai/download-video?videoId=${videoId}`;
+
+      await onUpdateRef.current({
+        ...latestCurrent,
+        videoStatus: 'completed',
+        videoUrl: directUrl,
+        videoGenerationMetadata: data.videoGenerationMetadata || {
+          ...(latestCurrent.videoGenerationMetadata || {}),
+          error: null,
+        },
+      }, { persist: false });
+
+      return { status: 'completed' as const, videoUrl: directUrl };
+    }
+
+    if (['failed', 'error'].includes(status)) {
+      await onUpdateRef.current({
+        ...latestCurrent,
+        videoStatus: 'failed',
+        videoGenerationMetadata: {
+          ...(latestCurrent.videoGenerationMetadata || {}),
+          ...(data.videoGenerationMetadata || {}),
+          ...(videoError ? { error: videoError } : {}),
+        },
+      }, { persist: false });
+
+      return {
+        status: 'failed' as const,
+        errorMessage: getVideoGenerationErrorMessage(videoError) || '视频生成失败',
+      };
+    }
+
+    return { status: 'processing' as const };
+  }, []);
 
   useEffect(() => {
     let interval: NodeJS.Timeout;
@@ -215,59 +298,8 @@ export function ShotCard({
       if (!latestCurrent.videoGenerationId || latestCurrent.videoStatus === 'completed' || latestCurrent.videoStatus === 'failed') return;
       
       try {
-        const res = await fetch('/api/ai/video-status', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ videoId: latestCurrent.videoGenerationId })
-        });
-        
-        if (!res.ok) {
-          scheduleNextCheck();
-          return;
-        }
-
-        const data = await res.json();
-        const statusInfo = data.data || data;
-        const status = (data.videoStatus || statusInfo.status || '').toLowerCase();
-        const videoError = normalizeVideoGenerationError(
-          data.videoError ||
-            data.videoGenerationMetadata?.error ||
-            statusInfo.error ||
-            statusInfo.Error ||
-            statusInfo.last_error ||
-            statusInfo.failure_reason ||
-            statusInfo.message
-        );
-        
-        if (['completed', 'succeeded', 'success'].includes(status)) {
-          // extract url from nested data structure if needed
-          const directUrl =
-            statusInfo.content?.video_url ||
-            statusInfo.url ||
-            statusInfo.video_url ||
-            (statusInfo.data && (statusInfo.data.content?.video_url || statusInfo.data.url || statusInfo.data.video_url));
-          onUpdateRef.current({
-            ...latestCurrent,
-            videoStatus: 'completed',
-            videoUrl: directUrl || `/api/ai/download-video?videoId=${latestCurrent.videoGenerationId}`,
-            videoGenerationMetadata: data.videoGenerationMetadata || {
-              ...(latestCurrent.videoGenerationMetadata || {}),
-              error: null,
-            },
-          });
-          return; // Stop polling
-        } else if (['failed', 'error'].includes(status)) {
-          onUpdateRef.current({
-            ...latestCurrent,
-            videoStatus: 'failed',
-            videoGenerationMetadata: {
-              ...(latestCurrent.videoGenerationMetadata || {}),
-              ...(data.videoGenerationMetadata || {}),
-              ...(videoError ? { error: videoError } : {}),
-            },
-          });
-          return; // Stop polling
-        }
+        const result = await queryVideoStatus(latestCurrent);
+        if (result.status === 'completed' || result.status === 'failed') return;
       } catch (error) {
         console.error('Check video status failed', error);
       }
@@ -296,7 +328,31 @@ export function ShotCard({
       isCancelled = true;
       if (timeoutId) clearTimeout(timeoutId);
     };
-  }, [current.videoGenerationId, current.videoStatus]);
+  }, [current.videoGenerationId, current.videoStatus, queryVideoStatus]);
+
+  const handleQueryVideoUrl = async () => {
+    if (isCheckingVideoUrl) return;
+
+    setIsCheckingVideoUrl(true);
+    setVideoUrlQueryMessage(null);
+    try {
+      const result = await queryVideoStatus(currentRef.current);
+      if (result.status === 'completed') {
+        setVideoUrlQueryMessage({ type: 'success', text: '已获取视频地址。' });
+      } else if (result.status === 'failed') {
+        setVideoUrlQueryMessage({ type: 'error', text: result.errorMessage });
+      } else {
+        setVideoUrlQueryMessage({ type: 'info', text: '任务仍在生成中，暂未返回视频地址。' });
+      }
+    } catch (error) {
+      setVideoUrlQueryMessage({
+        type: 'error',
+        text: error instanceof Error ? error.message : '查询视频任务失败，请稍后重试。',
+      });
+    } finally {
+      setIsCheckingVideoUrl(false);
+    }
+  };
 
   const handleGenerateVideo = async () => {
     if (isSubmittingVideo || isGeneratingVideo || current.videoStatus === 'processing') {
@@ -665,6 +721,26 @@ ${current.videoPrompt || 'None'}
                     </Button>
                   )}
                   <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    className="h-7 gap-1 px-2 text-xs text-gray-600 border-gray-200 hover:bg-gray-50"
+                    onClick={handleQueryVideoUrl}
+                    disabled={
+                      isCheckingVideoUrl ||
+                      !current.videoGenerationId ||
+                      current.videoGenerationId.startsWith('pending:')
+                    }
+                    title={current.videoGenerationId ? '查询异步任务并获取视频地址' : '生成任务创建后可查询视频地址'}
+                  >
+                    {isCheckingVideoUrl ? (
+                      <Loader2 className="w-3 h-3 animate-spin" />
+                    ) : (
+                      <Link2 className="w-3 h-3" />
+                    )}
+                    {isCheckingVideoUrl ? '查询中...' : '获取视频地址'}
+                  </Button>
+                  <Button
                     size="sm"
                     variant="outline"
                     className={`h-7 gap-1 px-2 text-xs transition-colors ${
@@ -688,6 +764,17 @@ ${current.videoPrompt || 'None'}
                   </Button>
                 </div>
               </div>
+              {videoUrlQueryMessage && (
+                <p className={`exclude-from-export text-xs ${
+                  videoUrlQueryMessage.type === 'success'
+                    ? 'text-green-600'
+                    : videoUrlQueryMessage.type === 'error'
+                      ? 'text-red-600'
+                      : 'text-gray-500'
+                }`}>
+                  {videoUrlQueryMessage.text}
+                </p>
+              )}
               {videoGenerationAccess.isLocked && (
                 <div className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-700">
                   已生成 {videoGenerationAccess.attempts} 次，默认上限 {videoGenerationAccess.baseLimit} 次。
