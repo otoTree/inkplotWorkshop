@@ -5,7 +5,7 @@ import {
   DEFAULT_SEEDANCE_2_RESOLUTION,
 } from './video-payload.ts';
 
-test('buildSeedance2VideoPayload replaces active asset URIs with source URLs', () => {
+test('buildSeedance2VideoPayload uses active domestic asset URIs', () => {
   const payload = buildSeedance2VideoPayload({
     model: 'seedance-2-0-fast-tezan',
     prompt: '图片1保持角色一致，完成一个转身镜头。',
@@ -31,7 +31,7 @@ test('buildSeedance2VideoPayload replaces active asset URIs with source URLs', (
   const reference = payload.content[1];
   assert.equal(reference.type, 'image_url');
   if (reference.type === 'image_url') {
-    assert.equal(reference.image_url.url, 'https://storage.example.com/active.png');
+    assert.equal(reference.image_url.url, 'asset://asset-20260424120352-8lkvp');
   }
 });
 
@@ -85,7 +85,7 @@ test('buildSeedance2VideoPayload falls back to source URL for non-active asset U
   }
 });
 
-test('buildSeedance2VideoPayload omits asset IDs without a source URL', () => {
+test('buildSeedance2VideoPayload accepts an active asset URI without source URL', () => {
   const payload = buildSeedance2VideoPayload({
     model: 'seedance-2-0-fast-tezan',
     prompt: '不应提交素材 ID。',
@@ -98,7 +98,12 @@ test('buildSeedance2VideoPayload omits asset IDs without a source URL', () => {
     ],
   });
 
-  assert.equal(payload.content.length, 1);
+  assert.equal(payload.content.length, 2);
+  const reference = payload.content[1];
+  assert.equal(reference.type, 'image_url');
+  if (reference.type === 'image_url') {
+    assert.equal(reference.image_url.url, 'asset://asset-only-id');
+  }
 });
 
 test('buildSeedance2VideoPayload always uses the fixed resolution', () => {

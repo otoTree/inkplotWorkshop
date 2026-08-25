@@ -77,12 +77,12 @@ export const PROJECT_VIDEO_MODEL_OPTIONS = [
   {
     value: DEFAULT_SEEDANCE_2_VIDEO_MODEL,
     label: 'Seedance 2.0 Fast',
-    description: `${DEFAULT_SEEDANCE_2_VIDEO_MODEL}，使用对象存储链接。`,
+    description: `${DEFAULT_SEEDANCE_2_VIDEO_MODEL}，可选使用火山素材库或对象存储链接。`,
   },
   {
     value: STANDARD_SEEDANCE_2_VIDEO_MODEL,
     label: 'Seedance 2.0 标准版',
-    description: `${STANDARD_SEEDANCE_2_VIDEO_MODEL}，使用对象存储链接。`,
+    description: `${STANDARD_SEEDANCE_2_VIDEO_MODEL}，可选使用火山素材库或对象存储链接。`,
   },
   {
     value: INTERNATIONAL_SEEDANCE_2_VIDEO_MODEL,
@@ -159,7 +159,8 @@ export const normalizeProjectVideoSettings = (
   const model = normalizeProjectVideoGenerationModel(settings?.model, preferredVideoModel);
 
   return {
-    syncAssetsToPrivateLibrary: false,
+    syncAssetsToPrivateLibrary:
+      !isInternationalSeedance2Model(model) && settings?.syncAssetsToPrivateLibrary === true,
     assetGroupId: normalizeOptionalString(settings?.assetGroupId),
     projectName: normalizeOptionalString(settings?.projectName) || DEFAULT_VOLCENGINE_PROJECT_NAME,
     model,

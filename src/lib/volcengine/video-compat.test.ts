@@ -74,25 +74,23 @@ test('normalizeProjectVideoGenerationModel upgrades old seedance preference to c
   assert.equal(normalizeProjectVideoGenerationModel('legacy'), 'legacy');
 });
 
-test('all video models disable private asset sync', () => {
+test('domestic models can enable private asset sync while international models cannot', () => {
   assert.equal(isInternationalSeedance2Model('intsd2-x'), true);
   assert.equal(isInternationalSeedance2Model('intsd20-hc'), true);
   assert.equal(isInternationalSeedance2Model('intsd20-hc-f'), true);
-  for (const model of [
-    'seedance-2-0-fast-tezan',
-    'seedance-2-0',
-    'intsd2-x',
-    'intsd20-hc',
-    'intsd20-hc-f',
-  ] as const) {
-    assert.equal(
-      normalizeProjectVideoSettings({
-        model,
-        preferredVideoModel: 'seedance-2.0',
-        syncAssetsToPrivateLibrary: true,
-      }).syncAssetsToPrivateLibrary,
-      false
-    );
+  for (const model of ['seedance-2-0-fast-tezan', 'seedance-2-0'] as const) {
+    assert.equal(normalizeProjectVideoSettings({
+      model,
+      preferredVideoModel: 'seedance-2.0',
+      syncAssetsToPrivateLibrary: true,
+    }).syncAssetsToPrivateLibrary, true);
+  }
+  for (const model of ['intsd2-x', 'intsd20-hc', 'intsd20-hc-f'] as const) {
+    assert.equal(normalizeProjectVideoSettings({
+      model,
+      preferredVideoModel: 'seedance-2.0',
+      syncAssetsToPrivateLibrary: true,
+    }).syncAssetsToPrivateLibrary, false);
   }
 });
 

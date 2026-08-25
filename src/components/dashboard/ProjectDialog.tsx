@@ -31,6 +31,8 @@ import {
 import {
   DEFAULT_PROJECT_VIDEO_ASPECT_RATIO,
   DEFAULT_SEEDANCE_2_VIDEO_MODEL,
+  DEFAULT_VOLCENGINE_PROJECT_NAME,
+  isInternationalSeedance2Model,
   normalizeProjectVideoModel,
   normalizeProjectVideoSettings,
   PROJECT_VIDEO_MODEL_OPTIONS,
@@ -73,9 +75,13 @@ export function ProjectDialog({ children, project, open: controlledOpen, onOpenC
     DEFAULT_SEEDANCE_2_VIDEO_MODEL
   );
   const [videoAspectRatio, setVideoAspectRatio] = useState<'9:16' | '16:9'>(DEFAULT_PROJECT_VIDEO_ASPECT_RATIO);
+  const [syncVolcengineAssets, setSyncVolcengineAssets] = useState(false);
+  const [volcengineAssetGroupId, setVolcengineAssetGroupId] = useState('');
+  const [volcengineProjectName, setVolcengineProjectName] = useState(DEFAULT_VOLCENGINE_PROJECT_NAME);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [ideaInput, setIdeaInput] = useState('');
   const [isGenerating, setIsGenerating] = useState(false);
+  const usesInternationalSeedance = isInternationalSeedance2Model(videoModel);
   const compatibilityHint =
     project?.visualStylePresetSource === 'legacy-inferred'
       ? '这是历史项目：系统已根据原有人物或场景美术描述自动匹配预设，保存后会写入新的风格预设字段。'
@@ -100,6 +106,9 @@ export function ProjectDialog({ children, project, open: controlledOpen, onOpenC
         setSceneArtStyle(project.sceneArtStyle || project.artStyle || '');
         setVideoModel(normalizedVideoSettings.model);
         setVideoAspectRatio(normalizedVideoSettings.aspectRatio);
+        setSyncVolcengineAssets(normalizedVideoSettings.syncAssetsToPrivateLibrary);
+        setVolcengineAssetGroupId(normalizedVideoSettings.assetGroupId || '');
+        setVolcengineProjectName(normalizedVideoSettings.projectName);
         setIdeaInput('');
       } else {
         // Only clear if not editing (or if we want to reset on new create)
@@ -114,6 +123,9 @@ export function ProjectDialog({ children, project, open: controlledOpen, onOpenC
           setSceneArtStyle('');
           setVideoModel(DEFAULT_SEEDANCE_2_VIDEO_MODEL);
           setVideoAspectRatio(DEFAULT_PROJECT_VIDEO_ASPECT_RATIO);
+          setSyncVolcengineAssets(false);
+          setVolcengineAssetGroupId('');
+          setVolcengineProjectName(DEFAULT_VOLCENGINE_PROJECT_NAME);
           setIdeaInput('');
         }
       }
@@ -167,6 +179,7 @@ export function ProjectDialog({ children, project, open: controlledOpen, onOpenC
     try {
       const normalizedLanguage = language || 'zh';
       const normalizedPreferredVideoModel = normalizeProjectVideoModel(videoModel);
+      const shouldSyncVolcengineAssets = !usesInternationalSeedance && syncVolcengineAssets;
       if (project) {
         // Update existing project
         await api.projects.update(project.id, {
@@ -181,7 +194,9 @@ export function ProjectDialog({ children, project, open: controlledOpen, onOpenC
             model: videoModel,
             preferredVideoModel: normalizedPreferredVideoModel,
             aspectRatio: videoAspectRatio,
-            syncAssetsToPrivateLibrary: false,
+            syncAssetsToPrivateLibrary: shouldSyncVolcengineAssets,
+            assetGroupId: volcengineAssetGroupId.trim() || undefined,
+            projectName: volcengineProjectName.trim() || DEFAULT_VOLCENGINE_PROJECT_NAME,
           },
           updatedAt: Date.now(),
         });
@@ -229,7 +244,9 @@ export function ProjectDialog({ children, project, open: controlledOpen, onOpenC
             model: videoModel,
             preferredVideoModel: normalizedPreferredVideoModel,
             aspectRatio: videoAspectRatio,
-            syncAssetsToPrivateLibrary: false,
+            syncAssetsToPrivateLibrary: shouldSyncVolcengineAssets,
+            assetGroupId: volcengineAssetGroupId.trim() || undefined,
+            projectName: volcengineProjectName.trim() || DEFAULT_VOLCENGINE_PROJECT_NAME,
           },
           genre: [],
           createdAt: Date.now(),
@@ -253,6 +270,9 @@ export function ProjectDialog({ children, project, open: controlledOpen, onOpenC
         setSceneArtStyle('');
         setVideoModel(DEFAULT_SEEDANCE_2_VIDEO_MODEL);
         setVideoAspectRatio(DEFAULT_PROJECT_VIDEO_ASPECT_RATIO);
+        setSyncVolcengineAssets(false);
+        setVolcengineAssetGroupId('');
+        setVolcengineProjectName(DEFAULT_VOLCENGINE_PROJECT_NAME);
       }
       if (onSuccess) onSuccess();
     } catch (error) {
@@ -427,7 +447,11 @@ export function ProjectDialog({ children, project, open: controlledOpen, onOpenC
               <div className="sm:col-span-3">
                 <Select
                   value={videoModel}
-                  onValueChange={(value) => setVideoModel(value as ProjectVideoModelSelection)}
+                  onValueChange={(value) => {
+                    const nextModel = value as ProjectVideoModelSelection;
+                    setVideoModel(nextModel);
+                    if (isInternationalSeedance2Model(nextModel)) setSyncVolcengineAssets(false);
+                  }}
                 >
                   <SelectTrigger id="videoModel">
                     <SelectValue placeholder="选择视频模型" />
@@ -461,6 +485,47 @@ export function ProjectDialog({ children, project, open: controlledOpen, onOpenC
                     <SelectItem value="16:9">横版 16:9</SelectItem>
                   </SelectContent>
                 </Select>
+              </div>
+            </div>
+            <div className="grid grid-cols-1 gap-2 sm:grid-cols-4 sm:items-start sm:gap-4">
+              <Label htmlFor="syncVolcengineAssets" className="sm:pt-1 sm:text-right">
+                火山素材库
+              </Label>
+              <div className="space-y-3 sm:col-span-3">
+                <label className="flex items-start gap-2 text-sm text-slate-700">
+                  <input
+                    id="syncVolcengineAssets"
+                    type="checkbox"
+                    checked={syncVolcengineAssets}
+                    onChange={(event) => setSyncVolcengineAssets(event.target.checked)}
+                    disabled={usesInternationalSeedance}
+                    className="mt-1 h-4 w-4"
+                  />
+                  <span>
+                    {usesInternationalSeedance ? '国际版使用对象存储链接' : '国内版使用火山素材库'}
+                    <span className="block text-xs text-slate-500">
+                      {usesInternationalSeedance
+                        ? '国际版模型直接提交对象存储 URL。'
+                        : '开启后，国内版模型会把参考素材同步到火山素材库，并使用 asset://素材ID；关闭时直接使用对象存储 URL。'}
+                    </span>
+                  </span>
+                </label>
+                {syncVolcengineAssets && !usesInternationalSeedance && (
+                  <div className="grid gap-3 rounded-md border border-slate-200 bg-slate-50 p-3">
+                    <Input
+                      value={volcengineAssetGroupId}
+                      onChange={(event) => setVolcengineAssetGroupId(event.target.value)}
+                      placeholder="Asset Group ID，可留空自动创建"
+                      className="bg-white"
+                    />
+                    <Input
+                      value={volcengineProjectName}
+                      onChange={(event) => setVolcengineProjectName(event.target.value)}
+                      placeholder="素材库 ProjectName，默认 tz"
+                      className="bg-white"
+                    />
+                  </div>
+                )}
               </div>
             </div>
             <div className="grid grid-cols-1 gap-2 sm:grid-cols-4 sm:items-center sm:gap-4">

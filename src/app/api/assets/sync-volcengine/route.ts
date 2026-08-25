@@ -181,7 +181,7 @@ export async function POST(req: Request) {
     const normalizedSettings = normalizeProjectVideoSettings(settings);
     if (normalizedSettings.syncAssetsToPrivateLibrary !== true) {
       return NextResponse.json(
-        { error: '所有模型已统一使用对象存储 URL，不再同步或使用火山素材 ID' },
+        { error: '请先在项目设置中为国内版模型开启火山素材库同步' },
         { status: 400 }
       );
     }

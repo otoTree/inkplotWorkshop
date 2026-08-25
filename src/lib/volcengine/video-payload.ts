@@ -65,8 +65,17 @@ export const normalizeSeedance2AspectRatio = (value?: string | null): Seedance2A
   value === '16:9' ? '16:9' : '9:16';
 
 const isObjectStorageUrl = (value: string) => /^https?:\/\//i.test(value);
+const isAssetUri = (value: string) => /^asset:\/\/[^/\s]+$/i.test(value);
 
 const resolveReferenceUrl = (reference: Seedance2Reference) => {
+  const fallbackUrl = reference.sourceUrl || (reference.mode === 'url' ? reference.usableUrl : '');
+
+  if (reference.mode === 'asset_uri') {
+    if (reference.volcengineAssetStatus === 'Active' && isAssetUri(reference.usableUrl)) {
+      return reference.usableUrl;
+    }
+    return fallbackUrl && isObjectStorageUrl(fallbackUrl) ? fallbackUrl : null;
+  }
   if (reference.sourceUrl && isObjectStorageUrl(reference.sourceUrl)) {
     return reference.sourceUrl;
   }
