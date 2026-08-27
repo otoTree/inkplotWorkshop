@@ -28,7 +28,7 @@
 | 图像生成/编辑 | OpenAI-compatible Images，项目按异步任务适配 | `POST {baseUrl}/images/generations` + `GET {baseUrl}/images/generations/{task_id}` | `gemini-3-pro-image-preview` / `gpt-image-2` |
 | 通用视频生成 | OpenAI-compatible/中转供应商视频接口 | `POST {baseUrl}/video/generations` + `GET {baseUrl}/video/generations/{id}` | `AI_API_VIDEO_MODEL` / `OPENAI_VIDEO_MODEL` |
 | 通用视频下载 | OpenAI-compatible/中转供应商视频下载 | `GET {baseUrl}/videos/{id}/content?variant=mp4` | 与通用视频任务同一供应商 |
-| Seedance 2.0 视频 | 火山方舟内容生成任务 | `POST {baseUrl}/contents/generations/tasks` + `GET {baseUrl}/contents/generations/tasks/{taskId}` | `seedance-2-0-fast-tezan` / `seedance-2-0` |
+| Seedance 2.0 视频 | 火山方舟内容生成任务 | `POST {baseUrl}/contents/generations/tasks` + `GET {baseUrl}/contents/generations/tasks/{taskId}` | `seedance-2-0-fast` / `seedance-2-0` |
 | 火山素材库 | 火山素材资产库 OpenAPI / ARTS Bearer 兼容层 | `POST {assetBaseUrl}?Action=...&Version=2024-01-01` | `CreateAssetGroup` / `CreateAsset` / `GetAsset` / `ListAssets` |
 
 ## 2. 通用鉴权与请求约定
@@ -131,7 +131,7 @@ ARTS_ASSET_GROUP_ID=optional-group-id
 ARTS_VIDEO_BASE_URL=https://jphhngvqjmgr.sealosbja.site
 ARTS_ASSET_BASE_URL=https://jphhngvqjmgr.sealosbja.site
 ARTS_API_KEY=replace-with-key
-ARTS_VIDEO_MODEL=seedance-2-0-fast-tezan
+ARTS_VIDEO_MODEL=seedance-2-0-fast
 ```
 
 `ARTS_ASSET_BASE_URL` 和 `ARTS_API_BASE_URL` 都不会追加 `/api/v3`，素材库按
@@ -603,7 +603,7 @@ Content-Type: application/json
 项目默认模型：
 
 ```text
-seedance-2-0-fast-tezan
+seedance-2-0-fast
 seedance-2-0
 ```
 
@@ -611,7 +611,7 @@ seedance-2-0
 
 ```json
 {
-  "model": "seedance-2-0-fast-tezan",
+  "model": "seedance-2-0-fast",
   "content": [
     {
       "type": "text",
@@ -718,7 +718,7 @@ Content-Type: application/json
 ```json
 {
   "id": "cgt-20260507143012-abcd1",
-  "model": "seedance-2-0-fast-tezan",
+  "model": "seedance-2-0-fast",
   "status": "processing",
   "updated_at": 1778135602
 }
@@ -729,7 +729,7 @@ Content-Type: application/json
 ```json
 {
   "id": "cgt-20260507143012-abcd1",
-  "model": "seedance-2-0-fast-tezan",
+  "model": "seedance-2-0-fast",
   "status": "succeeded",
   "content": {
     "video_url": "https://cdn.example.com/video.mp4"
@@ -749,7 +749,7 @@ Content-Type: application/json
 ```json
 {
   "id": "cgt-20260507143012-abcd1",
-  "model": "seedance-2-0-fast-tezan",
+  "model": "seedance-2-0-fast",
   "status": "failed",
   "error": {
     "code": "INVALID_PARAMETER",

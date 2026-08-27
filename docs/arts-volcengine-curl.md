@@ -18,7 +18,7 @@
 export ARTS_API_BASE_URL="https://jphhngvqjmgr.sealosbja.site"
 export ARTS_API_KEY="replace-with-your-arts-bearer-key"
 export ARTS_ASSET_PROJECT_NAME="tz"
-export ARTS_VIDEO_MODEL="seedance-2-0-fast-tezan"
+export ARTS_VIDEO_MODEL="seedance-2-0-fast"
 ```
 
 ## 统一约定
@@ -245,7 +245,7 @@ POST ${ARTS_VIDEO_BASE_URL}/v1/videos/generations
 
 说明：
 
-- `model` 使用 `seedance-2-0-fast-tezan`（快速版）或 `seedance-2-0`（标准版）。
+- `model` 使用 `seedance-2-0-fast`（快速版）或 `seedance-2-0`（标准版）。
 - 项目实际发送字段为：
   - `model`
   - `content`
@@ -317,7 +317,7 @@ curl -X GET "${ARTS_VIDEO_BASE_URL}/v1/tasks/${ARTS_VIDEO_TASK_ID}" \
 ```json
 {
   "id": "cgt_2b1b0f2f8fd44b73a0a6b64f3a6a7f11",
-  "model": "seedance-2-0-fast-tezan",
+  "model": "seedance-2-0-fast",
   "status": "processing",
   "updated_at": 1778135602
 }
@@ -328,7 +328,7 @@ curl -X GET "${ARTS_VIDEO_BASE_URL}/v1/tasks/${ARTS_VIDEO_TASK_ID}" \
 ```json
 {
   "id": "cgt_2b1b0f2f8fd44b73a0a6b64f3a6a7f11",
-  "model": "seedance-2-0-fast-tezan",
+  "model": "seedance-2-0-fast",
   "status": "succeeded",
   "content": {
     "video_url": "https://cdn.example.com/video/cgt_2b1b0f2f8fd44b73a0a6b64f3a6a7f11.mp4"
@@ -355,7 +355,7 @@ curl -X GET "${ARTS_VIDEO_BASE_URL}/v1/tasks/${ARTS_VIDEO_TASK_ID}" \
 ```json
 {
   "id": "cgt_2b1b0f2f8fd44b73a0a6b64f3a6a7f11",
-  "model": "seedance-2-0-fast-tezan",
+  "model": "seedance-2-0-fast",
   "status": "failed",
   "error": {
     "code": "INVALID_PARAMETER",

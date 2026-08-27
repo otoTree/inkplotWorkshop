@@ -74,7 +74,7 @@ test('gateway base URL uses /v1 video generation and task routes', async () => {
   const config = {
     baseUrl: 'https://jphhngvqjmgr.sealosbja.site',
     apiKey: 'test-key',
-    model: 'seedance-2-0-fast-tezan',
+    model: 'seedance-2-0-fast',
     timeoutMs: 1000,
     apiStyle: 'gateway' as const,
   };
@@ -128,7 +128,7 @@ test('task-not-found query response becomes a terminal failed snapshot', async (
     const result = await getSeedance2VideoTask('missing-task', {
       baseUrl: 'https://video.example.com',
       apiKey: 'test-key',
-      model: 'seedance-2-0-fast-tezan',
+      model: 'seedance-2-0-fast',
       timeoutMs: 1000,
       apiStyle: 'gateway',
     });
@@ -291,7 +291,7 @@ test('getVolcengineVideoConfig treats shared ARTS base URL as gateway root', () 
   process.env.ARTS_API_BASE_URL = 'https://jphhngvqjmgr.sealosbja.site/';
   delete process.env.ARTS_VIDEO_BASE_URL;
   process.env.ARTS_API_KEY = 'arts-video-key';
-  process.env.ARTS_VIDEO_MODEL = 'seedance-2-0-fast-tezan';
+  process.env.ARTS_VIDEO_MODEL = 'seedance-2-0-fast';
   process.env.VOLCENGINE_ARK_VIDEO_BASE_URL = 'https://legacy.example.com/api/v3';
   process.env.VOLCENGINE_ARK_VIDEO_API_KEY = 'legacy-video-key';
   process.env.VOLCENGINE_ARK_VIDEO_MODEL = 'legacy-model';
@@ -301,7 +301,7 @@ test('getVolcengineVideoConfig treats shared ARTS base URL as gateway root', () 
     assert.equal(config.baseUrl, 'https://jphhngvqjmgr.sealosbja.site');
     assert.equal(config.apiStyle, 'gateway');
     assert.equal(config.apiKey, 'arts-video-key');
-    assert.equal(config.model, 'seedance-2-0-fast-tezan');
+    assert.equal(config.model, 'seedance-2-0-fast');
   } finally {
     for (const [key, value] of Object.entries(previous)) {
       if (value === undefined) {
@@ -324,7 +324,7 @@ test('getVolcengineVideoConfig preserves dedicated gateway base URL', () => {
   process.env.ARTS_VIDEO_BASE_URL = 'https://jphhngvqjmgr.sealosbja.site/';
   process.env.ARTS_API_BASE_URL = 'https://legacy.example.com/api/v3';
   process.env.ARTS_API_KEY = 'gateway-key';
-  process.env.ARTS_VIDEO_MODEL = 'seedance-2-0-fast-tezan';
+  process.env.ARTS_VIDEO_MODEL = 'seedance-2-0-fast';
 
   try {
     const config = getVolcengineVideoConfig('seedance-2-0');
@@ -373,7 +373,7 @@ test('getConfiguredVolcengineVideoModel prefers project override when provided',
     ARTS_VIDEO_MODEL: process.env.ARTS_VIDEO_MODEL,
   };
 
-  process.env.ARTS_VIDEO_MODEL = 'seedance-2-0-fast-tezan';
+  process.env.ARTS_VIDEO_MODEL = 'seedance-2-0-fast';
 
   try {
     assert.equal(
@@ -421,13 +421,13 @@ test('getVolcengineVideoConfig falls back to ARK base url and model envs', () =>
   delete process.env.VOLCENGINE_ARK_VIDEO_MODEL;
   process.env.ARK_BASE_URL = 'https://ark.example.com/api';
   process.env.ARK_API_KEY = 'ark-key';
-  process.env.ARK_VIDEO_MODEL = 'seedance-2-0-fast-tezan';
+  process.env.ARK_VIDEO_MODEL = 'seedance-2-0-fast';
 
   try {
     const config = getVolcengineVideoConfig();
     assert.equal(config.baseUrl, 'https://ark.example.com/api/v3');
     assert.equal(config.apiKey, 'ark-key');
-    assert.equal(config.model, 'seedance-2-0-fast-tezan');
+    assert.equal(config.model, 'seedance-2-0-fast');
   } finally {
     for (const [key, value] of Object.entries(previous)) {
       if (value === undefined) {
@@ -450,7 +450,7 @@ test('getVolcengineVideoConfig uses project model override', () => {
   delete process.env.ARTS_VIDEO_BASE_URL;
   process.env.ARTS_API_BASE_URL = 'https://apis.artsapi.com/api';
   process.env.ARTS_API_KEY = 'arts-video-key';
-  process.env.ARTS_VIDEO_MODEL = 'seedance-2-0-fast-tezan';
+  process.env.ARTS_VIDEO_MODEL = 'seedance-2-0-fast';
 
   try {
     const config = getVolcengineVideoConfig('seedance-2-0');

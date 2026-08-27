@@ -3,7 +3,7 @@ import { isSeedance2Model } from './video-client.ts';
 export type ProjectVideoModelPreference = 'legacy' | 'seedance-2.0';
 export type ProjectVideoAspectRatio = '9:16' | '16:9';
 export type Seedance2VideoModelSelection =
-  | 'seedance-2-0-fast-tezan'
+  | 'seedance-2-0-fast'
   | 'seedance-2-0'
   | 'intsd2-x'
   | 'intsd20-hc'
@@ -36,7 +36,7 @@ export type VideoGenerationMetadataLike = {
 };
 
 export const DEFAULT_PROJECT_VIDEO_MODEL: ProjectVideoModelPreference = 'legacy';
-export const FAST_SEEDANCE_2_VIDEO_MODEL = 'seedance-2-0-fast-tezan';
+export const FAST_SEEDANCE_2_VIDEO_MODEL = 'seedance-2-0-fast';
 export const STANDARD_SEEDANCE_2_VIDEO_MODEL = 'seedance-2-0';
 export const INTERNATIONAL_SEEDANCE_2_VIDEO_MODEL = 'intsd2-x';
 export const OVERSEAS_STANDARD_SEEDANCE_2_VIDEO_MODEL = 'intsd20-hc';

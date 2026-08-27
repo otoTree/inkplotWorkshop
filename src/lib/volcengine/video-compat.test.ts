@@ -42,10 +42,10 @@ test('normalizeProjectVideoGenerationModel upgrades old seedance preference to c
     normalizeProjectVideoGenerationModel(undefined, 'seedance-2.0'),
     DEFAULT_SEEDANCE_2_VIDEO_MODEL
   );
-  assert.equal(DEFAULT_SEEDANCE_2_VIDEO_MODEL, 'seedance-2-0-fast-tezan');
+  assert.equal(DEFAULT_SEEDANCE_2_VIDEO_MODEL, 'seedance-2-0-fast');
   assert.equal(
-    normalizeProjectVideoGenerationModel('seedance-2-0-fast-tezan'),
-    'seedance-2-0-fast-tezan'
+    normalizeProjectVideoGenerationModel('seedance-2-0-fast'),
+    'seedance-2-0-fast'
   );
   assert.equal(
     normalizeProjectVideoGenerationModel('seedance-2-0'),
@@ -78,7 +78,7 @@ test('domestic models can enable private asset sync while international models c
   assert.equal(isInternationalSeedance2Model('intsd2-x'), true);
   assert.equal(isInternationalSeedance2Model('intsd20-hc'), true);
   assert.equal(isInternationalSeedance2Model('intsd20-hc-f'), true);
-  for (const model of ['seedance-2-0-fast-tezan', 'seedance-2-0'] as const) {
+  for (const model of ['seedance-2-0-fast', 'seedance-2-0'] as const) {
     assert.equal(normalizeProjectVideoSettings({
       model,
       preferredVideoModel: 'seedance-2.0',

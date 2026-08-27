@@ -49,7 +49,7 @@ test('domestic sync uploads new references and waits for Active status', async (
       imageUrl: 'https://storage.example.com/c.png',
     }],
     settings: {
-      model: 'seedance-2-0-fast-tezan',
+      model: 'seedance-2-0-fast',
       syncAssetsToPrivateLibrary: true,
       projectName: 'demo',
     },
