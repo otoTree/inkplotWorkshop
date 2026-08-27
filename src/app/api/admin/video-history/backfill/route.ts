@@ -4,6 +4,7 @@ import { checkAdminAuth } from '@/lib/admin/auth';
 import { createAdminClient } from '@/lib/supabase/admin';
 import {
   getAIAPIConfig,
+  getAIAPIConfigKey,
   getAIVideoStatus,
   getVideoTaskHistoryKey,
 } from '@/lib/ai-server';
@@ -211,7 +212,7 @@ const collectRedisCandidates = async (windowMs: number): Promise<BackfillCandida
 
   const redis = Redis.fromEnv();
   const config = getAIAPIConfig();
-  const configKey = `${config.baseUrl}|${config.apiKey}|${config.maxConcurrency}`;
+  const configKey = getAIAPIConfigKey(config);
   const baseKey = `video_concurrency:${configKey}`;
   const activeKey = `${baseKey}:active`;
   const historyKey = getVideoTaskHistoryKey(config);

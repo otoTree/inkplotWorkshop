@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { checkAdminAuth } from '@/lib/admin/auth';
 import { Redis } from '@upstash/redis';
-import { completeVideoTask, getAIAPIConfig, getAIVideoStatus } from '@/lib/ai-server';
+import { getAIAPIConfig, getAIAPIConfigKey } from '@/lib/ai-server';
 import { createAdminClient } from '@/lib/supabase/admin';
 
 export async function GET(req: Request) {
@@ -17,7 +17,7 @@ export async function GET(req: Request) {
 
     const redis = Redis.fromEnv();
     const config = getAIAPIConfig();
-    const configKey = `${config.baseUrl}|${config.apiKey}|${config.maxConcurrency}`;
+    const configKey = getAIAPIConfigKey(config);
     const baseKey = `video_concurrency:${configKey}`;
     const queueKey = `${baseKey}:queue`;
     const activeKey = `${baseKey}:active`;
@@ -26,51 +26,32 @@ export async function GET(req: Request) {
     const page = Math.max(1, Number(url.searchParams.get('page') || '1'));
     const pageSize = Math.min(100, Math.max(10, Number(url.searchParams.get('pageSize') || '20')));
 
-    // Opportunistically clean up a small batch of finished active tasks so the dashboard reflects reality
-    // without blocking the whole page on a long serial provider scan.
-    const rawActiveItems = await redis.zrange(activeKey, 0, -1, { withScores: true });
-    const activeMembersToCheck: string[] = [];
-    for (let i = 0; i < rawActiveItems.length; i += 2) {
-      const member = String(rawActiveItems[i]);
-      if (!member.startsWith('pending:') && !member.startsWith('job_')) {
-        activeMembersToCheck.push(member);
+    const [queueItems, activeItems, globalItems] = await Promise.all([
+      redis.zrange(queueKey, 0, 99, { withScores: true }),
+      redis.zrange(activeKey, 0, 99, { withScores: true }),
+      redis.zrange(globalKey, 0, 99, { withScores: true }),
+    ]);
+
+    const formatItems = async (items: unknown[], includeShotMapping = false) => {
+      const members = [];
+      for (let i = 0; i < items.length; i += 2) {
+        members.push(String(items[i]));
       }
-    }
-
-    const cleanupBatch = activeMembersToCheck.slice(0, 8);
-    await Promise.all(cleanupBatch.map(async (member) => {
-      try {
-        const providerStatus = await getAIVideoStatus(member);
-        const statusInfo = providerStatus.data || providerStatus;
-        const status = (statusInfo.status || '').toLowerCase();
-        if (['completed', 'succeeded', 'success', 'failed', 'error'].includes(status)) {
-          await completeVideoTask(member);
-        }
-      } catch (err) {
-        console.error(`Failed to auto-clean active task ${member}:`, err);
-      }
-    }));
-
-    // Get queue items
-    const queueItems = await redis.zrange(queueKey, 0, -1, { withScores: true });
-    // Get active items
-    const activeItems = await redis.zrange(activeKey, 0, -1, { withScores: true });
-    // Get global items
-    const globalItems = await redis.zrange(globalKey, 0, -1, { withScores: true });
-
-    const formatItems = async (items: unknown[]) => {
+      const taskIds = includeShotMapping
+        ? members.filter((member) => !member.startsWith('pending:') && !member.startsWith('job_'))
+        : [];
+      const mappedShotIds = taskIds.length > 0
+        ? await redis.mget<(string | null)[]>(taskIds.map((member) => `video_task_map:${configKey}:${member}`))
+        : [];
+      const mappedShotIdByTask = new Map(taskIds.map((taskId, index) => [taskId, mappedShotIds[index] || null]));
       const formatted = [];
       for (let i = 0; i < items.length; i += 2) {
         const member = String(items[i]);
-        let mappedShotId: string | null = null;
-        if (!member.startsWith('pending:') && !member.startsWith('job_')) {
-          mappedShotId = await redis.get<string>(`video_task_map:${configKey}:${member}`) || null;
-        }
         formatted.push({
           member,
           score: Number(items[i + 1]),
           date: new Date(Number(items[i + 1])).toISOString(),
-          mappedShotId,
+          mappedShotId: mappedShotIdByTask.get(member) || null,
         });
       }
       return formatted;
@@ -97,7 +78,7 @@ export async function GET(req: Request) {
       activeKey,
       globalKey,
       queue: await formatItems(queueItems),
-      active: await formatItems(activeItems),
+      active: await formatItems(activeItems, true),
       global: await formatItems(globalItems),
       shotTasks: shotTasks || [],
       shotTasksCount: shotTasksCount || 0,
@@ -105,7 +86,10 @@ export async function GET(req: Request) {
   } catch (err) {
     const error = err as Error;
     console.error('Error fetching redis stats:', error);
-    return NextResponse.json({ error: error.message || 'Internal Error' }, { status: 500 });
+    const message = /max requests limit|monthly request|request limit exceeded/i.test(error.message)
+      ? 'Upstash Redis 月度请求额度已用尽，请升级计划或等待额度重置。'
+      : '读取 Redis 状态失败，请查看服务端日志。';
+    return NextResponse.json({ error: message }, { status: 500 });
   }
 }
 

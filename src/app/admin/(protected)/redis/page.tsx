@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
@@ -42,7 +42,7 @@ export default function AdminRedisPage() {
   const [page, setPage] = useState(1);
   const pageSize = 20;
 
-  const fetchRedisData = async () => {
+  const fetchRedisData = useCallback(async () => {
     setIsLoading(true);
     setError(null);
     try {
@@ -59,7 +59,7 @@ export default function AdminRedisPage() {
     } finally {
       setIsLoading(false);
     }
-  };
+  }, [page]);
 
   const handleDeleteMember = async (key: string, member: string) => {
     if (!confirm(`确定删除 ${member} 吗？`)) return;
@@ -141,7 +141,7 @@ export default function AdminRedisPage() {
       if (res.ok) {
         let successCount = 0;
         let failCount = 0;
-        json.results.forEach((r: any) => {
+        json.results.forEach((r: { success?: boolean }) => {
           if (r.success) successCount++;
           else failCount++;
         });
@@ -158,9 +158,7 @@ export default function AdminRedisPage() {
 
   useEffect(() => {
     fetchRedisData();
-    const interval = setInterval(fetchRedisData, 5000);
-    return () => clearInterval(interval);
-  }, [page]);
+  }, [fetchRedisData]);
 
   const totalPages = data ? Math.max(1, Math.ceil(data.shotTasksCount / pageSize)) : 1;
 
@@ -307,7 +305,7 @@ export default function AdminRedisPage() {
                 const data = await res.json();
                 alert(data.message || '重置完成');
                 fetchRedisData();
-              } catch(e) { alert('请求失败'); }
+              } catch { alert('请求失败'); }
             }} 
             variant="destructive"
           >

@@ -465,29 +465,19 @@ export const runVideoGenerationCronTick = async (
             video_generation_metadata: nextMetadata,
           }).eq('id', shot.id);
 
-          try {
-            const {
-              getAIAPIConfig,
-              getVideoTaskHistoryKey,
-              VIDEO_TASK_HISTORY_TTL_SECONDS,
-            } = await import('@/lib/ai-server');
-            const config = getAIAPIConfig();
-            const redis = (await import('@upstash/redis')).Redis.fromEnv();
-            const baseKey = `video_concurrency:${config.baseUrl}|${config.apiKey}|${config.maxConcurrency}`;
-            const activeKey = `${baseKey}:active`;
-
-            await redis.zrem(activeKey, `pending:${shot.id}`);
-            await redis.zadd(activeKey, { score: Date.now() + 15 * 60 * 1000, member: taskId });
-            await redis.set(`video_task_map:${config.baseUrl}|${config.apiKey}|${config.maxConcurrency}:${taskId}`, shot.id, {
-              ex: VIDEO_TASK_HISTORY_TTL_SECONDS,
-            });
-            await redis.zadd(getVideoTaskHistoryKey(config), {
-              score: Date.now(),
-              member: JSON.stringify({ taskId, shotId: shot.id }),
-            });
-            await redis.expire(getVideoTaskHistoryKey(config), VIDEO_TASK_HISTORY_TTL_SECONDS);
-          } catch (redisErr) {
-            console.error('Failed to commit real taskId to Redis in cron:', redisErr);
+          // Legacy generation already records the task in callAIVideoGeneration.
+          // Seedance bypasses that helper and still needs an explicit Redis record.
+          if (useSeedance2) {
+            try {
+              const {
+                getAIAPIConfig,
+                recordVideoTask,
+              } = await import('@/lib/ai-server');
+              const config = getAIAPIConfig();
+              await recordVideoTask(config, shot.id, taskId);
+            } catch (redisErr) {
+              console.error('Failed to commit real taskId to Redis in cron:', redisErr);
+            }
           }
 
           queueResults.push({ id: shot.id, taskId, status: videoStatus });

@@ -1,4 +1,5 @@
 import { Redis } from '@upstash/redis';
+import { createHash } from 'node:crypto';
 import {
   DEFAULT_IMAGE_GENERATION_MODEL,
   isSupportedImageGenerationModel,
@@ -221,8 +222,12 @@ export const getAIImageAPIConfig = () => {
   return config;
 };
 
-const getKey = (config: AIAPIConfig) =>
-  `${config.baseUrl}|${config.apiKey}|${config.maxConcurrency}`;
+export const getAIAPIConfigKey = (config: AIAPIConfig) => {
+  const apiKeyHash = createHash('sha256').update(config.apiKey).digest('hex').slice(0, 16);
+  return `${config.baseUrl}|${apiKeyHash}|${config.maxConcurrency}`;
+};
+
+const getKey = getAIAPIConfigKey;
 
 const getVideoTaskMapKey = (config: AIAPIConfig, taskId: string) =>
   `video_task_map:${getKey(config)}:${taskId}`;
@@ -242,6 +247,76 @@ const getSemaphore = (config: AIAPIConfig) => {
 };
 
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+
+const GLOBAL_SEMAPHORE_SCRIPT = `
+local now = tonumber(ARGV[1])
+local maxConcurrency = tonumber(ARGV[2])
+local jobId = ARGV[3]
+local expiresAt = tonumber(ARGV[4])
+redis.call('ZREMRANGEBYSCORE', KEYS[1], 0, now)
+if redis.call('ZCARD', KEYS[1]) >= maxConcurrency then
+  return 0
+end
+redis.call('ZADD', KEYS[1], expiresAt, jobId)
+return 1
+`;
+
+const VIDEO_SLOT_SCRIPT = `
+local now = tonumber(ARGV[1])
+local maxConcurrency = tonumber(ARGV[2])
+local placeholderId = ARGV[3]
+local expiresAt = tonumber(ARGV[4])
+redis.call('ZREMRANGEBYSCORE', KEYS[1], 0, now)
+if redis.call('ZCARD', KEYS[1]) >= maxConcurrency then
+  return 0
+end
+redis.call('ZADD', KEYS[1], expiresAt, placeholderId)
+return 1
+`;
+
+const VIDEO_TASK_COMMIT_SCRIPT = `
+local placeholderId = ARGV[1]
+local realTaskId = ARGV[2]
+local jobId = ARGV[3]
+local activeExpiresAt = tonumber(ARGV[4])
+local createdAt = tonumber(ARGV[5])
+local historyTtl = tonumber(ARGV[6])
+if realTaskId ~= '' then
+  redis.call('ZADD', KEYS[1], activeExpiresAt, realTaskId)
+  redis.call('SET', KEYS[2], jobId, 'EX', historyTtl)
+  redis.call('ZADD', KEYS[3], createdAt, cjson.encode({ taskId = realTaskId, shotId = jobId }))
+  redis.call('EXPIRE', KEYS[3], historyTtl)
+end
+redis.call('ZREM', KEYS[1], placeholderId)
+return 1
+`;
+
+const isRedisQuotaError = (error: unknown) =>
+  /max requests limit|monthly request|request limit exceeded/i.test(
+    error instanceof Error ? error.message : String(error)
+  );
+
+const commitVideoTaskInRedis = async (
+  redis: Redis,
+  config: AIAPIConfig,
+  jobId: string,
+  realTaskId: string
+) => {
+  const committedAt = Date.now();
+  const activeKey = `video_concurrency:${getKey(config)}:active`;
+  await redis.eval<string[], number>(VIDEO_TASK_COMMIT_SCRIPT, [
+    activeKey,
+    getVideoTaskMapKey(config, realTaskId),
+    getVideoTaskHistoryKey(config),
+  ], [
+    `pending:${jobId}`,
+    realTaskId,
+    jobId,
+    String(committedAt + 15 * 60 * 1000),
+    String(committedAt),
+    String(VIDEO_TASK_HISTORY_TTL_SECONDS),
+  ]);
+};
 
 const getAIRequestRetryCount = () =>
   Math.max(
@@ -558,37 +633,29 @@ const acquireGlobalSemaphore = async (config: AIAPIConfig): Promise<() => void |
   while (true) {
     try {
       const now = Date.now();
-      // 1. Remove expired jobs
-      await redis.zremrangebyscore(key, 0, now);
-      
-      // 2. Count current active jobs
-      const count = await redis.zcard(key);
-      
-      if (count < maxConcurrency) {
-        // 3. Try to add our job
-        await redis.zadd(key, { score: now + jobTimeout, member: jobId });
-        
-        // 4. Verify we are within the limit (prevent race conditions)
-        const rank = await redis.zrank(key, jobId);
-        if (rank !== null && rank < maxConcurrency) {
-          // Success
-          return async () => {
-            try {
-              await redis.zrem(key, jobId);
-            } catch (err) {
-              console.error('Failed to release KV semaphore:', err);
-            }
-          };
-        } else {
-          // We got added but exceeded the limit, rollback
-          await redis.zrem(key, jobId);
-        }
+      const acquired = await redis.eval<string[], number>(GLOBAL_SEMAPHORE_SCRIPT, [key], [
+        String(now),
+        String(maxConcurrency),
+        jobId,
+        String(now + jobTimeout),
+      ]);
+      if (acquired === 1) {
+        return async () => {
+          try {
+            await redis.zrem(key, jobId);
+          } catch (err) {
+            console.error('Failed to release KV semaphore:', err);
+          }
+        };
       }
     } catch (err) {
-      console.error('KV Semaphore error, waiting before retry:', err);
+      if (isRedisQuotaError(err)) {
+        throw new AIAPIError('Redis 请求额度已用尽，请升级 Upstash 计划或等待额度重置。', 503);
+      }
+      console.error('KV Semaphore error:', err);
+      throw new AIAPIError('Redis 并发信号量暂时不可用，请稍后重试。', 503);
     }
-    
-    // Wait 2~3s with jitter before retrying
+
     await sleep(2000 + Math.random() * 1000);
   }
 };
@@ -611,28 +678,23 @@ export const tryAcquireVideoSlot = async (config: AIAPIConfig, jobId: string): P
 
   try {
     const now = Date.now();
-    // Remove tasks that have been active for > 15 mins (timeout safety)
-    await redis.zremrangebyscore(activeKey, 0, now - 15 * 60 * 1000);
+    const placeholderId = `pending:${jobId}`;
+    const acquired = await redis.eval<string[], number>(VIDEO_SLOT_SCRIPT, [activeKey], [
+      String(now),
+      String(maxConcurrency),
+      placeholderId,
+      String(now + 2 * 60 * 1000),
+    ]);
 
-    const activeCount = await redis.zcard(activeKey);
-    
-    if (activeCount < maxConcurrency) {
-      // My turn!
-      const placeholderId = `pending:${jobId}`;
-      await redis.zadd(activeKey, { score: now + 2 * 60 * 1000, member: placeholderId }); // 2 min placeholder
+    if (acquired === 1) {
 
       return async (realTaskId?: string) => {
         try {
           if (realTaskId) {
-            await redis.zadd(activeKey, { score: Date.now() + 15 * 60 * 1000, member: realTaskId });
-            await redis.set(getVideoTaskMapKey(config, realTaskId), jobId, { ex: VIDEO_TASK_HISTORY_TTL_SECONDS });
-            await redis.zadd(getVideoTaskHistoryKey(config), {
-              score: Date.now(),
-              member: JSON.stringify({ taskId: realTaskId, shotId: jobId }),
-            });
-            await redis.expire(getVideoTaskHistoryKey(config), VIDEO_TASK_HISTORY_TTL_SECONDS);
+            await commitVideoTaskInRedis(redis, config, jobId, realTaskId);
+          } else {
+            await redis.zrem(activeKey, placeholderId);
           }
-          await redis.zrem(activeKey, placeholderId);
         } catch (err) {
           console.error('Failed to commit real taskId:', err);
         }
@@ -640,9 +702,20 @@ export const tryAcquireVideoSlot = async (config: AIAPIConfig, jobId: string): P
     }
   } catch (err) {
     console.error('KV Queue error:', err);
+    if (isRedisQuotaError(err)) {
+      throw new AIAPIError('Redis 请求额度已用尽，请升级 Upstash 计划或等待额度重置。', 503);
+    }
+    throw new AIAPIError('Redis 视频并发队列暂时不可用，请稍后重试。', 503);
   }
 
-  return null; // Cannot acquire slot immediately
+  return null;
+};
+
+export const recordVideoTask = async (config: AIAPIConfig, jobId: string, taskId: string) => {
+  const isKVConfigured = !!(process.env.KV_REST_API_URL && process.env.KV_REST_API_TOKEN);
+  if (!isKVConfigured) return;
+
+  await commitVideoTaskInRedis(Redis.fromEnv(), config, jobId, taskId);
 };
 
 export const enqueueVideoTaskAndWait = async (config: AIAPIConfig, jobId: string): Promise<((taskId?: string) => Promise<void>)> => {
@@ -728,6 +801,11 @@ const withThrottle = async <T>(config: AIAPIConfig, fn: () => Promise<T>) => {
   } finally {
     await release();
   }
+};
+
+const withProviderThrottle = async <T>(config: AIAPIConfig, fn: () => Promise<T>) => {
+  await waitForInterval(getKey(config), config.minIntervalMs);
+  return await fn();
 };
 
 export type AIChatMessage = {
@@ -1130,7 +1208,9 @@ export const callAIVideoGeneration = async (
 
 export const getAIVideoStatus = async (videoId: string) => {
   const config = getAIAPIConfig();
-  return await withThrottle(config, async () => {
+  // Status reads are already bounded by the caller's polling policy. They do
+  // not consume a generation slot or require a Redis round trip.
+  return await withProviderThrottle(config, async () => {
     const response = await fetchWithTimeout(
       `${config.baseUrl}/video/generations/${videoId}`,
       {
