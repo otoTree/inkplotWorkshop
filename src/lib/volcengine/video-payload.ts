@@ -8,9 +8,10 @@ export type Seedance2Reference = {
 };
 
 export type Seedance2AspectRatio = '9:16' | '16:9';
-export type Seedance2Resolution = '480p';
+export type Seedance2Resolution = '480p' | '720p';
 export type OverseasSeedance2Size = '1280x720' | '720x1280';
 export const DEFAULT_SEEDANCE_2_RESOLUTION: Seedance2Resolution = '480p';
+export const INTSD2_X_RESOLUTION: Seedance2Resolution = '720p';
 
 export type ArkSeedance2VideoPayload = {
   model: string;
@@ -63,6 +64,11 @@ export const isOverseasSeedance2Model = (
 
 export const normalizeSeedance2AspectRatio = (value?: string | null): Seedance2AspectRatio =>
   value === '16:9' ? '16:9' : '9:16';
+
+export const resolveSeedance2Resolution = (model?: string | null): Seedance2Resolution =>
+  model?.trim().toLowerCase() === 'intsd2-x'
+    ? INTSD2_X_RESOLUTION
+    : DEFAULT_SEEDANCE_2_RESOLUTION;
 
 const isObjectStorageUrl = (value: string) => /^https?:\/\//i.test(value);
 const isAssetUri = (value: string) => /^asset:\/\/[^/\s]+$/i.test(value);
@@ -147,7 +153,7 @@ export function buildSeedance2VideoPayload({
     content,
     generate_audio: generateAudio,
     ratio,
-    resolution: DEFAULT_SEEDANCE_2_RESOLUTION,
+    resolution: resolveSeedance2Resolution(model),
     ...(duration ? { duration } : {}),
     watermark,
   };

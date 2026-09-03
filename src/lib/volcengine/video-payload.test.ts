@@ -3,6 +3,8 @@ import test from 'node:test';
 import {
   buildSeedance2VideoPayload,
   DEFAULT_SEEDANCE_2_RESOLUTION,
+  INTSD2_X_RESOLUTION,
+  resolveSeedance2Resolution,
 } from './video-payload.ts';
 
 test('buildSeedance2VideoPayload uses active domestic asset URIs', () => {
@@ -114,6 +116,16 @@ test('buildSeedance2VideoPayload always uses the fixed resolution', () => {
 
   assert.equal(payload.resolution, DEFAULT_SEEDANCE_2_RESOLUTION);
   assert.equal(payload.resolution, '480p');
+});
+
+test('buildSeedance2VideoPayload forces intsd2-x to 720p', () => {
+  const payload = buildSeedance2VideoPayload({
+    model: 'intsd2-x',
+    prompt: '测试国际版固定分辨率。',
+  });
+
+  assert.equal(resolveSeedance2Resolution('intsd2-x'), INTSD2_X_RESOLUTION);
+  assert.equal(payload.resolution, '720p');
 });
 
 test('buildSeedance2VideoPayload builds the overseas Fast body with landscape size', () => {

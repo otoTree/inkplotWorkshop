@@ -30,6 +30,7 @@ import {
   buildSeedance2VideoPayload,
   DEFAULT_SEEDANCE_2_RESOLUTION,
   normalizeSeedance2AspectRatio,
+  resolveSeedance2Resolution,
 } from '@/lib/volcengine/video-payload';
 import {
   buildVolcengineSubmissionMetadata,
@@ -290,6 +291,7 @@ export const runVideoGenerationCronTick = async (
       let useSeedance2 = false;
       let aspectRatio = getShotAspectRatio(shot);
       let resolvedSeedanceModel = '';
+      let resolvedSeedanceResolution = DEFAULT_SEEDANCE_2_RESOLUTION;
       let attemptMetadata = (shot.video_generation_metadata || {}) as VideoGenerationMetadata;
       try {
         const referenceAssets: LocalReferenceAsset[] = [];
@@ -314,6 +316,7 @@ export const runVideoGenerationCronTick = async (
         resolvedSeedanceModel =
           resolveProjectVideoGenerationModel(projectVideoSettings) ||
           getConfiguredVolcengineVideoModel();
+        resolvedSeedanceResolution = resolveSeedance2Resolution(resolvedSeedanceModel);
         aspectRatio = resolveVideoAspectRatio(shot, projectVideoSettings);
         const fullPrompt = buildVideoGenerationPrompt(
           [
@@ -410,7 +413,7 @@ export const runVideoGenerationCronTick = async (
                   requestContentMode: resolvedReferences.requestContentMode,
                   referenceAssetIds: resolvedReferences.referenceAssetIds,
                   aspectRatio,
-                  resolution: DEFAULT_SEEDANCE_2_RESOLUTION,
+                  resolution: resolvedSeedanceResolution,
                   result: seedanceResult,
                 }),
               };
@@ -499,7 +502,7 @@ export const runVideoGenerationCronTick = async (
                 provider: 'volcengine',
                 model: useSeedance2 && resolvedSeedanceModel ? resolvedSeedanceModel : undefined,
                 aspectRatio,
-                resolution: DEFAULT_SEEDANCE_2_RESOLUTION,
+                resolution: resolvedSeedanceResolution,
                 rawStatus: 'waiting_for_assets',
                 error: errorDetails,
               }),
@@ -517,7 +520,7 @@ export const runVideoGenerationCronTick = async (
                 provider: useSeedance2 ? 'volcengine' : 'legacy',
                 model: useSeedance2 && resolvedSeedanceModel ? resolvedSeedanceModel : undefined,
                 aspectRatio: useSeedance2 ? aspectRatio : undefined,
-                resolution: DEFAULT_SEEDANCE_2_RESOLUTION,
+                resolution: resolvedSeedanceResolution,
                 rawStatus: useSeedance2 ? 'failed' : undefined,
                 error: errorDetails,
               }),

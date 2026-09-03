@@ -30,9 +30,9 @@ import {
   type ProjectVideoSettingsLike,
 } from '@/lib/volcengine/video-compat';
 import {
-  DEFAULT_SEEDANCE_2_RESOLUTION,
   buildSeedance2VideoPayload,
   normalizeSeedance2AspectRatio,
+  resolveSeedance2Resolution,
   type Seedance2Resolution,
 } from '@/lib/volcengine/video-payload';
 import {
@@ -78,7 +78,7 @@ type VideoGenerationMetadata = {
   requestContentMode?: 'asset_uri' | 'url';
   referenceAssetIds?: string[];
   aspectRatio?: '9:16' | '16:9';
-  resolution?: Seedance2Resolution | '720p';
+  resolution?: Seedance2Resolution;
   rawStatus?: string;
   usage?: Record<string, unknown>;
   error?: Record<string, unknown> | string | null;
@@ -293,6 +293,7 @@ export async function POST(req: Request) {
       const resolvedSeedanceModel =
         resolveProjectVideoGenerationModel(projectVideoSettings) ||
         getConfiguredVolcengineVideoModel();
+      const resolvedSeedanceResolution = resolveSeedance2Resolution(resolvedSeedanceModel);
       const aspectRatio = resolveVideoAspectRatio(claimedShot, projectVideoSettings);
       const fullPrompt = buildVideoGenerationPrompt(
         [
@@ -369,7 +370,7 @@ export async function POST(req: Request) {
                   requestContentMode: resolvedReferences.requestContentMode,
                   referenceAssetIds: resolvedReferences.referenceAssetIds,
                   aspectRatio,
-                  resolution: DEFAULT_SEEDANCE_2_RESOLUTION,
+                  resolution: resolvedSeedanceResolution,
                   result: seedanceResult,
                 }),
               };
@@ -458,7 +459,7 @@ export async function POST(req: Request) {
                   provider: useSeedance2 ? 'volcengine' : 'legacy',
                   model: useSeedance2 ? resolvedSeedanceModel || undefined : undefined,
                   aspectRatio,
-                  resolution: DEFAULT_SEEDANCE_2_RESOLUTION,
+                  resolution: resolvedSeedanceResolution,
                   rawStatus: useSeedance2 ? 'waiting_for_assets' : undefined,
                   error: error.details || error.message,
                 }
@@ -483,7 +484,7 @@ export async function POST(req: Request) {
                         provider: 'volcengine',
                         model: resolvedSeedanceModel || undefined,
                         aspectRatio,
-                        resolution: DEFAULT_SEEDANCE_2_RESOLUTION,
+                        resolution: resolvedSeedanceResolution,
                         rawStatus: 'waiting_for_assets',
                         error: error.details || error.message,
                       }
@@ -506,7 +507,7 @@ export async function POST(req: Request) {
                 provider: useSeedance2 ? 'volcengine' : 'legacy',
                 model: useSeedance2 && resolvedSeedanceModel ? resolvedSeedanceModel : undefined,
                 aspectRatio: useSeedance2 ? aspectRatio : undefined,
-                resolution: DEFAULT_SEEDANCE_2_RESOLUTION,
+                resolution: resolvedSeedanceResolution,
                 rawStatus: useSeedance2 ? 'failed' : undefined,
                 error: getGenerationFailureMessage(error),
               }

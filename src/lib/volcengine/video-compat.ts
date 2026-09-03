@@ -87,7 +87,7 @@ export const PROJECT_VIDEO_MODEL_OPTIONS = [
   {
     value: INTERNATIONAL_SEEDANCE_2_VIDEO_MODEL,
     label: 'Seedance 2.0 国际版',
-    description: `${INTERNATIONAL_SEEDANCE_2_VIDEO_MODEL}，使用对象存储链接。`,
+    description: `${INTERNATIONAL_SEEDANCE_2_VIDEO_MODEL}，720p，使用对象存储链接。`,
   },
   {
     value: OVERSEAS_STANDARD_SEEDANCE_2_VIDEO_MODEL,
